@@ -1,16 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  createDatabase,
-  createSecretStore,
-  createSqliteEventSink,
-  EventBus,
-  SnapshotRegistry,
-  type DesireGrimoireDb,
-} from '@desiregrimoire/runtime'
-import { createApp, type CreatedApp } from './server'
+import type { CreatedApp } from './server'
+import { cleanupHarnesses, makeE2eHarness } from './harness'
 
 /**
  * S8(WP0.9)端到端验收测试 —— implementation-plan §4.10 DoD 的自动化覆盖面:
@@ -22,50 +12,8 @@ import { createApp, type CreatedApp } from './server'
  * DoD 6/7 由 adapter fixture 套件与 CI 门禁覆盖。
  */
 
-const dirs: string[] = []
-const opened: DesireGrimoireDb[] = []
-
-interface Harness {
-  root: string
-  dbPath: string
-  open: () => CreatedApp & { store: DesireGrimoireDb }
-}
-
-function makeHarness(): Harness {
-  const root = mkdtempSync(join(tmpdir(), 'dg-e2e-'))
-  dirs.push(root)
-  const dbPath = join(root, 'chats.sqlite')
-  const open = (): CreatedApp & { store: DesireGrimoireDb } => {
-    const store = createDatabase(dbPath)
-    opened.push(store)
-    const bus = new EventBus(createSqliteEventSink(store))
-    const created = createApp({
-      store,
-      bus,
-      snapshots: new SnapshotRegistry(),
-      secretStore: createSecretStore(join(root, 'secrets')),
-      secretsDir: join(root, 'secrets'),
-    })
-    return { ...created, store }
-  }
-  return { root, dbPath, open }
-}
-
 afterEach(() => {
-  for (const store of opened.splice(0)) {
-    try {
-      store.close()
-    } catch {
-      // 已关闭
-    }
-  }
-  for (const dir of dirs.splice(0)) {
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch {
-      // Windows 句柄延迟释放:目录留待系统清理,不影响断言
-    }
-  }
+  cleanupHarnesses()
 })
 
 async function seed(app: CreatedApp['app']): Promise<{ chatId: string; providerId: string }> {
@@ -126,7 +74,7 @@ async function readSse(res: Response): Promise<{ id: number; event: string; data
 
 describe('S8 端到端(§4.10 DoD 自动化面)', () => {
   it('DoD 2:流式 → 中途取消 → partial 可查;run/generation 终态 cancelled(PV6)', async () => {
-    const harness = makeHarness()
+    const harness = makeE2eHarness()
     const { app } = harness.open()
     const { chatId } = await seed(app)
     const gen = await startGeneration(app, chatId, [
@@ -175,7 +123,7 @@ describe('S8 端到端(§4.10 DoD 自动化面)', () => {
   })
 
   it('DoD 3+4+5:完成链路 → usage 入库(source 分对)→ 重启恢复 → 快照重建模型可见内容', async () => {
-    const harness = makeHarness()
+    const harness = makeE2eHarness()
     const { app, store } = harness.open()
     const { chatId, providerId } = await seed(app)
     await startGeneration(app, chatId, [{ text: '完整回复正文。' }])
@@ -221,7 +169,7 @@ describe('S8 端到端(§4.10 DoD 自动化面)', () => {
   })
 
   it('§152 挂账补齐:characters/worldbooks/presets 注册路由(version 1 快照落库)', async () => {
-    const harness = makeHarness()
+    const harness = makeE2eHarness()
     const { app } = harness.open()
     const charRes = await app.request('/api/v2/characters', {
       method: 'POST',

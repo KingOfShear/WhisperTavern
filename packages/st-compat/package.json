@@ -16,5 +16,10 @@
   "devDependencies": {
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.0",
+    "zod": "^4.0.0",
+    "@desiregrimoire/contracts": "workspace:*"
   }
 }

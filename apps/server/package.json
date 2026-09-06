@@ -18,12 +18,14 @@
     "@desiregrimoire/runtime": "workspace:*",
     "hono": "^4.6.0",
     "drizzle-orm": "^0.44.0",
-    "@hono/node-server": "^1.13.0"
+    "@hono/node-server": "^1.13.0",
+    "@desiregrimoire/st-compat": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "fflate": "^0.8.0"
   }
 }

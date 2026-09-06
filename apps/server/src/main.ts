@@ -25,7 +25,7 @@ const logger = (level: 'error' | 'info', message: string, meta?: unknown): void 
   else console.info(`[server] ${message}`, meta ?? '')
 }
 
-const { app } = createApp({ store, bus, snapshots: new SnapshotRegistry(), secretStore, secretsDir, logger })
+const { app } = createApp({ store, bus, snapshots: new SnapshotRegistry(), secretStore, secretsDir, assetsDir: dataDir, logger })
 
 const port = Number.parseInt(process.env.DG_PORT ?? '8787', 10)
 serve({ fetch: app.fetch, port }, (info) => {

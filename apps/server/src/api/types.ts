@@ -17,6 +17,8 @@ export interface ServerDeps {
   logger?: ServerLogger
   /** 密钥目录(server 引导时已建;测试用临时目录) */
   secretsDir: string
+  /** 资产根目录(data/):cards/<slug>/ 与 worldbooks/ 落盘 */
+  assetsDir: string
 }
 
 /** api-spec §27 SSE 信封 */

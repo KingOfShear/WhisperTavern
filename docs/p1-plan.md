@@ -170,7 +170,7 @@ X8  真实资产只进 tests/fixtures/(脱敏后),原文件保持只读不引用
 
 | 会话 | WP | 状态 | 恢复点注记 |
 |---|---|---|---|
-| S9 | WP1.1a | ☐ | |
+| S9 | WP1.1a | ✅ | 2026-09-06 完成:st-compat 卡模块落码(V2/V3 JSON 双层冗余归一 data 层优先/PNG tEXt chara+ccv3 优先 ccv3/charx fflate 解包)+ .dgcard 归一(运行态剥离/内嵌书抽取 passthrough/compat 收集/compatFields 全列)+ ImportReport(路径化、无内容值)+ server 导入路由(落盘 cards/<slug>/ + worldbooks 双向注册 + v1 快照)。10 条 st-compat 测试 + 5 条路由契约测试。踩坑:zod looseObject 不剥未知键(广收集靠 modeled 集合反查);report.compatFields 须从 compat 对象全列。 |
 | S10 | WP1.1b | ☐ | |
 | S11 | WP1.2 | ☐ | |
 | S12 | WP1.3 | ☐ | |

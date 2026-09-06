@@ -63,6 +63,7 @@ function makeApp(): {
     snapshots: new SnapshotRegistry(),
     secretStore,
     secretsDir: dir,
+      assetsDir: dir,
     logger: (level, message, meta) => logs.push(`${level}: ${message} ${String(meta ?? '')}`),
   })
   return { ...created, bus, secretStore, secretsDir: join(dir, 'secrets'), logs, store }

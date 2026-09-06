@@ -1,8 +1,11 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Hono } from 'hono'
 import { and, desc, eq, gt, ne } from 'drizzle-orm'
 import { uuidv7 } from '@desiregrimoire/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@desiregrimoire/adapters'
 import { compile } from '@desiregrimoire/core'
+import { importCard, isCardParseError } from '@desiregrimoire/st-compat'
 import {
   activeLeafId,
   activateMessage,
@@ -498,6 +501,79 @@ export function createApp(deps: ServerDeps): CreatedApp {
     const requestId = requestIdOf(c)
     const rows = deps.store.db.select().from(charactersTable).orderBy(desc(charactersTable.createdAt)).limit(100).all()
     return ok(c, requestId, rows.map((row) => ({ id: row.id, name: row.name, description: row.description, version: row.version })))
+  })
+
+  // S9(WP1.1a):卡导入(§152 P0;st-compat 归一 → 文件落盘 + 注册 + v1 快照)
+  app.post('/api/v2/characters/import', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    if (typeof body.base64 !== 'string' || body.base64 === '') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'base64(卡文件字节)必填')
+    }
+    let result
+    try {
+      result = importCard(new Uint8Array(Buffer.from(body.base64, 'base64')))
+    } catch (error) {
+      if (isCardParseError(error)) {
+        return fail(c, requestId, 'VALIDATION_ERROR', error.message)
+      }
+      throw error
+    }
+    const slug = result.card.meta.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'card'
+    const cardDir = join(deps.assetsDir, 'cards', slug)
+    mkdirSync(cardDir, { recursive: true })
+    // .dgcard 文件(事实源,决策 11)+ 附带资产
+    const cardFileName = 'card.dgcard.json'
+    writeFileSync(join(cardDir, cardFileName), JSON.stringify(result.card, null, 2))
+    for (const [uri, bytes] of result.assetFiles) {
+      const target = join(cardDir, uri)
+      mkdirSync(join(target, '..'), { recursive: true })
+      writeFileSync(target, bytes)
+    }
+    // 内嵌书抽取:独立 .dgworld 文件 + worldbooks 注册(双向引用)
+    let worldbookId: string | undefined
+    if (result.extractedWorldbook !== undefined) {
+      worldbookId = uuidv7()
+      const wbDir = join(deps.assetsDir, 'worldbooks')
+      mkdirSync(wbDir, { recursive: true })
+      const wbFile = `worldbooks/${result.extractedWorldbook.ref}.dgworld.json`
+      writeFileSync(join(deps.assetsDir, wbFile), JSON.stringify({ schemaVersion: 0, sourceFormat: 'st-embedded', raw: result.extractedWorldbook.raw }, null, 2))
+      deps.store.db.insert(worldbooksTable).values({
+        id: worldbookId,
+        name: result.extractedWorldbook.suggestedName,
+        sourceFormat: 'st-embedded',
+        sourceData: JSON.stringify({ characterRef: null, file: wbFile }),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      }).run()
+    }
+    // 注册索引 + version 1 快照(混合存储:文件事实源,行是索引,决策 11)
+    const id = uuidv7()
+    const now = nowIso()
+    const cardFile = `cards/${slug}/${cardFileName}`
+    deps.store.db.insert(charactersTable).values({
+      id,
+      name: result.card.meta.name,
+      description: result.card.persona.description,
+      personality: result.card.persona.personality,
+      scenario: result.card.persona.scenario,
+      firstMessage: result.card.greetings.first,
+      metadata: JSON.stringify({ worldbookRef: result.card.worldbookRef, cardFile }),
+      sourceFormat: result.report.asset.sourceFormat,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    const snapshot = JSON.stringify({ card: result.card, worldbookId })
+    deps.store.db.insert(characterVersions).values({
+      id: uuidv7(),
+      characterId: id,
+      version: 1,
+      snapshot,
+      contentHash: sha256Hex(snapshot),
+      createdAt: now,
+    }).run()
+    return ok(c, requestId, { character: { id, name: result.card.meta.name, version: 1 }, worldbookId: worldbookId ?? null, report: result.report }, 201)
   })
 
   app.post('/api/v2/characters', async (c) => {
