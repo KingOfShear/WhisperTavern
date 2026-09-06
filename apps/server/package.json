@@ -1,0 +1,29 @@
+{
+  "name": "@desiregrimoire/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono HTTP/SSE 网关——纯传输层,无业务逻辑(总设计 §7 结构注记)",
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@desiregrimoire/adapters": "workspace:*",
+    "@desiregrimoire/contracts": "workspace:*",
+    "@desiregrimoire/core": "workspace:*",
+    "@desiregrimoire/runtime": "workspace:*",
+    "hono": "^4.6.0",
+    "drizzle-orm": "^0.44.0",
+    "@hono/node-server": "^1.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "tsx": "^4.19.0"
+  }
+}

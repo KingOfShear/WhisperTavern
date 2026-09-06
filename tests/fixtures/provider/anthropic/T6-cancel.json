@@ -1,0 +1,33 @@
+{
+  "provider": "anthropic",
+  "case": "T6-cancel",
+  "description": "流中途取消:partial + CANCELLED(PV6)",
+  "request": {
+    "model": "claude-sonnet-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZXZlbnQ6IG1lc3NhZ2Vfc3RhcnQKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjoyNX19fQoK",
+      "ZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoidGV4dF9kZWx0YSIsInRleHQiOiLpg6jliIblhoXlrrkifX0KCg=="
+    ]
+  },
+  "abortAfterChunk": 2,
+  "expect": {
+    "kind": "stream",
+    "text": "部分内容",
+    "lastError": "CANCELLED"
+  }
+}

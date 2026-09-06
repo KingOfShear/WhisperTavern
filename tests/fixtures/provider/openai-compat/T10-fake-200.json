@@ -1,0 +1,30 @@
+{
+  "provider": "openai-compat",
+  "case": "T10-fake-200",
+  "description": "伪造 200:text/html 拦截页 → PARSE_ERROR(R5)",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/html",
+    "chunksBase64": [
+      "PGh0bWw+Z2F0ZXdheSBibG9ja2VkPC9odG1sPg=="
+    ]
+  },
+  "expect": {
+    "kind": "error",
+    "errorCode": "PARSE_ERROR"
+  }
+}

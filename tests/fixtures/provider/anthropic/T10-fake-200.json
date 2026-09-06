@@ -1,0 +1,30 @@
+{
+  "provider": "anthropic",
+  "case": "T10-fake-200",
+  "description": "伪造 200:text/html → PARSE_ERROR(R5)",
+  "request": {
+    "model": "claude-sonnet-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/html",
+    "chunksBase64": [
+      "PGh0bWw+YmxvY2tlZDwvaHRtbD4="
+    ]
+  },
+  "expect": {
+    "kind": "error",
+    "errorCode": "PARSE_ERROR"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@desiregrimoire/st-compat",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SillyTavern 资产兼容:character / worldbook / preset / chat(P1 落地)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

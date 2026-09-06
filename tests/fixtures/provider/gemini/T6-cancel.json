@@ -1,0 +1,32 @@
+{
+  "provider": "gemini",
+  "case": "T6-cancel",
+  "description": "流中途取消:partial + CANCELLED(PV6)",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoi6YOo5YiG5YaF5a65In1dLCJyb2xlIjoibW9kZWwifX1dfQoK"
+    ]
+  },
+  "abortAfterChunk": 1,
+  "expect": {
+    "kind": "stream",
+    "text": "部分内容",
+    "lastError": "CANCELLED"
+  }
+}

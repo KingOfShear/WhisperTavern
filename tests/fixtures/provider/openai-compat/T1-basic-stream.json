@@ -1,0 +1,35 @@
+{
+  "provider": "openai-compat",
+  "case": "T1-basic-stream",
+  "description": "纯文本流:PV1 逐字节 + §8.1 顺序 + include_usage 帧",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50Ijoi5L2g5aW9LCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50Ijoi5LiW55WMISJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50IjoiIFRoZSBmb3guIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0KCg==",
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6e30sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoxMiwiY29tcGxldGlvbl90b2tlbnMiOjksInByb21wdF90b2tlbnNfZGV0YWlscyI6eyJjYWNoZWRfdG9rZW5zIjo0fSwiY29tcGxldGlvbl90b2tlbnNfZGV0YWlscyI6eyJyZWFzb25pbmdfdG9rZW5zIjowfX19Cgo="
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "你好,世界! The fox.",
+    "finishReason": "stop",
+    "usageSource": "reported"
+  }
+}

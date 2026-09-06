@@ -1,0 +1,33 @@
+{
+  "provider": "anthropic",
+  "case": "T11-multibyte",
+  "description": "多字节 UTF-8 跨 chunk 切断(R1)",
+  "request": {
+    "model": "claude-sonnet-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoidGV4dF9kZWx0YSIsInRleHQiOiLmt7HluqblkIjlubblrQ==",
+      "l+iKgui+ueeVjOa1iyJ9fQoK"
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "深度合并字节边界测",
+    "finishReason": "stop",
+    "usageSource": "estimated"
+  }
+}

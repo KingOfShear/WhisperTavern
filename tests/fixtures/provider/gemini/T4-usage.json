@@ -1,0 +1,33 @@
+{
+  "provider": "gemini",
+  "case": "T4-usage",
+  "description": "usage 归一:cachedContentTokenCount + thoughtsTokenCount(thought part → reasoning_delta)",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoi5YWI5o6o55CGIiwidGhvdWdodCI6dHJ1ZX1dLCJyb2xlIjoibW9kZWwifX1dfQoK",
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0IjoieCJ9XSwicm9sZSI6Im1vZGVsIn0sImZpbmlzaFJlYXNvbiI6IlNUT1AifV0sInVzYWdlTWV0YWRhdGEiOnsicHJvbXB0VG9rZW5Db3VudCI6MTIsImNhbmRpZGF0ZXNUb2tlbkNvdW50Ijo5LCJ0b3RhbFRva2VuQ291bnQiOjIxLCJjYWNoZWRDb250ZW50VG9rZW5Db3VudCI6NjQsInRob3VnaHRzVG9rZW5Db3VudCI6NX19Cgo="
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "x",
+    "finishReason": "stop",
+    "usageSource": "reported"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "provider": "gemini",
+  "case": "T12-context-too-large",
+  "description": "400 INVALID_ARGUMENT(超上限)→ CONTEXT_TOO_LARGE",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 400,
+    "contentType": "application/json",
+    "chunksBase64": [
+      "eyJlcnJvciI6eyJjb2RlIjo0MDAsIm1lc3NhZ2UiOiJUaGUgaW5wdXQgdG9rZW4gY291bnQgZXhjZWVkcyB0aGUgbWF4aW11bSBudW1iZXIgb2YgdG9rZW5zIGFsbG93ZWQiLCJzdGF0dXMiOiJJTlZBTElEX0FSR1VNRU5UIn19"
+    ]
+  },
+  "expect": {
+    "kind": "error",
+    "errorCode": "CONTEXT_TOO_LARGE"
+  }
+}

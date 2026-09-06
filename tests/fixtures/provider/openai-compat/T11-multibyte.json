@@ -1,0 +1,33 @@
+{
+  "provider": "openai-compat",
+  "case": "T11-multibyte",
+  "description": "多字节 UTF-8 跨 chunk 切断 → 解码无损(R1)",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50Ijoi5rex5bqm5ZCI5bm25a2X6IqC6L6555WM5rWLIn0sImZpbmlzaA==",
+      "X3JlYXNvbiI6bnVsbH1dfQoK"
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "深度合并字节边界测",
+    "finishReason": "stop",
+    "usageSource": "estimated"
+  }
+}

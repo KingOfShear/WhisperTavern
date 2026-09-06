@@ -1,0 +1,25 @@
+{
+  "name": "@desiregrimoire/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider Adapter:归一契约 + openai-compat / anthropic / gemini / fake(测试依赖)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@desiregrimoire/contracts": "workspace:*",
+    "@desiregrimoire/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "provider": "anthropic",
+  "case": "T12-context-too-large",
+  "description": "400 \"prompt is too long\" → CONTEXT_TOO_LARGE(Anthropic 表述)",
+  "request": {
+    "model": "claude-sonnet-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 400,
+    "contentType": "application/json",
+    "chunksBase64": [
+      "eyJ0eXBlIjoiZXJyb3IiLCJlcnJvciI6eyJ0eXBlIjoiaW52YWxpZF9yZXF1ZXN0X2Vycm9yIiwibWVzc2FnZSI6InByb21wdCBpcyB0b28gbG9uZzogMjAwMDAwIHRva2VucyA+IDE5MDAwMCBtYXhpbXVtIn19"
+    ]
+  },
+  "expect": {
+    "kind": "error",
+    "errorCode": "CONTEXT_TOO_LARGE"
+  }
+}

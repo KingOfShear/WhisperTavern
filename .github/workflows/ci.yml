@@ -1,0 +1,47 @@
+# DesireGrimoire CI —— 门禁分级(implementation-plan WP0.1 交付项):
+#   blocking:lint → typecheck → test(test 段随 WP 推进自动纳入不变量断言 §5.5、
+#             金样 G2/G4、adapter fixture T 套件——落进 vitest 即被本段拦截)
+#   warning :coverage(仅报告,不设阈值门禁;阈值门禁待 P2 缓存指标定型后再议)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # 版本取 package.json packageManager 字段
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # 总设计 §6:Node.js 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (blocking)
+        run: pnpm lint
+
+      - name: Typecheck (blocking)
+        run: pnpm typecheck
+
+      - name: Test (blocking)
+        run: pnpm test
+
+      - name: Coverage (warning,非门禁)
+        run: pnpm coverage
+        continue-on-error: true
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7

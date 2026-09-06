@@ -1,0 +1,24 @@
+# 依赖与构建产物
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# 日志与临时文件
+*.log
+tmp/
+
+# 环境变量(密钥永不入库——p0-plan R-P0-6)
+.env
+.env.*
+!.env.example
+
+# 外部参照(只读,内嵌 git 仓库)与用户真实资产——AGENTS §6 红线:勿修改、勿上传
+reference/
+酒馆参考文件/
+
+# 操作系统杂物
+.DS_Store
+Thumbs.db
+
+# 运行态数据(库文件/密钥/备份)与用户资产的忽略规则见 data/.gitignore

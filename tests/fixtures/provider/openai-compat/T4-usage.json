@@ -1,0 +1,33 @@
+{
+  "provider": "openai-compat",
+  "case": "T4-usage",
+  "description": "usage 归一:DeepSeek prompt_cache_hit_tokens → cachedInputTokens",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50IjoieCJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo=",
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6e30sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoxMDAsImNvbXBsZXRpb25fdG9rZW5zIjozLCJwcm9tcHRfY2FjaGVfaGl0X3Rva2VucyI6ODh9fQoK"
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "x",
+    "finishReason": "stop",
+    "usageSource": "reported"
+  }
+}

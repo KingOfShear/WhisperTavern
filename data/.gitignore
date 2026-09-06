@@ -1,0 +1,14 @@
+# 运行态与敏感数据一律不入库(p0-plan R-P0-6:密钥永不落盘明文、永不入库;
+# 总设计 §6 存储原则:SQLite = Runtime State,运行态不属于版本库)
+chats.sqlite*
+*.sqlite*
+*.sqlite3*
+*.db
+secrets/
+backups/
+*.key
+
+# 可移植资产(cards / worldbooks / presets / backgrounds)默认不入库——用户私有内容;
+# 如需纳入版本管理,在此显式白名单反选。
+*
+!.gitignore

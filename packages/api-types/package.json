@@ -1,0 +1,23 @@
+{
+  "name": "@desiregrimoire/api-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HTTP/SSE 线格式 DTO——contracts 的线格式投影(api-spec;决策 27)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@desiregrimoire/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

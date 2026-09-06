@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 11:依赖构建脚本白名单(esbuild = vitest 链路;better-sqlite3 = 原生模块)
+allowBuilds:
+  esbuild: true
+  better-sqlite3: true

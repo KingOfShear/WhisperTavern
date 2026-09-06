@@ -1,0 +1,33 @@
+{
+  "provider": "gemini",
+  "case": "T1-basic-stream",
+  "description": "纯文本流:usageMetadata 累积末帧定稿 + STOP 映射",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoi5L2g5aW9LCJ9XSwicm9sZSI6Im1vZGVsIn19XX0KCg==",
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoi5LiW55WMISJ9XSwicm9sZSI6Im1vZGVsIn0sImZpbmlzaFJlYXNvbiI6IlNUT1AifV0sInVzYWdlTWV0YWRhdGEiOnsicHJvbXB0VG9rZW5Db3VudCI6MTIsImNhbmRpZGF0ZXNUb2tlbkNvdW50Ijo5LCJ0b3RhbFRva2VuQ291bnQiOjIxfX0KCg=="
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "你好,世界!",
+    "finishReason": "stop",
+    "usageSource": "reported"
+  }
+}

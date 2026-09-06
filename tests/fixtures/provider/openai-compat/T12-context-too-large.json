@@ -1,0 +1,30 @@
+{
+  "provider": "openai-compat",
+  "case": "T12-context-too-large",
+  "description": "400 context length → CONTEXT_TOO_LARGE,不自动重试(§12)",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 400,
+    "contentType": "application/json",
+    "chunksBase64": [
+      "eyJlcnJvciI6eyJtZXNzYWdlIjoiVGhpcyBtb2RlbCBtYXhpbXVtIGNvbnRleHQgbGVuZ3RoIGlzIDY1NTM2IHRva2VucyJ9fQ=="
+    ]
+  },
+  "expect": {
+    "kind": "error",
+    "errorCode": "CONTEXT_TOO_LARGE"
+  }
+}

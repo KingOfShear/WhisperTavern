@@ -1,0 +1,33 @@
+{
+  "provider": "gemini",
+  "case": "T11-multibyte",
+  "description": "多字节 UTF-8 跨 chunk 切断(R1)",
+  "request": {
+    "model": "gemini-2.5-flash",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InBhcnRzIjpbeyJ0ZXh0Ijoi5rex5bqm5ZCI5bm25a2X6IqC6L6555WM5rWLIn1dLCJy",
+      "b2xlIjoibW9kZWwifX1dfQoK"
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "深度合并字节边界测",
+    "finishReason": "stop",
+    "usageSource": "estimated"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@desiregrimoire/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runtime 基座:Event Bus / SQLite 持久化 / 消息树 / 生成编排与不变量",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@desiregrimoire/contracts": "workspace:*",
+    "@desiregrimoire/core": "workspace:*",
+    "better-sqlite3": "^12.0.0",
+    "drizzle-orm": "^0.44.0"
+  },
+  "devDependencies": {
+    "@desiregrimoire/adapters": "workspace:*",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

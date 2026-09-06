@@ -1,0 +1,24 @@
+{
+  "name": "@desiregrimoire/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "核心类型 + Zod Schema 单一真相源(shared-contracts-spec C2)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

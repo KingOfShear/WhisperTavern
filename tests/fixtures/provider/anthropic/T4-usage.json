@@ -1,0 +1,34 @@
+{
+  "provider": "anthropic",
+  "case": "T4-usage",
+  "description": "双帧合成:input@message_start + output@message_delta;cache_read 归一",
+  "request": {
+    "model": "claude-sonnet-4",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZXZlbnQ6IG1lc3NhZ2Vfc3RhcnQKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjoxMDAsImNhY2hlX3JlYWRfaW5wdXRfdG9rZW5zIjo2NH19fQoK",
+      "ZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoidGV4dF9kZWx0YSIsInRleHQiOiJ4In19Cgo=",
+      "ZXZlbnQ6IG1lc3NhZ2VfZGVsdGEKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9kZWx0YSIsImRlbHRhIjp7InN0b3BfcmVhc29uIjoiZW5kX3R1cm4ifSwidXNhZ2UiOnsib3V0cHV0X3Rva2VucyI6N319Cgo="
+    ]
+  },
+  "expect": {
+    "kind": "stream",
+    "text": "x",
+    "finishReason": "stop",
+    "usageSource": "reported"
+  }
+}

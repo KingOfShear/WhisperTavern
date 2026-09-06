@@ -1,0 +1,32 @@
+{
+  "provider": "openai-compat",
+  "case": "T6-cancel",
+  "description": "流中途取消:partial + CANCELLED,无 finish(PV6)",
+  "request": {
+    "model": "deepseek-chat",
+    "messages": [
+      {
+        "role": "system",
+        "content": "fixture system line"
+      },
+      {
+        "role": "user",
+        "content": "fixture user line"
+      }
+    ],
+    "maxOutputTokens": 256
+  },
+  "response": {
+    "status": 200,
+    "contentType": "text/event-stream",
+    "chunksBase64": [
+      "ZGF0YTogeyJjaG9pY2VzIjpbeyJkZWx0YSI6eyJjb250ZW50Ijoi6YOo5YiG5YaF5a65In0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0KCg=="
+    ]
+  },
+  "abortAfterChunk": 1,
+  "expect": {
+    "kind": "stream",
+    "text": "部分内容",
+    "lastError": "CANCELLED"
+  }
+}

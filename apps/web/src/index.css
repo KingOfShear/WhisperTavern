@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* shadcn/ui 形制的设计令牌(P0 手工落地基础件;CLI 组件随需补充) */
+:root {
+  --background: oklch(0.16 0.01 260);
+  --foreground: oklch(0.93 0.01 260);
+  --muted: oklch(0.24 0.015 260);
+  --muted-foreground: oklch(0.65 0.015 260);
+  --border: oklch(0.3 0.02 260);
+  --primary: oklch(0.65 0.12 300);
+  --primary-foreground: oklch(0.98 0.005 300);
+  --user-bubble: oklch(0.3 0.05 300);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

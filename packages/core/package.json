@@ -1,0 +1,25 @@
+{
+  "name": "@desiregrimoire/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "纯 TS 无 IO:IR / Compiler / worldbook / macros / budget / cache / serializer",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@desiregrimoire/contracts": "workspace:*",
+    "@noble/hashes": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
