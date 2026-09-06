@@ -1,7 +1,7 @@
 # DesireGrimoire V2 — 实施计划总纲（Implementation Plan）
 
 > **文件：** `docs/implementation-plan.md`
-> **版本：** V2.2（2026-09-06：**P0 完成**——§4.10 DoD 勾选、§12 看板全 ✅、还账 #3 勾销；V2.1–V1.8：S7–S4'-a；V1.7–V1.2：S5–S2；V1.1 评审吸收；V1.0 首版，§38 决策 32/35）
+> **版本：** V2.3（2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 32/35）
 > **状态：** Active（随执行滚动更新——WP 状态看板在 §12，每完成一个包即更新）
 > **文档层级：** [technical-design.md](./technical-design.md) 之下的**执行层文档**。与 AGENTS.md 的分工：AGENTS 管**会话纪律**（怎么读、怎么改、何时问），本文管**执行顺序**（做什么、先做哪个、做到什么程度算完）。
 > **决策锚点：** technical-design §38 **决策 32**。
@@ -125,7 +125,7 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 
 P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话产出（B4），追加到对应小节。
 
-# 5. P1 工作包分解（初版，开工首会话细化）
+# 5. P1 工作包分解（**已细化**——会话级明细见 [p1-plan.md](./p1-plan.md),S9–S15;范围裁决 R-P1-1–R-P1-6;DoD 见 §4.11）
 
 | WP | 内容 | 关键锚点 / 还账 |
 |---|---|---|
@@ -137,6 +137,30 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 | WP1.6 | 金样测试体系完整（真实资产导入→编译→序列化） | technical-plan §8.2；override 槽位 UI 随 WP1.5 交付（默认关） |
 
 出场（§36）：目录内真实资产导入跑通、金样绿、Import Compatibility Report 产出（含"档位与越权槽位"小节）。
+
+## 4.11 P1 Definition of Done（含 Non-goals,S8 细化会话产出）
+
+验收清单（全绿 = P1 完成,对应 p1-plan S15）：
+
+```text
+☑(待执行) 目录内真实资产(ST 卡 V2/V3/PNG/charx、世界书两代格式、预设)导入跑通,产原生 .dg 格式
+☑(待执行) 世界书激活层全集语义单测 + 真实书金样(compiler-spec §23–§29)
+☑(待执行) 预设映射(ST Prompt Order §80–§81)→ contributions 顺序
+☑(待执行) 消息树完整交互(编辑变体/swipe 生成填充/分支激活,§16–§23 契约测试)
+☑(待执行) Prompt Inspector v1(段/哈希/diff + authority 徽标;override 槽位 UI 默认关)
+☑(待执行) Import Compatibility Report(含"档位与越权槽位"小节,instruction-security §25)
+☑(待执行) 金样测试体系(真实资产脱敏 → 导入→编译→序列化,technical-plan §8.2)
+☑(待执行) lint + tsc strict + 全量测试 CI 绿
+```
+
+**P1 明确不做**（P2 起接管）：
+
+```text
+✗ stableWB 毕业/退休/物理序 append-only、CachePlan、Budget 裁剪、Elastic History(P2)
+✗ Macro Engine 展开(P2;P1 延续 R-P0-1 宏透传)
+✗ Compatibility/Performance 模式分野与缓存标记翻译(P2/WP2.4)
+✗ Agent/Tool/Workflow(P3);Memory/群聊/RP(P4);PNG 导出双写/桌面化(P5)
+```
 
 # 6. P2 工作包分解（初版，最大差异化——优先打磨）
 

@@ -1067,7 +1067,8 @@ SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@prim
 technical-design.md（本文件，唯一总设计）
 ├─ technical-plan.md          → 工程实施规格（子系统细节 / 数据模型列级定义 / 测试基建 / 风险 / 决策记录）
 ├─ implementation-plan.md     → 实施计划总纲（WP 分解 / 构建顺序 / 验收触发 / 还账映射 / 状态看板；执行层文档，零设计语义，§38 决策 32）
-│  └─ p0-plan.md              → P0 实施明细计划（范围裁决 / 会话切分 / 任务清单 / 逐会话看板——implementation-plan §4 的执行明细，B4 滚动细化首例）
+│  ├─ p0-plan.md              → P0 实施明细计划（已归档执行记录，2026-09-06 P0 完成）
+│  └─ p1-plan.md              → P1 实施明细计划（ST Compatibility:S9–S15 会话切分 / 范围裁决 R-P1-1–6——B4 滚动细化）
 ├─ worldbook-cache-design.md  → Cache Engine 详细规格
 ├─ ui-design.md               → UI 详细规格
 ├─ st-reference-analysis.md   → 兼容性参照（ST 1.18 代码语义基准）

@@ -5,7 +5,7 @@
 
 **项目一句话**：仿 SillyTavern 的本地 AI RP 客户端，两大差异化——缓存友好型世界书（稳态命中率 ≥70%、输入成本削减 ≥60%）+ Agent 化对话（Agent Runtime / Roleplay Runtime 替代 MVU 填表插件）。
 
-**当前状态**（2026-09-06）：**P0 全部完成**（S1–S8,11 会话/2 天,177 测试全绿,四段门禁 CI 绿;§38 决策 35 = 完成记录;DoD 唯一开口项 = 真实四链路冒烟待用户以自有 key 执行 tests/smoke/real-provider-smoke.mjs）。下一会话 = **P1 细化会话**（按 implementation-plan §11 约定产出 docs/p1-plan.md:ST 资产导入/世界书激活层/Inspector,并先落 §4.10 Non-goals 的 P1 项）,见 [docs/p0-plan.md](./docs/p0-plan.md)(已归档)与 [docs/implementation-plan.md](./docs/implementation-plan.md)。
+**当前状态**（2026-09-06）：P0 已完成并提交里程碑（63aa7e1);**P1 细化会话已完成**——[docs/p1-plan.md](./docs/p1-plan.md) 落盘(S9–S15 会话切分 / R-P1-1–6 范围裁决 / §4.11 P1 DoD);下一会话 = **S9(WP1.1a 资产导入:ST 卡 → 原生 .dgcard)**,见 [docs/p1-plan.md](./docs/p1-plan.md) §11 看板。
 
 ## 1. 开工必读顺序（每次会话，顺序执行）
 
@@ -29,7 +29,7 @@
 | 跨模块核心类型 | [docs/specs/shared-contracts-spec.md](./docs/specs/shared-contracts-spec.md)（`packages/contracts` 单一真相源） |
 | UI / 交互 | [docs/ui-design.md](./docs/ui-design.md) |
 | 工程实施 / 测试基建 / st-compat / 资产格式 | [docs/technical-plan.md](./docs/technical-plan.md) |
-| 执行顺序 / 工作包分解 / 还账看板 | [docs/implementation-plan.md](./docs/implementation-plan.md)（总纲）· [docs/p0-plan.md](./docs/p0-plan.md)（P0 明细；P1–P5 由各自细化会话同构产出 pN-plan） |
+| 执行顺序 / 工作包分解 / 还账看板 | [docs/implementation-plan.md](./docs/implementation-plan.md)（总纲）· [docs/p1-plan.md](./docs/p1-plan.md)（P1 明细，当前阶段）· [docs/p0-plan.md](./docs/p0-plan.md)（P0 明细，已归档） |
 
 **文档优先序**（决策 27）：模块规格（对象形状/状态机）> API 规格（线格式投影）> 总设计（架构口径）。事件名唯一权威 = technical-design §5.4；Capability 唯一权威 = §18.2。
 
