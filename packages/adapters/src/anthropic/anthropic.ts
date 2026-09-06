@@ -5,8 +5,8 @@ import type {
   ProviderError,
   ProviderStreamEvent,
   ProviderUsage,
-} from '@desiregrimoire/contracts'
-import { estimateTokens } from '@desiregrimoire/core'
+} from '@whispertavern/contracts'
+import { estimateTokens } from '@whispertavern/core'
 import { parseSseData } from '../shared/sse'
 import {
   createRedact,

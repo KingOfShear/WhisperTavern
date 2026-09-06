@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProviderChatRequest, ProviderStreamEvent } from '@desiregrimoire/contracts'
+import type { ProviderChatRequest, ProviderStreamEvent } from '@whispertavern/contracts'
 import { AnthropicAdapter, type FetchLike, type ProviderHttpResponse } from '../index'
 
 const API_KEY = 'sk-ant-test-1234567890abcdef'

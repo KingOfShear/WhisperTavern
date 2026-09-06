@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ChatIdSchema, SnapshotIdSchema, type PromptIR, type PromptSegment } from '@desiregrimoire/contracts'
+import { ChatIdSchema, SnapshotIdSchema, type PromptIR, type PromptSegment } from '@whispertavern/contracts'
 import { buildPromptSnapshot } from './snapshot'
 
 const SHA256_EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'

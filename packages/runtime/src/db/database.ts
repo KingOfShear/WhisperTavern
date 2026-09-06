@@ -10,7 +10,7 @@ import { migrate } from './migrate'
 
 export type DrizzleDb = BetterSQLite3Database<typeof schema>
 
-export interface DesireGrimoireDb {
+export interface WhisperTavernDb {
   /** 原生句柄(事务/pragma 用) */
   sqlite: BetterSqlite3.Database
   /** Drizzle 查询层 */
@@ -19,7 +19,7 @@ export interface DesireGrimoireDb {
   close(): void
 }
 
-export function createDatabase(path: string, options: { autoMigrate?: boolean } = {}): DesireGrimoireDb {
+export function createDatabase(path: string, options: { autoMigrate?: boolean } = {}): WhisperTavernDb {
   const sqlite = new BetterSqlite3(path)
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')

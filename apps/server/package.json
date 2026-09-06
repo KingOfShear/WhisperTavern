@@ -1,5 +1,5 @@
 {
-  "name": "@desiregrimoire/server",
+  "name": "@whispertavern/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,14 +12,14 @@
     "dev": "tsx src/main.ts"
   },
   "dependencies": {
-    "@desiregrimoire/adapters": "workspace:*",
-    "@desiregrimoire/contracts": "workspace:*",
-    "@desiregrimoire/core": "workspace:*",
-    "@desiregrimoire/runtime": "workspace:*",
+    "@whispertavern/adapters": "workspace:*",
+    "@whispertavern/contracts": "workspace:*",
+    "@whispertavern/core": "workspace:*",
+    "@whispertavern/runtime": "workspace:*",
     "hono": "^4.6.0",
     "drizzle-orm": "^0.44.0",
     "@hono/node-server": "^1.13.0",
-    "@desiregrimoire/st-compat": "workspace:*"
+    "@whispertavern/st-compat": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -7,7 +7,7 @@ import type {
   ProviderCapabilities,
   ProviderUsage,
   SerializedPrompt,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 
 /**
  * HTTP/SSE 线格式 DTO —— contracts 的投影/反导出(shared-contracts-spec C2;

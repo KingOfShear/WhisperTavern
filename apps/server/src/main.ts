@@ -1,5 +1,5 @@
-// DesireGrimoire server 引导(S7):真实监听入口——数据目录、迁移、密钥库、SSE 总线。
-// 开发:npx tsx src/main.ts(或 pnpm --filter @desiregrimoire/server dev);端口 DG_PORT(缺省 8787)。
+// WhisperTavern server 引导(S7):真实监听入口——数据目录、迁移、密钥库、SSE 总线。
+// 开发:npx tsx src/main.ts(或 pnpm --filter @whispertavern/server dev);端口 DG_PORT(缺省 8787)。
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
@@ -9,7 +9,7 @@ import {
   EventBus,
   createSqliteEventSink,
   SnapshotRegistry,
-} from '@desiregrimoire/runtime'
+} from '@whispertavern/runtime'
 import { createApp } from './server'
 
 const dataDir = process.env.DG_DATA_DIR ?? join(process.cwd(), 'data')
@@ -29,5 +29,5 @@ const { app } = createApp({ store, bus, snapshots: new SnapshotRegistry(), secre
 
 const port = Number.parseInt(process.env.DG_PORT ?? '8787', 10)
 serve({ fetch: app.fetch, port }, (info) => {
-  logger('info', `DesireGrimoire server listening on http://localhost:${info.port}`)
+  logger('info', `WhisperTavern server listening on http://localhost:${info.port}`)
 })

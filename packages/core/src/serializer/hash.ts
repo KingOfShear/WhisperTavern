@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex } from '@noble/hashes/utils'
-import type { PromptIR, PromptSegment, PromptZoneName } from '@desiregrimoire/contracts'
+import type { PromptIR, PromptSegment, PromptZoneName } from '@whispertavern/contracts'
 import type { DeepReadonly } from '../ir/segment'
 
 /**

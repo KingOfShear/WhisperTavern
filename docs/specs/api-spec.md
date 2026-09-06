@@ -1,4 +1,4 @@
-# DesireGrimoire V2 API Specification
+# WhisperTavern V2 API Specification
 
 > **Version:** 2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec）  
 > **Status:** Implementation Specification  
@@ -13,7 +13,7 @@
 
 # 1. API Design Principles
 
-DesireGrimoire V2 API 遵循以下原则：
+WhisperTavern V2 API 遵循以下原则：
 
 ## 1.1 API 是 Runtime Contract
 
@@ -4028,7 +4028,7 @@ plugin:
 
 # 158. 最重要的 Runtime 链
 
-DesireGrimoire V2 最核心的一次请求应该永远遵循：
+WhisperTavern V2 最核心的一次请求应该永远遵循：
 
 ```text
                   USER
@@ -4144,7 +4144,7 @@ Every resumable run MUST survive application restart.
 
 # 160. Final Design Principle
 
-DesireGrimoire V2 API 不应该被设计成：
+WhisperTavern V2 API 不应该被设计成：
 
 > “给前端提供一堆 CRUD 接口。”
 
@@ -4185,7 +4185,7 @@ Prompt Compiler、Cache Planner、Agent Runtime、Memory Runtime 都必须拥有
 最终形成：
 
 ```text
-                    DesireGrimoire V2
+                    WhisperTavern V2
                            │
               ┌────────────┴────────────┐
               │                         │

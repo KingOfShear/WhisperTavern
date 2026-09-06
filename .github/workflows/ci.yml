@@ -1,4 +1,4 @@
-# DesireGrimoire CI —— 门禁分级(implementation-plan WP0.1 交付项):
+# WhisperTavern CI —— 门禁分级(implementation-plan WP0.1 交付项):
 #   blocking:lint → typecheck → test(test 段随 WP 推进自动纳入不变量断言 §5.5、
 #             金样 G2/G4、adapter fixture T 套件——落进 vitest 即被本段拦截)
 #   warning :coverage(仅报告,不设阈值门禁;阈值门禁待 P2 缓存指标定型后再议)

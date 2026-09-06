@@ -1,9 +1,9 @@
-# DesireGrimoire V2 — Prompt Compiler Specification
+# WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
 > **版本：** V2.1（2026-09 收编修订版。4 处修正与总设计对齐：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
-> **所属系统：** DesireGrimoire V2  
+> **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
 > **上游：** Application Runtime / Agent Runtime  
 > **下游：** Provider Adapter  
@@ -24,7 +24,7 @@
 > Provider Request
 > ```
 >
-> Prompt Compiler 是 DesireGrimoire V2 中唯一允许生成最终模型 Prompt 的核心模块。
+> Prompt Compiler 是 WhisperTavern V2 中唯一允许生成最终模型 Prompt 的核心模块。
 
 ---
 
@@ -4419,7 +4419,7 @@ Prompt Compiler V2 只有满足以下条件才能认为完成：
 
 # 148. 最终原则
 
-DesireGrimoire V2 Prompt Compiler 最重要的不是“把 Prompt 拼出来”。
+WhisperTavern V2 Prompt Compiler 最重要的不是“把 Prompt 拼出来”。
 
 它真正解决的是：
 
@@ -4435,7 +4435,7 @@ Prompt
 模型
 
 
-DesireGrimoire：
+WhisperTavern：
 
 Runtime State
  ↓
@@ -4482,7 +4482,7 @@ buildPrompt()
 
 函数。
 
-**最终目标不是让 DesireGrimoire “能生成 Prompt”，而是让系统能够回答：**
+**最终目标不是让 WhisperTavern “能生成 Prompt”，而是让系统能够回答：**
 
 > **“这一轮模型究竟看到了什么？为什么看到这些？哪些内容可以缓存？为什么缓存断了？如果换一个模型/重新运行，这个 Prompt 能不能完全复现？”**
 

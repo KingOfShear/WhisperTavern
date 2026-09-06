@@ -7,8 +7,8 @@ import {
   createSqliteEventSink,
   EventBus,
   SnapshotRegistry,
-  type DesireGrimoireDb,
-} from '@desiregrimoire/runtime'
+  type WhisperTavernDb,
+} from '@whispertavern/runtime'
 import { createApp, type CreatedApp } from './server'
 
 /**
@@ -17,20 +17,20 @@ import { createApp, type CreatedApp } from './server'
  */
 
 const dirs: string[] = []
-const opened: DesireGrimoireDb[] = []
+const opened: WhisperTavernDb[] = []
 
 export interface E2eHarness {
   root: string
   dbPath: string
   assetsDir: string
-  open: () => CreatedApp & { store: DesireGrimoireDb }
+  open: () => CreatedApp & { store: WhisperTavernDb }
 }
 
 export function makeE2eHarness(): E2eHarness {
   const root = mkdtempSync(join(tmpdir(), 'dg-e2e-'))
   dirs.push(root)
   const dbPath = join(root, 'chats.sqlite')
-  const open = (): CreatedApp & { store: DesireGrimoireDb } => {
+  const open = (): CreatedApp & { store: WhisperTavernDb } => {
     const store = createDatabase(dbPath)
     opened.push(store)
     const bus = new EventBus(createSqliteEventSink(store))

@@ -1,5 +1,5 @@
 {
-  "name": "@desiregrimoire/st-compat",
+  "name": "@whispertavern/st-compat",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -20,6 +20,6 @@
   "dependencies": {
     "fflate": "^0.8.0",
     "zod": "^4.0.0",
-    "@desiregrimoire/contracts": "workspace:*"
+    "@whispertavern/contracts": "workspace:*"
   }
 }

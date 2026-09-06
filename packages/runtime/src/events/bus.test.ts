@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Timestamp } from '@desiregrimoire/contracts'
+import type { Timestamp } from '@whispertavern/contracts'
 import { EventBus, type EventSink, type RuntimeEvent } from './bus'
 import { EVENT_CATALOG } from './catalog'
 

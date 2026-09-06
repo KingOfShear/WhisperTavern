@@ -1,8 +1,8 @@
-import type { ApiErrorBody, ApiEnvelope, MessageDto, PromptSnapshotDto, ProviderDto } from '@desiregrimoire/api-types'
+import type { ApiErrorBody, ApiEnvelope, MessageDto, PromptSnapshotDto, ProviderDto } from '@whispertavern/api-types'
 
 /**
  * HTTP 客户端薄壳(api-spec §6/§7):信封解包 + 错误归一。
- * 字段形状全部来自 @desiregrimoire/api-types(禁止手写线格式,S7 任务 2)。
+ * 字段形状全部来自 @whispertavern/api-types(禁止手写线格式,S7 任务 2)。
  */
 
 export class ApiClientError extends Error {

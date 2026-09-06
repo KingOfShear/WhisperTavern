@@ -1,4 +1,4 @@
-import type { ProviderError, ProviderErrorCode } from '@desiregrimoire/contracts'
+import type { ProviderError, ProviderErrorCode } from '@whispertavern/contracts'
 
 /**
  * HTTP 边界共享件 —— 响应形状 / 错误映射表(§12 表驱动)/ redact(§17.2,PV5)。

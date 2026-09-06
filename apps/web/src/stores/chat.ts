@@ -1,7 +1,7 @@
 import { ApiClientError, api } from '../api/client'
 import { openRunStream, validateSequence } from '../api/sse'
 import { create } from 'zustand'
-import type { ChatSummaryDto, PromptSnapshotDto, ProviderDto } from '@desiregrimoire/api-types'
+import type { ChatSummaryDto, PromptSnapshotDto, ProviderDto } from '@whispertavern/api-types'
 import type { MessageDtoLite } from '../api/client'
 
 /**

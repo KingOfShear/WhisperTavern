@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Roleplay Evaluation Engine Specification
+# WhisperTavern V2 — Roleplay Evaluation Engine Specification
 
 > 版本：V1.0（2026-09-05，Roleplay Quality 子规格之实现层）
 > 状态：Draft（与 roleplay-quality-spec / roleplay-runtime-spec / dialogue-director-spec / shared-contracts-spec 对齐，待 P4–P5 实施）

@@ -7,12 +7,12 @@ import { describe, expect, it } from 'vitest'
  * 零 IO 约束测试(p0-plan S3 验收:core 包零 IO)。
  *
  * 扫描 src 全部非测试源文件的 import 说明符:只允许相对导入、
- * @desiregrimoire/contracts(依赖方向 core → contracts)、@noble/hashes(纯 JS
+ * @whispertavern/contracts(依赖方向 core → contracts)、@noble/hashes(纯 JS
  * 哈希库)。node:* 与其余一切包 = 红。本测试文件自身用 node:fs 属测试基建,
  * 不受约束(被排除)。
  */
 
-const ALLOWED_EXTERNAL = /^(@desiregrimoire\/contracts|@noble\/hashes(\/[\w-]+)?)$/
+const ALLOWED_EXTERNAL = /^(@whispertavern\/contracts|@noble\/hashes(\/[\w-]+)?)$/
 const SOURCE_DIR = fileURLToPath(new URL('.', import.meta.url))
 
 function listSourceFiles(dir: string): string[] {

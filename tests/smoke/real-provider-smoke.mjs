@@ -1,7 +1,7 @@
 // 真实四链路冒烟(p0-plan S8 任务 2;DoD 第 1 条)——密钥经环境变量注入,
 // **绝不写入本文件、绝不入库、绝不出现在日志**(PV5/R-P0-6)。
 //
-// 用法(在仓库根,server 已起:DG_PORT=8787 pnpm --filter @desiregrimoire/server dev):
+// 用法(在仓库根,server 已起:DG_PORT=8787 pnpm --filter @whispertavern/server dev):
 //   DG_SMOKE_OPENAI_BASE=https://api.deepseek.com/v1 DG_SMOKE_OPENAI_KEY=sk-xxx \
 //   DG_SMOKE_OPENAI_MODEL=deepseek-chat \
 //   DG_SMOKE_ANTHROPIC_KEY=sk-ant-xxx DG_SMOKE_ANTHROPIC_MODEL=claude-sonnet-4 \

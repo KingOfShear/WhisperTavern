@@ -4,9 +4,9 @@ import {
   SnapshotIdSchema,
   type PromptSnapshot,
   type Timestamp,
-} from '@desiregrimoire/contracts'
-import { buildPromptSnapshot, type DeepReadonly } from '@desiregrimoire/core'
-import { FakeProviderAdapter } from '@desiregrimoire/adapters'
+} from '@whispertavern/contracts'
+import { buildPromptSnapshot, type DeepReadonly } from '@whispertavern/core'
+import { FakeProviderAdapter } from '@whispertavern/adapters'
 import { EventBus } from '../events/bus'
 import {
   assertNoMetadataOnWire,

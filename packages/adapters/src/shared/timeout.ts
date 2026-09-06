@@ -1,5 +1,5 @@
 import { providerError } from './http'
-import type { ProviderError, ProviderErrorCode } from '@desiregrimoire/contracts'
+import type { ProviderError, ProviderErrorCode } from '@whispertavern/contracts'
 
 /**
  * 分层超时 —— provider-adapter-spec §14(全部可配置,默认值实施期定,P0 落默认):

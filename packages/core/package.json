@@ -1,5 +1,5 @@
 {
-  "name": "@desiregrimoire/core",
+  "name": "@whispertavern/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@desiregrimoire/contracts": "workspace:*",
+    "@whispertavern/contracts": "workspace:*",
     "@noble/hashes": "^1.7.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Roleplay Quality Specification
+# WhisperTavern V2 — Roleplay Quality Specification
 
 > 版本：V1.0（2026-09-05，Roleplay Runtime 子规格二）
 > 状态：Draft（与 roleplay-runtime-spec / dialogue-director-spec / agent-runtime-spec / prompt-compiler-spec 对齐，待 P4 实施）

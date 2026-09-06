@@ -2,10 +2,10 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { and, desc, eq, gt, ne } from 'drizzle-orm'
-import { uuidv7 } from '@desiregrimoire/runtime'
-import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@desiregrimoire/adapters'
-import { compile } from '@desiregrimoire/core'
-import { importCard, isCardParseError } from '@desiregrimoire/st-compat'
+import { uuidv7 } from '@whispertavern/runtime'
+import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
+import { compile } from '@whispertavern/core'
+import { importCard, isCardParseError } from '@whispertavern/st-compat'
 import {
   activeLeafId,
   activateMessage,
@@ -19,7 +19,7 @@ import {
   swipeMessage,
   SERVER_COMPILER_VERSION,
   type RuntimeEvent,
-} from '@desiregrimoire/runtime'
+} from '@whispertavern/runtime'
 import {
   chats as chatsTable,
   characterVersions,
@@ -31,15 +31,15 @@ import {
   providers as providersTable,
   runs as runsTable,
   worldbooks as worldbooksTable,
-} from '@desiregrimoire/runtime'
-import type { Chat, ChatId, MessageId, ProviderAdapter, ProviderChatRequest, SnapshotId } from '@desiregrimoire/contracts'
+} from '@whispertavern/runtime'
+import type { Chat, ChatId, MessageId, ProviderAdapter, ProviderChatRequest, SnapshotId } from '@whispertavern/contracts'
 import { httpStatusFor } from './api/errors'
 import { RunStreamRegistry } from './api/run-streams'
 import { SSE_HEADERS, sseFrame } from './api/types'
 import type { ServerDeps } from './api/types'
 
 /**
- * DesireGrimoire HTTP/SSE 网关(api-spec P0 范围,§152 MVP Scope)。
+ * WhisperTavern HTTP/SSE 网关(api-spec P0 范围,§152 MVP Scope)。
  * **纯传输层**(总设计 §7):路由 = HTTP ↔ runtime 调用翻译,零业务逻辑;
  * 编排语义在 packages/runtime(startRun),归一契约在 adapters/contracts。
  */

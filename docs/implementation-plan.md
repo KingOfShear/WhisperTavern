@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — 实施计划总纲（Implementation Plan）
+# WhisperTavern V2 — 实施计划总纲（Implementation Plan）
 
 > **文件：** `docs/implementation-plan.md`
 > **版本：** V2.3（2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 32/35）

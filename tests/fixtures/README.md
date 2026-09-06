@@ -23,4 +23,4 @@
   **P0 内容为合成字节流**(无真实密钥、合成文本),由 `provider/record-fixtures.mjs`
   确定性生成——变更 fixture = 改脚本重跑,不手改 JSON;接入真实 API 录制后,
   录制流程必须过 adapters 的 redact 中间件(§17.2)再落盘。
-  回放器:`@desiregrimoire/adapters` 的 `loadFixture / fixtureTransport / fixtureRequest`。
+  回放器:`@whispertavern/adapters` 的 `loadFixture / fixtureTransport / fixtureRequest`。

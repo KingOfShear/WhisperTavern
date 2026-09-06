@@ -6,8 +6,8 @@ import type {
   ProviderStreamEvent,
   ProviderUsage,
   Timestamp,
-} from '@desiregrimoire/contracts'
-import type { DeepReadonly } from '@desiregrimoire/core'
+} from '@whispertavern/contracts'
+import type { DeepReadonly } from '@whispertavern/core'
 import type { EventBus, RuntimeEvent } from '../events/bus'
 import { uuidv7 } from '../util/id'
 

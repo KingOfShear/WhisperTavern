@@ -3,7 +3,7 @@ import {
   ChatIdSchema,
   SnapshotIdSchema,
   type PromptContribution,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 import { compile, type CompileRequest } from './pipeline'
 
 const chatId = ChatIdSchema.parse('chat_s4')

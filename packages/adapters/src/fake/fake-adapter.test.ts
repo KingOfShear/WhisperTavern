@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProviderChatRequest, ProviderStreamEvent } from '@desiregrimoire/contracts'
+import type { ProviderChatRequest, ProviderStreamEvent } from '@whispertavern/contracts'
 import { FakeProviderAdapter } from './fake-adapter'
 
 const baseRequest: ProviderChatRequest = {

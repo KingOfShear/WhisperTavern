@@ -1,4 +1,4 @@
-# @desiregrimoire/adapters
+# @whispertavern/adapters
 
 Provider Adapter 层:**只翻译,不做语义**(PV1)——不改内容字节、不裁剪、不重排;
 语义修改权唯一在 Prompt Compiler。规格真相源:
@@ -8,7 +8,7 @@ Provider Adapter 层:**只翻译,不做语义**(PV1)——不改内容字节、�
 
 ```text
 src/
-├─ contract.ts    归一契约临时占位(§6/§7 草案)——S2 收编入 @desiregrimoire/contracts 后删除
+├─ contract.ts    归一契约临时占位(§6/§7 草案)——S2 收编入 @whispertavern/contracts 后删除
 ├─ fake/          脚本回放式内存 adapter(测试依赖,不出网;WP0.1 就位)
 ├─ openai/        S4'-a(openai-compat,含 DeepSeek reasoning_content 与本地端点)
 ├─ anthropic/     S4'-b(thinking 签名块回传 PV8)

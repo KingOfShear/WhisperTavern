@@ -1,4 +1,4 @@
-import type { Timestamp } from '@desiregrimoire/contracts'
+import type { Timestamp } from '@whispertavern/contracts'
 import {
   assertEventName,
   durabilityOf,

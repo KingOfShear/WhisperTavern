@@ -1,7 +1,7 @@
-# DesireGrimoire 技术总设计（V2）
+# WhisperTavern 技术总设计（V2）
 
 > **版本**：V2.0 合并稿（2026-09-04）
-> **来源**：以《DesireGrimoire V2 技术总设计》草案为骨架，合并原 technical-plan.md / worldbook-cache-design.md 的实施结论，并修正三处设计问题（stableWB 排序漏洞、summary 区位置、默认工作流路径），修正依据见 §38 决策记录。
+> **来源**：以《WhisperTavern V2 技术总设计》草案为骨架，合并原 technical-plan.md / worldbook-cache-design.md 的实施结论，并修正三处设计问题（stableWB 排序漏洞、summary 区位置、默认工作流路径），修正依据见 §38 决策记录。
 > **一句话定义**：以 Prompt Compiler 为核心、以 Prefix Cache 为成本引擎、以 Agent Runtime 为执行引擎、以 Memory Runtime 为长期上下文引擎，通过 Snapshot / Event / Inspector 实现完全可观测的 Local-first AI RP / 长上下文工作台。
 
 ## 0. 核心设计原则（铁律）
@@ -23,7 +23,7 @@
 
 ## 1. 项目定位
 
-DesireGrimoire V2 不是 SillyTavern UI 重制版。目标是把"角色卡 + 世界书 + Prompt + 聊天记录 + 插件"组成的传统 AI Chat 客户端，升级为拥有 Prompt Compiler、缓存管理、长期记忆和多智能体运行时的本地 AI 工作台。
+WhisperTavern V2 不是 SillyTavern UI 重制版。目标是把"角色卡 + 世界书 + Prompt + 聊天记录 + 插件"组成的传统 AI Chat 客户端，升级为拥有 Prompt Compiler、缓存管理、长期记忆和多智能体运行时的本地 AI 工作台。
 
 传统酒馆的核心模型：`资产 → 前端脚本 → 动态拼 Prompt → Provider → 模型`。其 Prompt 组装散落在浏览器端各处（胖前端架构，见 [st-reference-analysis.md](./st-reference-analysis.md)），扩展只能在浏览器里做字符串手术。V2 将组装收敛为服务端纯函数编译管线，这是架构层面的主动升级而非重构。
 
@@ -254,7 +254,7 @@ Event Bus 在 P0 就存在；插件、UI、Telemetry、Agent Runtime 都建立�
 ## 7. 仓库结构
 
 ```text
-DesireGrimoire/
+WhisperTavern/
 ├─ apps/
 │  ├─ server/            # Hono：HTTP 路由 + SSE 网关（纯传输层，无业务逻辑）
 │  │  ├─ api/
@@ -927,7 +927,7 @@ Prompt 证据层
 
 ## 32. Replay 与确定性调试
 
-Replay 使用 Character / Persona / Preset / Worldbook State / Memory / Message Branch / Prompt Snapshot / Model / Sampling Params 重新生成；支持 **Replay with Model B** 做 A/B 对照，同时比较 Prompt Diff / Output Diff / Cost / Latency / Cache。这使 DesireGrimoire 从"聊天客户端"升级为 **AI Runtime Debugging Environment**。
+Replay 使用 Character / Persona / Preset / Worldbook State / Memory / Message Branch / Prompt Snapshot / Model / Sampling Params 重新生成；支持 **Replay with Model B** 做 A/B 对照，同时比较 Prompt Diff / Output Diff / Cost / Latency / Cache。这使 WhisperTavern 从"聊天客户端"升级为 **AI Runtime Debugging Environment**。
 
 ## 33. 遥测与缓存诊断
 
@@ -1055,6 +1055,8 @@ SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@prim
 
 35. **P0 完成记录（2026-09-06,S8/WP0.9 收官）**:DoD 七条逐项核验（implementation-plan §4.10）——①真实四链路:机制全就绪,冒烟脚本 tests/smoke/real-provider-smoke.mjs（env-var 驱动、密钥不入库）,**真实执行待用户以自有 key 冒烟后勾销**;②streaming/取消/partial:e2e 锁定(取消→CANCELLED→partial 前缀可查);③generation+usage 入库 + 重启恢复:e2e 锁定(usage_source 分对/重启后消息树/运行记录/快照可查);④快照重建模型可见内容:e2e(serialized.parts ≡ generations.request.messages);⑤无绕过路径:fake 调用入口四不变量闸口 + 故意违规测试变红;⑥金样 G2/G4 + fixture T1/T4/T6/T10/T11/T12/T14×3 家全绿;⑦lint + tsc strict + 全量 177 测试 CI 绿。P0 范围外挂账:§152 的资产 CRUD 已于 S8 补齐(migration v3);swipe 生成填充、代理管道、Inspector 完整形态随 P1。**P1 起步前置:P1 细化会话产出 p1-plan(§11 阶段计划约定)。**
 
+36. **目录/工作区改名后 node_modules junction 失效的修复约定（2026-09-06，承接 AGENTS§9 四版更名）**:更名后实测发现 pnpm 工作区 junction（`node_modules/.pnpm/node_modules/@whispertavern/*` 及各 workspace 包）其 Target 为**绝对路径**——文件夹改名不会自动更新，即便源码 grep 清零 + lockfile 干净，junction 仍指向旧路径 `D:\Workspace\DesireGrimoire\...`（已不存在），node_modules 处于死链接失效态。**四版所记"pnpm install 重链接"实际未在改名后生效，本条更正该记录**。修复：重跑 `pnpm install --frozen-lockfile`（重装遇 `ERR_PNPM_ENOENT`，即 better-sqlite3 rename 撞既有目录的 Windows pnpm 已知瞬态，清理该包残留后重跑成功）；修复后核验 `@whispertavern` 9 个 junction 全部指向 `D:\Workspace\WhisperTavern\...`、`@desiregrimoire` 死链接清除、旧名全仓 grep 清零、全量 192 测试绿。**沉淀约定：本仓库做目录/工作区改名时，除源码与 lockfile 机械替换外，必须重跑 `pnpm install` 并核验 workspace junction 的 Target——绝对路径型 junction 是 grep 看不见的旧路径残留，不得只以 grep 清零为验收**。
+
 ## 39. 风险与对策
 
 完整风险清单（语义长尾、provider 缓存策略变动、usage 不回传降级、最小前缀阈值、群聊 TTL、摘要链质量、Agent 延迟）见 [technical-plan.md](./technical-plan.md) §10。
@@ -1104,7 +1106,7 @@ DeepSeek Harness           → agent-loop 脊柱机械结构参照
 
 ```text
 ┌──────────────────────────────────────────────┐
-│              DesireGrimoire V2               │
+│              WhisperTavern V2               │
 │  ① Compile     Prompt Compiler               │
 │  ② Cache       Cache-aware Context           │
 │  ③ Act         Agent Runtime                 │

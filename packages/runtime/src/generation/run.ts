@@ -1,4 +1,4 @@
-import { compile } from '@desiregrimoire/core'
+import { compile } from '@whispertavern/core'
 import {
   type ApplicationError,
   type MessageRole,
@@ -11,12 +11,12 @@ import {
   type MessageId,
   type SnapshotId,
   type ProviderChatRequest,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 import { activeLeafId, ancestorChain, createMessage, loadChat, loadMessage } from '../tree/messages'
-import type { Chat, Message } from '@desiregrimoire/contracts'
+import type { Chat, Message } from '@whispertavern/contracts'
 import { dispatchGeneration, SnapshotRegistry, type DispatchResult } from './dispatch'
 import type { EventBus } from '../events/bus'
-import type { DesireGrimoireDb } from '../db/database'
+import type { WhisperTavernDb } from '../db/database'
 import { generations, promptSnapshots, runs } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { uuidv7 } from '../util/id'
@@ -32,7 +32,7 @@ import { uuidv7 } from '../util/id'
 export const SERVER_COMPILER_VERSION = '0.1.0'
 
 export interface RunDeps {
-  store: DesireGrimoireDb
+  store: WhisperTavernDb
   bus: EventBus
   snapshots: SnapshotRegistry
   /** usage 落库钩子(SSE 侧 bus.flush 时机由传输层定) */
@@ -209,7 +209,7 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
 }
 
 /** 活跃链(根 → 叶);空链返回空数组(§24:先有消息才能生成) */
-export function loadActiveChain(store: DesireGrimoireDb, leafId: string | undefined): Result<Message[], ApplicationError> {
+export function loadActiveChain(store: WhisperTavernDb, leafId: string | undefined): Result<Message[], ApplicationError> {
   if (leafId === undefined) return { ok: true, value: [] }
   const chainIds = ancestorChain(store, leafId as MessageId).reverse()
   const chain: Message[] = []

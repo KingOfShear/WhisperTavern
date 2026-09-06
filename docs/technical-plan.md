@@ -1,4 +1,4 @@
-# DesireGrimoire 工程实施规格
+# WhisperTavern 工程实施规格
 
 > **文档层级（2026-09 更新）**：总体设计已上移至 [technical-design.md](./technical-design.md)（唯一总设计：架构、IR、Zone、缓存生命周期、Agent Runtime、路线图）。本文降级为**工程实施规格**——§5 各子系统实施细节、§6 数据模型、§7 AI 协作编码规范、§8 测试策略、§10 风险与对策、§11 决策记录继续有效，与总设计重复的部分以总设计为准。
 > 缓存机制（本项目最核心的差异化设计）详见 [worldbook-cache-design.md](./worldbook-cache-design.md)，交互界面设计见 [ui-design.md](./ui-design.md)。

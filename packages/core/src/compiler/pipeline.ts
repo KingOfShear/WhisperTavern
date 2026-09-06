@@ -17,7 +17,7 @@ import {
   type SnapshotId,
   type StabilityClass,
   type Timestamp,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 import { createPromptIR, deepFreeze, type DeepReadonly } from '../ir/segment'
 import { buildZoneHashes, ZONE_ORDER } from '../serializer/hash'
 import { buildPromptSnapshot } from '../serializer/snapshot'

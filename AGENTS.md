@@ -1,4 +1,4 @@
-# DesireGrimoire — AI 协作会话引导（AGENTS.md）
+# WhisperTavern — AI 协作会话引导（AGENTS.md）
 
 > 本文件是每个 AI 会话的**第一入口**：开工先读完本文件，再按 §1 顺序读文档。
 > 维护纪律：本文件与 docs/ 体系冲突时，以 docs/ 为准并修订本文件；修订须在末尾登记日期。
@@ -10,7 +10,7 @@
 ## 1. 开工必读顺序（每次会话，顺序执行）
 
 1. **本文件**（§2 文档地图 → 按任务找对详设）。
-2. **docs/technical-design.md**：§0 核心设计原则（铁律）→ **§38 已定决策记录（33 项，唯一权威）** → 与任务相关的章节。
+2. **docs/technical-design.md**：§0 核心设计原则（铁律）→ **§38 已定决策记录（36 项，唯一权威）** → 与任务相关的章节。
 3. **`.workbuddy/memory/` 最近日记**（会话连续性；决策 26 ③）。
 4. 本次任务涉及的 spec（见 §2 地图）——先读其**头部版本行与修订说明**，确认没有并发会话改过。
 5. 到 **[docs/implementation-plan.md](./docs/implementation-plan.md)** 认领工作包（WP）：核对 §12 状态看板与该包的入场/出场条件，未满足入场条件不得开工。
@@ -98,3 +98,5 @@ reference/SillyTavern/  ← 外部参照代码（只读，不是本仓库代码�
 - 2026-09-05 初版（随 provider-adapter-spec 骨架一同落成，决策 31）。
 - 2026-09-05 二版（吸收外部评审，择优采纳：新增 §4 决策协议、纪律 5 架构扩展限制 / 纪律 6 代码风格底线、实验留痕；§6 去数量化防过期。**拒绝**另立 `ai-agent-development-policy.md`——平行文档违反决策 26 ②；拒绝复述 §37 四问式 Prompt 清单——已有验收门禁，只留"不用 Prompt 修架构问题"红线）。
 - 2026-09-05 三版（小步同步：当前状态更新为 S1 完成、决策计数 31→33；License 定 **Apache-2.0**（§38 决策 33），开源挂账登记 implementation-plan §10 #14–#16。开源评审"重排 13 包结构"方案拒绝——违反 §7 结构 / 纪律 5 / shared-contracts C4）。
+- 2026-09-06 四版（**项目更名：DesireGrimoire → WhisperTavern**，用户指令。全仓机械替换两形态：`@desiregrimoire/*` 作用域包名 → `@whispertavern/*`（118 处，含 pnpm-lock 同步 sed + `pnpm install` 重链接）；`DesireGrimoire` 品牌串/类型名 → `WhisperTavern`（91 处，含 `DesireGrimoireDb`→`WhisperTavernDb`）。工作区目录同步改名。**保留项**：`.dg*` 资产扩展名（.dgcard/.dgpreset/.dgworld）与 `dg` 内部前缀暂不迁移——属公共契约破坏性变更（决策协议 c），是否改 `.wt*` 另议需登记 §38；`.workbuddy/memory/2026-09-04、05.md` 两年日记按留痕原则不改写）。验证：grep 复核清零 + 全量测试。
+- 2026-09-06 五版（**更名重链接修复与四版记录更正**，决策 36）：四版所谓"pnpm install 重链接"实测并未在改名后生效——pnpm 工作区 junction 的 Target 是绝对路径，文件夹改名不自动更新，即使 grep 清零 + lockfile 干净，junction 仍指向已不存在的旧路径 `D:\Workspace\DesireGrimoire\...`，node_modules 呈死链接失效态。重跑 `pnpm install --frozen-lockfile` 修复（重装遇 better-sqlite3 `ERR_PNPM_ENOENT` 的 Windows 已知瞬态，清理残留后重跑成功），修后 `@whispertavern` 全部 junction 指回 `WhisperTavern` 路径、`@desiregrimoire` 死链接清除、旧名 grep 清零、全量 192 测试绿。**沉淀约定（§38 决策 36）：目录/工作区改名不得只以 grep 清零为验收，必须重跑 `pnpm install` 并核验 workspace junction 的 Target。**

@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Instruction Security & Trust Boundary Specification
+# WhisperTavern V2 — Instruction Security & Trust Boundary Specification
 
 > **文件：** `docs/specs/instruction-security-spec.md`
 > **版本：** V1.1（2026-09-05 晚补：五层定位法 §2.1 + 行为差分测量 §23.1–23.3，明令不产「绕过改述」词表；V1.0 = 2026-09-05 首版，收编为 §38 决策 30）
@@ -366,9 +366,9 @@ untrusted 内容进入模型可见区的**唯一方式**：包在编译器生成
 ```text
 边界段 = platform 档、编译器内建段，仅提供结构化区隔，不含任何"配方"：
 ----------------------------------------------------------
-[DesireGrimoire Instruction Boundary: begin]
+[WhisperTavern Instruction Boundary: begin]
 <…untrusted 内容…>
-[DesireGrimoire Instruction Boundary: end]
+[WhisperTavern Instruction Boundary: end]
 ----------------------------------------------------------
 ```
 

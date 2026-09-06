@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — P1 实施明细计划(ST Compatibility)
+# WhisperTavern V2 — P1 实施明细计划(ST Compatibility)
 
 > **文件:** `docs/p1-plan.md`
 > **版本:** V1.0(2026-09-06,P1 开工首会话细化产出——implementation-plan §11 阶段计划约定 B4)

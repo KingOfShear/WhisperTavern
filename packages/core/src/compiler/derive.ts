@@ -8,7 +8,7 @@ import {
   type PromptRole,
   type PromptZoneName,
   type SegmentSource,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 
 /**
  * 指令元数据默认推导 —— instruction-security-spec §10(source → authority/trust/scope)

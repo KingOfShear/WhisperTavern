@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Agent Runtime Specification
+# WhisperTavern V2 — Agent Runtime Specification
 
 > 版本：V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
 > 状态：Draft（已与总设计对齐，待 P3 实施验证）
@@ -17,7 +17,7 @@
 
 # 1. 文档目标
 
-Agent Runtime 是 DesireGrimoire V2 的执行核心。
+Agent Runtime 是 WhisperTavern V2 的执行核心。
 
 它负责：
 
@@ -5312,7 +5312,7 @@ Tool Recorded Response
 
 # 175. 最终架构原则
 
-DesireGrimoire V2 的 Agent Runtime 最终应该遵循：
+WhisperTavern V2 的 Agent Runtime 最终应该遵循：
 
 ```text
 Agent = Actor
@@ -5382,7 +5382,7 @@ LLM
 
 三者必须保持严格边界。
 
-这样后续 DesireGrimoire V2 才能在不推翻核心架构的情况下继续加入 **Multi-Agent、Group Chat、Workflow、Tool Calling、Memory、Worldbook、Prompt Cache、Replay、Human-in-the-loop 和插件系统**。
+这样后续 WhisperTavern V2 才能在不推翻核心架构的情况下继续加入 **Multi-Agent、Group Chat、Workflow、Tool Calling、Memory、Worldbook、Prompt Cache、Replay、Human-in-the-loop 和插件系统**。
 
 ---
 

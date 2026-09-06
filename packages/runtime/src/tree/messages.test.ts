@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Timestamp } from '@desiregrimoire/contracts'
-import { createDatabase, type DesireGrimoireDb } from '../db/database'
+import type { Timestamp } from '@whispertavern/contracts'
+import { createDatabase, type WhisperTavernDb } from '../db/database'
 import { events as eventsTable } from '../db/schema'
 import { EventBus } from '../events/bus'
 import {
@@ -17,7 +17,7 @@ import {
 
 const NOW = '2026-09-05T12:00:00Z' as Timestamp
 
-function setup(): { store: DesireGrimoireDb; bus: EventBus; durableTypes: () => string[] } {
+function setup(): { store: WhisperTavernDb; bus: EventBus; durableTypes: () => string[] } {
   const store = createDatabase(':memory:')
   const bus = new EventBus({
     insert: (batch) => {

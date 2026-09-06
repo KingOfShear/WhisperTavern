@@ -1,4 +1,4 @@
-// S2(WP0.2):归一契约收编入 @desiregrimoire/contracts(provider-adapter-spec §6/§7),
+// S2(WP0.2):归一契约收编入 @whispertavern/contracts(provider-adapter-spec §6/§7),
 // 临时占位文件 contract.ts 已删除;adapters 导出自己的实现与共享 SSE/HTTP 工具。
 export { FakeProviderAdapter, type FakeTurn } from './fake/fake-adapter'
 export { OpenAICompatAdapter, type OpenAICompatConfig } from './openai/openai-compat'

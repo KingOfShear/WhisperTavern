@@ -1,4 +1,4 @@
-# @desiregrimoire/agent(壳占位,P3 落地)
+# @whispertavern/agent(壳占位,P3 落地)
 
 Agent Runtime:runtime / workflow / tools / skills / memory / artifacts。
 规格真相源:[agent-runtime-spec](../../docs/specs/agent-runtime-spec.md);

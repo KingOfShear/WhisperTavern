@@ -28,7 +28,7 @@ export function App(): ReactElement {
       <ChatSidebar />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2">
-          <span className="text-sm text-[var(--muted-foreground)]">DesireGrimoire · P0 工作台</span>
+          <span className="text-sm text-[var(--muted-foreground)]">WhisperTavern · P0 工作台</span>
           <button
             type="button"
             className="rounded px-3 py-1 text-sm hover:bg-[var(--muted)]"

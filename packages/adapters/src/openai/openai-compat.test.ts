@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProviderCapabilities, ProviderChatRequest, ProviderStreamEvent } from '@desiregrimoire/contracts'
+import type { ProviderCapabilities, ProviderChatRequest, ProviderStreamEvent } from '@whispertavern/contracts'
 import { OpenAICompatAdapter, type FetchLike, type ProviderHttpResponse } from '../index'
 
 const API_KEY = 'sk-test-1234567890abcdef'

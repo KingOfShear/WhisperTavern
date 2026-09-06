@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProviderChatRequest, ProviderStreamEvent } from '@desiregrimoire/contracts'
+import type { ProviderChatRequest, ProviderStreamEvent } from '@whispertavern/contracts'
 import { AnthropicAdapter } from '../anthropic/anthropic'
 import { GeminiAdapter } from '../gemini/gemini'
 import { OpenAICompatAdapter } from '../openai/openai-compat'

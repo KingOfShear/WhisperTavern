@@ -29,19 +29,19 @@ importers:
 
   apps/server:
     dependencies:
-      '@desiregrimoire/adapters':
+      '@whispertavern/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@desiregrimoire/core':
+      '@whispertavern/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@desiregrimoire/runtime':
+      '@whispertavern/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@desiregrimoire/st-compat':
+      '@whispertavern/st-compat':
         specifier: workspace:*
         version: link:../../packages/st-compat
       '@hono/node-server':
@@ -72,7 +72,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@desiregrimoire/api-types':
+      '@whispertavern/api-types':
         specifier: workspace:*
         version: link:../../packages/api-types
       react:
@@ -112,10 +112,10 @@ importers:
 
   packages/adapters:
     dependencies:
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@desiregrimoire/core':
+      '@whispertavern/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -140,7 +140,7 @@ importers:
 
   packages/api-types:
     dependencies:
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -169,7 +169,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@noble/hashes':
@@ -188,10 +188,10 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@desiregrimoire/core':
+      '@whispertavern/core':
         specifier: workspace:*
         version: link:../core
       better-sqlite3:
@@ -201,7 +201,7 @@ importers:
         specifier: ^0.44.0
         version: 0.44.0(@types/better-sqlite3@7.6.0)(better-sqlite3@12.11.1)
     devDependencies:
-      '@desiregrimoire/adapters':
+      '@whispertavern/adapters':
         specifier: workspace:*
         version: link:../adapters
       '@types/better-sqlite3':
@@ -219,7 +219,7 @@ importers:
 
   packages/st-compat:
     dependencies:
-      '@desiregrimoire/contracts':
+      '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../contracts
       fflate:

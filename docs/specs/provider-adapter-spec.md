@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Provider Adapter Specification
+# WhisperTavern V2 — Provider Adapter Specification
 
 > **文件：** `docs/specs/provider-adapter-spec.md`
 > **版本：** V1.2（2026-09-05 S4'-b 实施：§8.1 reasoning_delta 增 signature 载体（PV8/§11 签名块"缓存于消息组装侧"的归一流通道）；V1.1 S4'-a（开放点 2 落定、Capabilities 定稿）；V1.0.x 骨架期）

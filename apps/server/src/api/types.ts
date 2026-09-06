@@ -1,4 +1,4 @@
-import type { DesireGrimoireDb, EventBus, RuntimeEvent, SecretStore, SnapshotRegistry } from '@desiregrimoire/runtime'
+import type { WhisperTavernDb, EventBus, RuntimeEvent, SecretStore, SnapshotRegistry } from '@whispertavern/runtime'
 
 /**
  * Server 依赖装配(总设计 §7:apps/server 纯传输层,无业务逻辑——本接口是
@@ -10,7 +10,7 @@ export interface ServerLogger {
 }
 
 export interface ServerDeps {
-  store: DesireGrimoireDb
+  store: WhisperTavernDb
   bus: EventBus
   snapshots: SnapshotRegistry
   secretStore: SecretStore

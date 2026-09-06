@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Dialogue Director Specification
+# WhisperTavern V2 — Dialogue Director Specification
 
 > 版本：V1.0（2026-09-05，Roleplay Runtime 子规格一）
 > 状态：Draft（与 roleplay-runtime-spec / agent-runtime-spec / prompt-compiler-spec / api-spec 对齐，待 P4 实施）

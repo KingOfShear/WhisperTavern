@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Database Schema Specification
+# WhisperTavern V2 — Database Schema Specification
 
 > 版本：V2.7（2026-09-05 S5/WP0.6 实施：§51 `generations` 增 `usage_source` 列，§52 落实施注记）
 > **本次补充（V2.7）**：§52 Token Accounting 实施定案——`generations` 表显式增 `usage_source TEXT`（`'reported' | 'estimated'`）列承载"估算方式必须标记"；原拟走 metadata,实施期改为专用列（可查询、可审计）；estimated 不参与缓存命中率分母（口径见总设计 §33.2）。
@@ -21,7 +21,7 @@
 
 # 1. 设计目标
 
-DesireGrimoire V2 的数据库不是单纯的“聊天记录数据库”。
+WhisperTavern V2 的数据库不是单纯的“聊天记录数据库”。
 
 数据库需要同时承担以下职责：
 
@@ -3577,7 +3577,7 @@ CREATE TABLE migrations (
 建议最终提供：
 
 ```text
-DesireGrimoire Archive
+WhisperTavern Archive
 ```
 
 结构：
@@ -3629,7 +3629,7 @@ Memory References
 ```text
 Export
     ↓
-另一个 DesireGrimoire
+另一个 WhisperTavern
     ↓
 Import
     ↓
@@ -3959,7 +3959,7 @@ Diagnostics
 如果把整个数据库压缩成一句话：
 
 ```text
-DesireGrimoire V2 Database
+WhisperTavern V2 Database
 =
 Versioned Assets
 +

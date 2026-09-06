@@ -1,4 +1,4 @@
-import type { ProviderErrorCode } from '@desiregrimoire/contracts'
+import type { ProviderErrorCode } from '@whispertavern/contracts'
 
 /**
  * HTTP 错误信封(api-spec §7/§8)+ ProviderError → API 错误码映射(§19 三层映射:

@@ -1,4 +1,4 @@
-import { SSE_EVENT_TYPES, type SseEnvelope } from '@desiregrimoire/api-types'
+import { SSE_EVENT_TYPES, type SseEnvelope } from '@whispertavern/api-types'
 
 /**
  * SSE 客户端(api-spec §26/§27/§142):

@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Shared Contracts Specification
+# WhisperTavern V2 — Shared Contracts Specification
 
 > 版本：V2.0（2026-09-05：**P0 收编落地**——§2 包结构按 WP0.2 实际平铺模块修订，新增 §2.1 P0 模块清单 / §2.2 Schema 同源机制 / §2.3 开放形状 / §2.4 C1–C4 自查；§9 补落地证据。V1.0 骨架，2026-09-05）
 > 状态：**Active（P0 范围真相源）**——packages/contracts 已按本规格落地并过门禁；P1+ 随 WP 渐次充实
@@ -14,7 +14,7 @@
 
 # 1. 文档目的
 
-DesireGrimoire 含多个 Runtime（Agent / Roleplay / Dialogue Director / Prompt Compiler / Evaluation / Memory / Database / Inspector），它们必须共享统一数据模型。本规格定义 **Shared Contracts** 作为唯一真相源：
+WhisperTavern 含多个 Runtime（Agent / Roleplay / Dialogue Director / Prompt Compiler / Evaluation / Memory / Database / Inspector），它们必须共享统一数据模型。本规格定义 **Shared Contracts** 作为唯一真相源：
 
 ```text
 One Concept → One Canonical Contract → Many Consumers
@@ -76,7 +76,7 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
 ## 2.4 C1–C4 自查（WP0.2）
 
 - **C1 事件命名**：contracts 不定义任何 §5.4 事件名。`CacheBreakReason` 的 SCREAMING type 值是 compiler-spec §58 的**诊断标签**（非事件名），按原文保留。
-- **C2 包结构**：api-types 已建壳并声明 `workspace:*` 反向依赖（投影约定写入其入口 TSDoc：type-only、禁止手写第二套形状）；contracts 自身零 IO、零工作区依赖（ESLint `no-restricted-imports` 锁定 node:* 与 @desiregrimoire/*）。
+- **C2 包结构**：api-types 已建壳并声明 `workspace:*` 反向依赖（投影约定写入其入口 TSDoc：type-only、禁止手写第二套形状）；contracts 自身零 IO、零工作区依赖（ESLint `no-restricted-imports` 锁定 node:* 与 @whispertavern/*）。
 - **C3 命名映射**：chat.ts 不引入 Session/Turn（P0 无此面）；`Conversation = chats` 别名以注释承记；`MessageRole.character ≠ assistant` 落 schema 并有测试锁定；messages 不设 is_active（活跃指针唯一来源 = chats.active_branch_id → chat_branches.leaf_message_id）。
 - **C4 去重**：Run/Attempt/StepRun 等执行形状未在 contracts 重造（P0 无消费面，引用规则见 §4）；authority/trust/scope 全项目仅 instruction.ts 一处。
 
@@ -164,9 +164,9 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
   branded ID 不可裸 string 互换（@ts-expect-error 编译期锁定）、枚举穷尽性
   （authority 12 档 / 错误码 14 / 流式事件 7 类 / CachePlacement 7 区 / MessageRole 6 值）。
 - **依赖方向硬约束**：ESLint `no-restricted-imports` 使 contracts 引用 `node:*` 或
-  任何 `@desiregrimoire/*` 直接 lint 红（§1 依赖方向的机械执行）。
+  任何 `@whispertavern/*` 直接 lint 红（§1 依赖方向的机械执行）。
 - **收编闭环**：provider-adapter §6/§7 草案自 packages/adapters 临时占位收编入
-  `provider.ts`,S1 占位文件已删除;fake adapter 改走 `@desiregrimoire/contracts`。
+  `provider.ts`,S1 占位文件已删除;fake adapter 改走 `@whispertavern/contracts`。
 
 ---
 

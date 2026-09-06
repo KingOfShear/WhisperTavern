@@ -1,4 +1,4 @@
-import type { Timestamp } from '@desiregrimoire/contracts'
+import type { Timestamp } from '@whispertavern/contracts'
 
 /**
  * 事件权威目录(technical-design §5.4 的**源码常量化**,落实该节"待办":

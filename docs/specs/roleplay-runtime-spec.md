@@ -1,4 +1,4 @@
-# DesireGrimoire V2 — Roleplay Runtime Specification
+# WhisperTavern V2 — Roleplay Runtime Specification
 
 > 版本：V1.1（2026-09-05 升级：并入细化版后按折中 5 表持久化 + `roleplay.*` 事件域对齐收编）
 > 状态：Draft（与总设计、agent-runtime-spec、prompt-compiler-spec、database-schema、api-spec 对齐，待 P4 实施验证）
@@ -17,7 +17,7 @@
 
 # 1. 文档目的
 
-Roleplay Runtime 是 DesireGrimoire V2 中负责"角色作为一个持续存在的人物进行行动"的核心运行时。
+Roleplay Runtime 是 WhisperTavern V2 中负责"角色作为一个持续存在的人物进行行动"的核心运行时。
 
 **它不负责**：最终 Prompt 拼接、模型调用、Token Budget 分配、Provider 调用、世界书激活本身、最终回复生成。
 
@@ -740,7 +740,7 @@ interface TurnSelection {
 
 # 38. 与 Kemini 的对应与改造
 
-| Kemini | DesireGrimoire |
+| Kemini | WhisperTavern |
 |---|---|
 | 互动小说 | Roleplay Runtime |
 | 白描 | Generation Style Policy |

@@ -5,7 +5,7 @@ import type {
   ProviderError,
   ProviderStreamEvent,
   ProviderUsage,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 
 /**
  * fake provider —— 脚本回放式内存 adapter,测试依赖,不出网(p0-plan S1 任务 8)。

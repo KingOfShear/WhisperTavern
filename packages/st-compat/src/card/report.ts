@@ -1,4 +1,4 @@
-import type { InstructionAuthority } from '@desiregrimoire/contracts'
+import type { InstructionAuthority } from '@whispertavern/contracts'
 import type { DgCard, ExtractedWorldbook } from './types'
 
 /**

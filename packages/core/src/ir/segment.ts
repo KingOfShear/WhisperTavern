@@ -1,4 +1,4 @@
-import { PromptSegmentSchema, type InstructionMetadata, type PromptIR, type PromptSegment } from '@desiregrimoire/contracts'
+import { PromptSegmentSchema, type InstructionMetadata, type PromptIR, type PromptSegment } from '@whispertavern/contracts'
 
 /**
  * 不可变性保证 —— p0-plan S3 任务 1(总设计 §7:core 纯 TS 无 IO)。

@@ -7,11 +7,11 @@ import {
   createSecretStore,
   EventBus,
   SnapshotRegistry,
-  type DesireGrimoireDb,
+  type WhisperTavernDb,
   type SecretStore,
-} from '@desiregrimoire/runtime'
+} from '@whispertavern/runtime'
 import { createApp, type CreatedApp } from './server'
-import { events as eventsTable } from '@desiregrimoire/runtime'
+import { events as eventsTable } from '@whispertavern/runtime'
 
 /**
  * S6 契约测试(api-spec §144):信封 §6 / 错误码 §8 / Request ID §5 /
@@ -20,7 +20,7 @@ import { events as eventsTable } from '@desiregrimoire/runtime'
  */
 
 const dirs: string[] = []
-const stores: DesireGrimoireDb[] = []
+const stores: WhisperTavernDb[] = []
 
 function makeApp(): {
   app: CreatedApp['app']
@@ -29,7 +29,7 @@ function makeApp(): {
   secretStore: SecretStore
   secretsDir: string
   logs: string[]
-  store: DesireGrimoireDb
+  store: WhisperTavernDb
 } {
   const dir = mkdtempSync(join(tmpdir(), 'dg-server-'))
   dirs.push(dir)

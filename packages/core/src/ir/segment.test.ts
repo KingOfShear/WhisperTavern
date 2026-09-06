@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createPromptSegment, createPromptIR, deepFreeze } from './segment'
-import type { PromptSegment } from '@desiregrimoire/contracts'
+import type { PromptSegment } from '@whispertavern/contracts'
 
 const validSegment: PromptSegment = {
   id: 'preset:default:main',

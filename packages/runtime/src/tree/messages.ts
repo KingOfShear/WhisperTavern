@@ -11,10 +11,10 @@ import {
   type Timestamp,
   type ChatId,
   type MessageId,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 import { eq } from 'drizzle-orm'
 import type { EventBus } from '../events/bus'
-import type { DesireGrimoireDb } from '../db/database'
+import type { WhisperTavernDb } from '../db/database'
 import { chatBranches, chats, messages } from '../db/schema'
 import { uuidv7 } from '../util/id'
 
@@ -45,7 +45,7 @@ export interface CreateChatInput {
 }
 
 /** 创建 chat + 默认主分支(main,is_active),发 chat.created(§18 前置) */
-export function createChat(store: DesireGrimoireDb, bus: EventBus, input: CreateChatInput): OpResult<Chat> {
+export function createChat(store: WhisperTavernDb, bus: EventBus, input: CreateChatInput): OpResult<Chat> {
   const chatId = uuidv7() as ChatId
   const branchId = uuidv7()
   store.db.transaction(() => {
@@ -107,7 +107,7 @@ export interface CreatedMessage {
 }
 
 export function createMessage(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: CreateMessageInput,
 ): OpResult<CreatedMessage> {
@@ -157,7 +157,7 @@ export function createMessage(
 
 /** §19 编辑:不原地覆盖——新建变体(同父兄弟),leaf 移到新版本,原消息内容永不动 */
 export function editMessage(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: { messageId: MessageId; content: string; now: Timestamp },
 ): OpResult<Message> {
@@ -166,7 +166,7 @@ export function editMessage(
 
 /** §20/§22 swipe:同 variant_group 新建兄弟(空内容,由生成填充);S6 将其串接 dispatchGeneration */
 export function swipeMessage(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: { messageId: MessageId; now: Timestamp },
 ): OpResult<Message> {
@@ -174,7 +174,7 @@ export function swipeMessage(
 }
 
 function createVariant(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: { messageId: MessageId; content?: string; now: Timestamp; kind: 'edited' | 'swiped' },
 ): OpResult<Message> {
@@ -246,7 +246,7 @@ function createVariant(
 
 /** §21 分支:不复制聊天,只记录血缘位(继承前缀 = 可复用缓存前缀,决策 25) */
 export function createBranch(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: { chatId: ChatId; fromMessageId: MessageId; name?: string; now: Timestamp },
 ): OpResult<ChatBranch> {
@@ -312,7 +312,7 @@ export function createBranch(
  * 否则取覆盖该消息链的其他分支,最后落到主分支(root 未设 = 全树)。
  */
 export function activateMessage(
-  store: DesireGrimoireDb,
+  store: WhisperTavernDb,
   bus: EventBus,
   input: { chatId: ChatId; messageId: MessageId; now: Timestamp },
 ): OpResult<{ branchId: string; activeLeafId: MessageId }> {
@@ -365,51 +365,51 @@ export function activateMessage(
 
 // —— 查询与映射 ——
 
-export function loadChat(store: DesireGrimoireDb, chatId: ChatId): OpResult<Chat> {
+export function loadChat(store: WhisperTavernDb, chatId: ChatId): OpResult<Chat> {
   const row = store.db.select().from(chats).where(eq(chats.id, chatId)).get()
   if (row === undefined) return opError('NOT_FOUND', `chat 不存在: ${chatId}`)
   return { ok: true, value: ChatSchema.parse(rowToChat(row)) }
 }
 
-export function loadMessage(store: DesireGrimoireDb, messageId: MessageId): OpResult<Message> {
+export function loadMessage(store: WhisperTavernDb, messageId: MessageId): OpResult<Message> {
   const row = store.db.select().from(messages).where(eq(messages.id, messageId)).get()
   if (row === undefined) return opError('NOT_FOUND', `message 不存在: ${messageId}`)
   return { ok: true, value: MessageSchema.parse(rowToMessage(row)) }
 }
 
-export function loadBranch(store: DesireGrimoireDb, branchId: string): OpResult<ChatBranch> {
+export function loadBranch(store: WhisperTavernDb, branchId: string): OpResult<ChatBranch> {
   const row = store.db.select().from(chatBranches).where(eq(chatBranches.id, branchId)).get()
   if (row === undefined) return opError('NOT_FOUND', `branch 不存在: ${branchId}`)
   return { ok: true, value: ChatBranchSchema.parse(rowToBranch(row)) }
 }
 
 /** 活跃叶子消息 id(§21:active_branch_id → branch.leaf_message_id);无消息返回 undefined */
-export function activeLeafId(store: DesireGrimoireDb, chatId: ChatId): string | undefined {
+export function activeLeafId(store: WhisperTavernDb, chatId: ChatId): string | undefined {
   const branchId = chat_activeBranchId(store, chatId)
   if (branchId === undefined) return undefined
   const row = store.db.select({ leaf: chatBranches.leafMessageId }).from(chatBranches).where(eq(chatBranches.id, branchId)).get()
   return row?.leaf ?? undefined
 }
 
-function activeBranch(store: DesireGrimoireDb, chatId: ChatId): OpResult<ChatBranch> {
+function activeBranch(store: WhisperTavernDb, chatId: ChatId): OpResult<ChatBranch> {
   const branchId = chat_activeBranchId(store, chatId)
   if (branchId === undefined) return opError('NOT_FOUND', 'chat 无活跃分支')
   return loadBranch(store, branchId)
 }
 
-function activeBranchOrThrow(store: DesireGrimoireDb, chatId: string): string {
+function activeBranchOrThrow(store: WhisperTavernDb, chatId: string): string {
   const branchId = chat_activeBranchId(store, chatId as ChatId)
   if (branchId === undefined) throw new Error(`INVARIANT_VIOLATION: chat ${chatId} 无活跃分支`)
   return branchId
 }
 
-function chat_activeBranchId(store: DesireGrimoireDb, chatId: ChatId): string | undefined {
+function chat_activeBranchId(store: WhisperTavernDb, chatId: ChatId): string | undefined {
   const row = store.db.select({ activeBranchId: chats.activeBranchId }).from(chats).where(eq(chats.id, chatId)).get()
   return row?.activeBranchId ?? undefined
 }
 
 /** 从消息沿父链到根;返回 [messageId, ..., root](含自身) */
-export function ancestorChain(store: DesireGrimoireDb, messageId: MessageId): string[] {
+export function ancestorChain(store: WhisperTavernDb, messageId: MessageId): string[] {
   const chain: string[] = []
   let cursor: string | undefined = messageId
   const guard = new Set<string>()
@@ -426,7 +426,7 @@ export function ancestorChain(store: DesireGrimoireDb, messageId: MessageId): st
   return chain
 }
 
-function chainDepth(store: DesireGrimoireDb, messageId: MessageId): number {
+function chainDepth(store: WhisperTavernDb, messageId: MessageId): number {
   return ancestorChain(store, messageId).length
 }
 

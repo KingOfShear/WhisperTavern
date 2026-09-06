@@ -2,7 +2,7 @@
 
 > 调研对象：本地部署 `C:\MySpecialFolder\SillyTavern`（sillytavern 1.18.0）。
 > **文档层级（2026-09）**：本文是 [technical-design.md](./technical-design.md) 之下的 **兼容性参照（Level B 语义基准）**。
-> 目的：为 DesireGrimoire 的 P1/P2 实现提供**语义对照源**与**兼容性基准**。引用格式 `文件:行号`。
+> 目的：为 WhisperTavern 的 P1/P2 实现提供**语义对照源**与**兼容性基准**。引用格式 `文件:行号`。
 
 ## 1. 架构总评
 

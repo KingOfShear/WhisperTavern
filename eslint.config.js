@@ -1,5 +1,5 @@
 // @ts-check
-// DesireGrimoire ESLint flat config(根唯一,子包经向上解析共用)。
+// WhisperTavern ESLint flat config(根唯一,子包经向上解析共用)。
 // 代码风格底线 = AGENTS.md 纪律 6:显式类型(禁 any 出口)、小函数、单向依赖;
 // 机械执行交给本配置 + tsc --strict(technical-plan §7)。
 import eslint from '@eslint/js'
@@ -47,7 +47,7 @@ export default tseslint.config(
               message: 'contracts 零 IO:禁止 Node 内建模块(shared-contracts-spec §1 依赖方向)',
             },
             {
-              group: ['@desiregrimoire/*'],
+              group: ['@whispertavern/*'],
               message: 'contracts 不引用任何工作区包(依赖方向最底层)',
             },
           ],
@@ -70,7 +70,7 @@ export default tseslint.config(
               message: 'core 纯 TS 无 IO(总设计 §7):禁止 Node 内建模块',
             },
             {
-              group: ['@desiregrimoire/runtime', '@desiregrimoire/agent', '@desiregrimoire/adapters', '@desiregrimoire/api-types', '@desiregrimoire/st-compat'],
+              group: ['@whispertavern/runtime', '@whispertavern/agent', '@whispertavern/adapters', '@whispertavern/api-types', '@whispertavern/st-compat'],
               message: 'core → contracts 单向依赖,禁引用其余工作区包(provider-adapter-spec §4)',
             },
           ],

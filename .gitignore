@@ -17,6 +17,9 @@ tmp/
 reference/
 酒馆参考文件/
 
+# 内部会话上下文（跨会话日记/实验记录）——不对外发布（AGENTS §6 / §9 五版）
+.workbuddy/
+
 # 操作系统杂物
 .DS_Store
 Thumbs.db

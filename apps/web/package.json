@@ -1,5 +1,5 @@
 {
-  "name": "@desiregrimoire/web",
+  "name": "@whispertavern/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@desiregrimoire/api-types": "workspace:*",
+    "@whispertavern/api-types": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.0"

@@ -1,4 +1,4 @@
-# DesireGrimoire 交互界面设计
+# WhisperTavern 交互界面设计
 
 > 定位：本文定义前端的**信息架构、核心界面与交互模式**，与 [technical-plan.md](./technical-plan.md) §5 各子系统一一对应。
 > **文档层级（2026-09）**：本文是 [technical-design.md](./technical-design.md) 之下的 **UI 详细规格**；§2 信息架构与总设计 §30 一致。

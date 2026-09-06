@@ -1,4 +1,4 @@
-# @desiregrimoire/st-compat(壳占位,P1 落地)
+# @whispertavern/st-compat(壳占位,P1 落地)
 
 SillyTavern 资产兼容层:character / worldbook / preset / chat。
 实施口径在 [technical-plan §5.9](../../docs/technical-plan.md)(st-compat 生态兼容),

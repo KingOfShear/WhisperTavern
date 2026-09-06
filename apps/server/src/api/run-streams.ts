@@ -1,5 +1,5 @@
-import type { RuntimeEvent } from '@desiregrimoire/runtime'
-import type { EventBus } from '@desiregrimoire/runtime'
+import type { RuntimeEvent } from '@whispertavern/runtime'
+import type { EventBus } from '@whispertavern/runtime'
 
 /**
  * 活跃 Run 流注册表 —— api-spec §26/§27/§142:

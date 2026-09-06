@@ -87,7 +87,7 @@ export function fixtureTransport(fixture: ProviderFixture): { fetchImpl: FetchLi
 }
 
 /** 由 fixture.request 构造契约请求(脱敏样例;snapshotId 固定保确定性) */
-export function fixtureRequest(fixture: ProviderFixture): import('@desiregrimoire/contracts').ProviderChatRequest {
+export function fixtureRequest(fixture: ProviderFixture): import('@whispertavern/contracts').ProviderChatRequest {
   return {
     snapshotId: `snap_fixture_${fixture.provider}_${fixture.case}`,
     model: fixture.request.model,

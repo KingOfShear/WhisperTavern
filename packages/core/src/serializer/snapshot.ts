@@ -12,7 +12,7 @@ import {
   type SerializedPrompt,
   type SnapshotId,
   type Timestamp,
-} from '@desiregrimoire/contracts'
+} from '@whispertavern/contracts'
 import { bytesToHex } from '@noble/hashes/utils'
 import { sha256 } from '@noble/hashes/sha256'
 import { deepFreeze, type DeepReadonly } from '../ir/segment'

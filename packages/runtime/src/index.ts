@@ -23,7 +23,7 @@ export {
 } from './events/catalog'
 export {
   createDatabase,
-  type DesireGrimoireDb,
+  type WhisperTavernDb,
   type DrizzleDb,
 } from './db/database'
 export {
