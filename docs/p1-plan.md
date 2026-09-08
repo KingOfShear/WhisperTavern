@@ -171,7 +171,7 @@ X8  真实资产只进 tests/fixtures/(脱敏后),原文件保持只读不引用
 | 会话 | WP | 状态 | 恢复点注记 |
 |---|---|---|---|
 | S9 | WP1.1a | ✅ | 2026-09-06 完成:st-compat 卡模块落码(V2/V3 JSON 双层冗余归一 data 层优先/PNG tEXt chara+ccv3 优先 ccv3/charx fflate 解包)+ .dgcard 归一(运行态剥离/内嵌书抽取 passthrough/compat 收集/compatFields 全列)+ ImportReport(路径化、无内容值)+ server 导入路由(落盘 cards/<slug>/ + worldbooks 双向注册 + v1 快照)。10 条 st-compat 测试 + 5 条路由契约测试。踩坑:zod looseObject 不剥未知键(广收集靠 modeled 集合反查);report.compatFields 须从 compat 对象全列。 |
-| S10 | WP1.1b | ☐ | |
+| S10 | WP1.1b | ✅ | 2026-09-07 完成:st-compat 世界书模块落码(types/normalize/report)——三种容器(数组/uid 键对象/裸 uid 键对象)+ 两代字段集(老 8 字段 ↔ 现代 42 字段)→ 原生 .dgworld;零魔数(position 0-7→slot、selectiveLogic 0-3→logic、disable/enable 极性归一);**字段方言**(key/keys、disable/enabled、order/insertion_order)书级探测 + toStEntry 按方言回写,实现逐键往返无损;无原生语义字段(addMemo/automationId)刻意不进 schema,落 compat。migration v4 建 worldbook_entries + worldbook_entry_versions(database-schema §13/§14),POST /api/v2/worldbooks/import 落盘 + 注册 + 条目落库 + v1 快照;卡导入内嵌书由 passthrough 改为完整归一(characterRef 双向引用回填)。12 条 st-compat 单测 + 4 条路由契约测试(全量 208 绿)。踩坑:①zod looseObject 的字段不必"声明了就要有处放"——无原生语义的字段应当**不声明**,让它自动落 compat,否则往返会静默丢失;②迁移版本号硬编码在 migrate.test.ts / e2e.test.ts,新增 v4 需同步 4 处;③native 测试必须用系统 node 24 跑(better-sqlite3 编译于 NODE_MODULE_VERSION 137,托管 node 22 是 127)。 |
 | S11 | WP1.2 | ☐ | |
 | S12 | WP1.3 | ☐ | |
 | S13 | WP1.4 | ☐ | |

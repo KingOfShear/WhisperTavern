@@ -9,6 +9,25 @@ import { z } from 'zod'
  */
 
 /**
+ * 世界书槽位(compiler-spec §12 worldbook.position;ST position 0-7 的语义化命名,
+ * 权威枚举见 st-reference-analysis §2 = world-info.js :855)。
+ *
+ * 单独导出以供资产层(.dgworld entry.placement.slot)复用同一枚举——C4:资产格式
+ * 不得另造一份同义 slot 拼写(technical-plan §5.3 旧稿 charBefore/atDepth 已对齐此枚举)。
+ */
+export const WorldbookPositionSchema = z.enum([
+  'before',
+  'after',
+  'anTop',
+  'anBottom',
+  'depth',
+  'emTop',
+  'emBottom',
+  'outlet',
+])
+export type WorldbookPosition = z.infer<typeof WorldbookPositionSchema>
+
+/**
  * 语义槽位(compiler-spec §12)。worldbook position 取值保持 ST 原始拼写
  * (anTop/emTop 等)——它们是酒馆生态的线上协议词,纠正拼写 = 破坏导入兼容。
  */
@@ -16,16 +35,7 @@ export const SemanticPlacementSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('header'), order: z.number().int() }),
   z.object({
     type: z.literal('worldbook'),
-    position: z.enum([
-      'before',
-      'after',
-      'anTop',
-      'anBottom',
-      'depth',
-      'emTop',
-      'emBottom',
-      'outlet',
-    ]),
+    position: WorldbookPositionSchema,
     depth: z.number().int().optional(),
     outletName: z.string().optional(),
     order: z.number().int(),

@@ -256,6 +256,86 @@ CREATE TABLE prompt_snapshots (
 );
 `
 
+/**
+ * v4 世界书条目与条目版本(database-schema §13/§14)。
+ * 存储口径:`.dgworld` 文件是事实源(决策 11 混合存储),本组表是**编译/激活读模型**
+ * ——编译关键语义列按 §69 自洽要求显式成列,不藏进 source_data。
+ */
+const V4_WORLDBOOK_ENTRIES = /* sql */ `
+CREATE TABLE worldbook_entries (
+    id                      TEXT PRIMARY KEY,
+    worldbook_id            TEXT NOT NULL REFERENCES worldbooks(id),
+
+    entry_key               TEXT,           -- ST 数值 uid 原样保留(字符串;无 uid 的老条目 = NULL)
+                                            -- 往返映射键,technical-plan §5.3
+    name                    TEXT,           -- 条目标题(ST comment 语义正名)
+
+    content                 TEXT NOT NULL,
+    enabled                 INTEGER NOT NULL DEFAULT 1,
+
+    activation_mode         TEXT NOT NULL DEFAULT 'selective',
+    priority                INTEGER NOT NULL DEFAULT 0,
+    position                INTEGER NOT NULL DEFAULT 0,
+    insertion_order         INTEGER NOT NULL DEFAULT 0,
+    role                    TEXT NOT NULL DEFAULT 'system',
+
+    keywords_primary        TEXT NOT NULL DEFAULT '[]',
+    keywords_secondary      TEXT NOT NULL DEFAULT '[]',
+    keyword_logic           TEXT NOT NULL DEFAULT 'andAny',
+
+    -- 三态:NULL = 跟随书级 scan(§5.3),非 NULL = 条目级覆盖
+    case_sensitive          INTEGER,
+    whole_word              INTEGER,
+    scan_depth              INTEGER,
+
+    match_scope             TEXT NOT NULL DEFAULT '[]',
+    triggers                TEXT NOT NULL DEFAULT '[]',
+
+    recursive               INTEGER NOT NULL DEFAULT 0,
+    exclude_recursion       INTEGER NOT NULL DEFAULT 0,
+    prevent_recursion       INTEGER NOT NULL DEFAULT 0,
+    delay_until_recursion   INTEGER NOT NULL DEFAULT 0,
+
+    sticky_rounds           INTEGER NOT NULL DEFAULT 0,
+    cooldown                INTEGER NOT NULL DEFAULT 0,
+    delay                   INTEGER NOT NULL DEFAULT 0,
+
+    probability             REAL NOT NULL DEFAULT 100,
+
+    group_id                TEXT,
+    group_override          INTEGER NOT NULL DEFAULT 0,
+    group_weight            REAL,
+    use_group_scoring       INTEGER NOT NULL DEFAULT 1,
+
+    ignore_budget           INTEGER NOT NULL DEFAULT 0,
+    outlet_name             TEXT,
+    character_filter        TEXT NOT NULL DEFAULT '{}',
+
+    injection_position      TEXT,
+    injection_depth         INTEGER,
+
+    metadata                TEXT NOT NULL DEFAULT '{}',
+    source_data             TEXT NOT NULL DEFAULT '{}',   -- = 资产文件 entry.compat 的 DB 镜像
+
+    version                 INTEGER NOT NULL DEFAULT 1,
+    created_at              TEXT NOT NULL,
+    updated_at              TEXT NOT NULL,
+    deleted_at              TEXT
+);
+
+CREATE INDEX idx_worldbook_entries_book ON worldbook_entries(worldbook_id);
+
+CREATE TABLE worldbook_entry_versions (
+    id                  TEXT PRIMARY KEY,
+    entry_id            TEXT NOT NULL REFERENCES worldbook_entries(id),
+    version             INTEGER NOT NULL,
+    snapshot            TEXT NOT NULL,
+    content_hash        TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    UNIQUE(entry_id, version)
+);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -274,5 +354,11 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'p0-asset-registry',
     sql: V3_ASSETS,
     checksum: sha256Hex(V3_ASSETS),
+  },
+  {
+    version: 4,
+    name: 'p1-worldbook-entries',
+    sql: V4_WORLDBOOK_ENTRIES,
+    checksum: sha256Hex(V4_WORLDBOOK_ENTRIES),
   },
 ]

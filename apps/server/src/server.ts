@@ -5,7 +5,15 @@ import { and, desc, eq, gt, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
 import { compile } from '@whispertavern/core'
-import { importCard, isCardParseError } from '@whispertavern/st-compat'
+import {
+  importCard,
+  importWorldbook,
+  importWorldbookFromJson,
+  isCardParseError,
+  isWorldbookParseError,
+  SLOT_TO_ST_POSITION,
+  type DgWorldbook,
+} from '@whispertavern/st-compat'
 import {
   activeLeafId,
   activateMessage,
@@ -30,6 +38,8 @@ import {
   promptSnapshots,
   providers as providersTable,
   runs as runsTable,
+  worldbookEntries,
+  worldbookEntryVersions,
   worldbooks as worldbooksTable,
 } from '@whispertavern/runtime'
 import type { Chat, ChatId, MessageId, ProviderAdapter, ProviderChatRequest, SnapshotId } from '@whispertavern/contracts'
@@ -520,6 +530,7 @@ export function createApp(deps: ServerDeps): CreatedApp {
       throw error
     }
     const slug = result.card.meta.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'card'
+    const id = uuidv7() // 先取 id:内嵌书要回填 characterRef(双向引用)
     const cardDir = join(deps.assetsDir, 'cards', slug)
     mkdirSync(cardDir, { recursive: true })
     // .dgcard 文件(事实源,决策 11)+ 附带资产
@@ -530,25 +541,16 @@ export function createApp(deps: ServerDeps): CreatedApp {
       mkdirSync(join(target, '..'), { recursive: true })
       writeFileSync(target, bytes)
     }
-    // 内嵌书抽取:独立 .dgworld 文件 + worldbooks 注册(双向引用)
+    // 内嵌书抽取:S10 起走完整归一(老/现代字段集 → 原生 .dgworld),不再 passthrough
     let worldbookId: string | undefined
     if (result.extractedWorldbook !== undefined) {
-      worldbookId = uuidv7()
-      const wbDir = join(deps.assetsDir, 'worldbooks')
-      mkdirSync(wbDir, { recursive: true })
-      const wbFile = `worldbooks/${result.extractedWorldbook.ref}.dgworld.json`
-      writeFileSync(join(deps.assetsDir, wbFile), JSON.stringify({ schemaVersion: 0, sourceFormat: 'st-embedded', raw: result.extractedWorldbook.raw }, null, 2))
-      deps.store.db.insert(worldbooksTable).values({
-        id: worldbookId,
+      const embedded = importWorldbookFromJson(result.extractedWorldbook.raw, {
         name: result.extractedWorldbook.suggestedName,
         sourceFormat: 'st-embedded',
-        sourceData: JSON.stringify({ characterRef: null, file: wbFile }),
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      }).run()
+      })
+      worldbookId = persistWorldbook(deps, embedded.worldbook, 'st-embedded', { characterRef: id })
     }
     // 注册索引 + version 1 快照(混合存储:文件事实源,行是索引,决策 11)
-    const id = uuidv7()
     const now = nowIso()
     const cardFile = `cards/${slug}/${cardFileName}`
     deps.store.db.insert(charactersTable).values({
@@ -612,6 +614,34 @@ export function createApp(deps: ServerDeps): CreatedApp {
     const requestId = requestIdOf(c)
     const rows = deps.store.db.select().from(worldbooksTable).orderBy(desc(worldbooksTable.createdAt)).limit(100).all()
     return ok(c, requestId, rows.map((row) => ({ id: row.id, name: row.name, scanDepth: row.scanDepth, recursive: row.recursive, version: row.version })))
+  })
+
+  // S10(WP1.1b):世界书导入(老 8 字段 uid 键对象 / 现代 42 字段 → .dgworld + 注册 + 条目落库)
+  app.post('/api/v2/worldbooks/import', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    if (typeof body.base64 !== 'string' || body.base64 === '') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'base64(世界书文件字节)必填')
+    }
+    let result
+    try {
+      result = importWorldbook(new Uint8Array(Buffer.from(body.base64, 'base64')), {
+        name: typeof body.name === 'string' && body.name !== '' ? body.name : undefined,
+      })
+    } catch (error) {
+      if (isWorldbookParseError(error)) return fail(c, requestId, 'VALIDATION_ERROR', error.message)
+      throw error
+    }
+    const worldbookId = persistWorldbook(deps, result.worldbook, result.report.asset.sourceFormat)
+    return ok(
+      c,
+      requestId,
+      {
+        worldbook: { id: worldbookId, name: result.worldbook.meta.name, entryCount: result.worldbook.entries.length, version: 1 },
+        report: result.report,
+      },
+      201,
+    )
   })
 
   app.post('/api/v2/worldbooks', async (c) => {
@@ -685,6 +715,93 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+/**
+ * 世界书落盘 + 注册 + 条目落库 + v1 快照(决策 11 混合存储:.dgworld 文件是事实源,
+ * worldbooks 行是索引,worldbook_entries 是编译/激活读模型——database-schema §13)。
+ * 卡导入的内嵌书与世界书导入共用此路径,保证两条来源的落库口径一致。
+ */
+function persistWorldbook(
+  deps: ServerDeps,
+  worldbook: DgWorldbook,
+  sourceFormat: string,
+  extra: { characterRef?: string } = {},
+): string {
+  const id = uuidv7()
+  const now = nowIso()
+  const slug = worldbook.meta.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'worldbook'
+  const file = `worldbooks/${slug}-${id.slice(0, 8)}.dgworld.json`
+  mkdirSync(join(deps.assetsDir, 'worldbooks'), { recursive: true })
+  writeFileSync(join(deps.assetsDir, file), JSON.stringify(worldbook, null, 2))
+
+  deps.store.db.insert(worldbooksTable).values({
+    id,
+    name: worldbook.meta.name,
+    description: worldbook.meta.description,
+    scanDepth: worldbook.scan.scanDepth,
+    recursive: worldbook.scan.recursive,
+    metadata: JSON.stringify({ file, scan: worldbook.scan, entryCount: worldbook.entries.length }),
+    sourceFormat,
+    sourceData: JSON.stringify({ file, characterRef: extra.characterRef ?? null }),
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  }).run()
+
+  for (const entry of worldbook.entries) {
+    const entryId = uuidv7()
+    deps.store.db.insert(worldbookEntries).values({
+      id: entryId,
+      worldbookId: id,
+      entryKey: entry.uid === undefined ? null : String(entry.uid),
+      name: entry.title,
+      content: entry.content,
+      enabled: entry.enabled,
+      activationMode: entry.activation.mode,
+      position: SLOT_TO_ST_POSITION[entry.placement.slot],
+      insertionOrder: entry.placement.order,
+      role: entry.placement.role,
+      keywordsPrimary: JSON.stringify(entry.activation.keys),
+      keywordsSecondary: JSON.stringify(entry.activation.secondaryKeys),
+      keywordLogic: entry.activation.logic,
+      caseSensitive: entry.activation.caseSensitive,
+      wholeWord: entry.activation.matchWholeWords,
+      scanDepth: entry.activation.scanDepth,
+      matchScope: JSON.stringify(entry.activation.matchScope),
+      triggers: JSON.stringify(entry.activation.triggers),
+      excludeRecursion: entry.recursion.excluded,
+      preventRecursion: entry.recursion.prevent,
+      delayUntilRecursion: entry.recursion.delayedUntil,
+      stickyRounds: entry.lifecycle.sticky,
+      cooldown: entry.lifecycle.cooldown,
+      delay: entry.lifecycle.delay,
+      probability: entry.activation.chance,
+      groupId: entry.group.id,
+      groupOverride: entry.group.override,
+      groupWeight: entry.group.weight,
+      useGroupScoring: entry.group.scoring,
+      ignoreBudget: entry.budget.ignore,
+      outletName: entry.placement.outletName,
+      characterFilter: JSON.stringify(entry.activation.characterFilter),
+      // injection_* 由 S11 激活层接线时填充(语义未定,不留猜测值)
+      metadata: JSON.stringify({ id: entry.id, zoning: entry.zoning, depth: entry.placement.depth }),
+      sourceData: JSON.stringify(entry.compat),
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    const snapshot = JSON.stringify(entry)
+    deps.store.db.insert(worldbookEntryVersions).values({
+      id: uuidv7(),
+      entryId,
+      version: 1,
+      snapshot,
+      contentHash: sha256Hex(snapshot),
+      createdAt: now,
+    }).run()
+  }
+  return id
 }
 
 type ProviderRow = {

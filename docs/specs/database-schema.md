@@ -426,8 +426,10 @@ CREATE TABLE worldbook_entries (
     keyword_logic           TEXT NOT NULL DEFAULT 'andAny',
                             -- andAny|andAll|notAny|notAll（对齐 ST selectiveLogic；初稿 'ANY' 表达不了 NOT *）
 
-    case_sensitive          BOOLEAN NOT NULL DEFAULT FALSE,
-    whole_word              BOOLEAN NOT NULL DEFAULT FALSE,
+    -- 【2026-09-07 修订(S10)】三态:NULL = 跟随书级 scan(technical-plan §5.3),
+    -- 非 NULL = 条目级覆盖;原 NOT NULL DEFAULT FALSE 表达不了"跟随"语义
+    case_sensitive          BOOLEAN,
+    whole_word              BOOLEAN,
 
     match_scope             JSONB NOT NULL DEFAULT '[]',  -- 六个 match* 字段合并
     triggers                JSONB NOT NULL DEFAULT '[]',  -- 向量触发词

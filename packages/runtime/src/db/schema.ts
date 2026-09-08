@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
  * P0 表清单 —— database-schema P0 阶段清单的 Drizzle 投影(p0-plan S5 任务 2):
@@ -223,6 +223,67 @@ export const presets = sqliteTable('presets', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at'),
+})
+
+/**
+ * 世界书条目(database-schema §13;migration v4)。
+ * 口径:`.dgworld` 文件是事实源,本表是编译/激活读模型——语义列显式成列,
+ * 不藏进 source_data(§69 自洽要求);sourceData = 文件 entry.compat 的 DB 镜像。
+ */
+export const worldbookEntries = sqliteTable('worldbook_entries', {
+  id: text('id').primaryKey(),
+  worldbookId: text('worldbook_id').notNull(),
+  /** ST 数值 uid 原样保留(字符串)= 往返映射键(technical-plan §5.3);无 uid 的老条目 = null */
+  entryKey: text('entry_key'),
+  name: text('name'),
+  content: text('content').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  activationMode: text('activation_mode').notNull().default('selective'),
+  priority: integer('priority').notNull().default(0),
+  position: integer('position').notNull().default(0),
+  insertionOrder: integer('insertion_order').notNull().default(0),
+  role: text('role').notNull().default('system'),
+  keywordsPrimary: text('keywords_primary').notNull().default('[]'),
+  keywordsSecondary: text('keywords_secondary').notNull().default('[]'),
+  keywordLogic: text('keyword_logic').notNull().default('andAny'),
+  /** 三态:null = 跟随书级 scan(§5.3),非 null = 条目级覆盖 */
+  caseSensitive: integer('case_sensitive', { mode: 'boolean' }),
+  wholeWord: integer('whole_word', { mode: 'boolean' }),
+  scanDepth: integer('scan_depth'),
+  matchScope: text('match_scope').notNull().default('[]'),
+  triggers: text('triggers').notNull().default('[]'),
+  recursive: integer('recursive', { mode: 'boolean' }).notNull().default(false),
+  excludeRecursion: integer('exclude_recursion', { mode: 'boolean' }).notNull().default(false),
+  preventRecursion: integer('prevent_recursion', { mode: 'boolean' }).notNull().default(false),
+  delayUntilRecursion: integer('delay_until_recursion', { mode: 'boolean' }).notNull().default(false),
+  stickyRounds: integer('sticky_rounds').notNull().default(0),
+  cooldown: integer('cooldown').notNull().default(0),
+  delay: integer('delay').notNull().default(0),
+  probability: real('probability').notNull().default(100),
+  groupId: text('group_id'),
+  groupOverride: integer('group_override', { mode: 'boolean' }).notNull().default(false),
+  groupWeight: real('group_weight'),
+  useGroupScoring: integer('use_group_scoring', { mode: 'boolean' }).notNull().default(true),
+  ignoreBudget: integer('ignore_budget', { mode: 'boolean' }).notNull().default(false),
+  outletName: text('outlet_name'),
+  characterFilter: text('character_filter').notNull().default('{}'),
+  injectionPosition: text('injection_position'),
+  injectionDepth: integer('injection_depth'),
+  metadata: text('metadata').notNull().default('{}'),
+  sourceData: text('source_data').notNull().default('{}'),
+  version: integer('version').notNull().default(1),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+export const worldbookEntryVersions = sqliteTable('worldbook_entry_versions', {
+  id: text('id').primaryKey(),
+  entryId: text('entry_id').notNull(),
+  version: integer('version').notNull(),
+  snapshot: text('snapshot').notNull(),
+  contentHash: text('content_hash').notNull(),
+  createdAt: text('created_at').notNull(),
 })
 
 export const presetVersions = sqliteTable('preset_versions', {

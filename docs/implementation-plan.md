@@ -222,6 +222,10 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | 14 | **开源发布套件**：LICENSE 落盘（§38 决策 33）、SECURITY.md / CONTRIBUTING.md（引用 AGENTS 决策协议与纪律 5，不复写）/ CODE_OF_CONDUCT.md / Issue·PR 模板（architecture_proposal 对齐 §37 四问）/ 产品化 README；依赖许可证兼容性纪律（运行时依赖禁引入 GPL/AGPL） | 开源/推送公开仓库**前**（用户触发，不绑阶段 WP） | 2026-09-05 开源评审择优 |
 | 15 | **Sanitized Debug Export / Reproduction Bundle**：RedactionPolicy（去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full；密钥沿用 PV5 redact），导出可 Replay | WP1.5（Inspector v1）细化会话 | 总设计 §19/§32；provider-adapter §17.2 |
 | 16 | Plugin 信任分档（built-in / trusted / community / untrusted）补入 §29 权限模型——P0–P4 只按 §21.5 Capability 执行 | WP5 细化会话 | 总设计 §29/§21.5 |
+| 17 | **Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落 | P3 | §38 决策 37 增量①；agent-runtime-spec §39/§93 |
+| 18 | **World State 全局态（规则版）**：地点/时间/物品/任务/派系/知识补表 + 规则化推演；**禁止额外 LLM 调用**（R1/C1）；按纪律 3 先落 roleplay-runtime-spec 扩展章节 + database-schema 补表 | P4 | §38 决策 37 增量③；roleplay-runtime-spec；database-schema |
+| 19 | Simulation Agent（LLM 世界推演）决策点：凭 P4 规则版实测（覆盖率/延迟/成本）决定是否引入 | P5 决策点 | §38 决策 37 暂缓项 |
+| 20 | **世界书槽位/逻辑枚举三套拼写归一**：api-spec §48 Worldbook Entry DTO 用 `ANTop/ANBottom/atDepth` + `selectiveLogic: 'AND_ANY'`，与 contracts `WorldbookPositionSchema`（`anTop/anBottom/depth`）+ `keyword_logic`（`andAny/andAll/notAny/notAll`）冲突（S10 落码时发现）。候选：A 改 api-spec 对齐 contracts（推荐，DTO 是投影）；B 在 st-compat 加适配层（多一层转换，反对）。**属公共契约变更，需作者拍板后再动** | S13(WP1.4) 前 | api-spec §48；contracts placement；database-schema §13 |
 
 # 11. 会话运转节奏（与 AGENTS.md 衔接）
 
@@ -247,6 +251,8 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | WP0.7 server 传输层 | ✅ | 2026-09-06 S6 完成（Hono 骨架 + §152 P0 路由 + 信封/Request ID + SSE 续传 + SecretStore R-P0-6 定案(§38 决策 34)+ migration v2(runs/prompt_snapshots);11 条契约测试;§152 的 characters/worldbooks/presets CRUD 挂 S8 补齐(需 §6-§11 资产表迁移)） |
 | WP0.8 web Chat UI | ✅ | 2026-09-06 S7 完成（脚手架 + api-types 填充 + SSE 客户端 + 工作台 + 设置页 + 快照面板；真机冒烟全链路绿；类型零 any） |
 | WP0.9 P0 端到端验收 | ✅ | 2026-09-06 S8 完成（e2e ×3 + 资产 CRUD 补齐 + 冒烟脚本;DoD 见 §4.10 勾选;真实四链路待用户 key 冒烟） |
+| WP1.1a 卡导入 | ✅ | 2026-09-06 S9 完成（st-compat 卡模块 + 三载体归一 + .dgcard + 导入路由 + 兼容报告；详见 p1-plan §11） |
+| WP1.1b 世界书导入 | ✅ | 2026-09-07 S10 完成（st-compat 世界书模块：三容器 × 两代字段集 → .dgworld + 方言回写往返；migration v4 worldbook_entries/entry_versions；POST /api/v2/worldbooks/import；全量 208 测试绿；详见 p1-plan §11） |
 
 （P1–P5 WP 在各阶段开工细化时进看板。）
 

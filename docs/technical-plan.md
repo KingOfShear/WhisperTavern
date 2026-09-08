@@ -87,16 +87,22 @@
         "chance": 100,               // 概率
         "matchScope": [],            // 六个 match* 字段合并：persona/charDescription/… 是否参与扫描
         "triggers": [],              // 向量触发词
-        "characterFilter": []
+        "characterFilter": [],
+        "scanDepth": null, "caseSensitive": null, "matchWholeWords": null
+                                     // 条目级可空覆盖：null = 跟随书级 scan(→ 会话配置)
       },
       "lifecycle":   { "sticky": 0, "cooldown": 0, "delay": 0 },          // 定时效应
       "recursion":   { "excluded": false, "prevent": false, "delayedUntil": false },
       "placement": {                                                        // 放置
-        "slot": "charBefore",        // charBefore|charAfter|atDepth|anTop|anBottom|emTop|emBottom|outlet（替代 position 0-7 魔数）
+        "slot": "before",            // before|after|anTop|anBottom|depth|emTop|emBottom|outlet
+                                     // （替代 position 0-7 魔数；枚举取值与 contracts
+                                     //   WorldbookPositionSchema 同一份，C4 不重造）
         "order": 100, "depth": 4, "role": "system", "outletName": null
       },
       "budget":  { "ignore": false },                                       // ignoreBudget
-      "group":   { "id": null, "override": false, "weight": 100 },          // 酒馆"包含组"计分语义（≠预设的"选一"开关组）
+      "group":   { "id": null, "override": false, "weight": 100, "scoring": true },
+                                     // 酒馆"包含组"计分语义（≠预设的"选一"开关组）；
+                                     // scoring = useGroupScoring
       "zoning":  { "retirement": "auto", "pin": false },                    // ★ 新增：缓存分区策略覆盖（条目级退休/钉住）
       "compat":  { }                                                        // 未建模字段原样暂存，导出时原样回写
     }
@@ -110,6 +116,9 @@
 - **compat 暂存袋保证真无损**：42 字段还会继续进化，未建模字段进 `compat` 原样保留、导出时回写——往返保证不依赖"我们恰好建模了所有字段"。
 - **哈希不在文件里**：内容哈希/缓存指纹是 per-chat 运行态，存 chat_state；世界书文件保持纯内容——作者改条目 → 新哈希 → 走 freshWB 重新注入（缓存设计文档 §7 的既定行为）。
 - **导入兼容两种形态**：uid 键对象与数组、老字段名（`insertion_order`→`order`）、缺省字段按酒馆默认值补齐。
+- **字段方言（同语义、不同拼写）**：lorebook 写 `key`/`disable`/`order`，V3 `character_book` 写 `keys`/`enabled`/`insertion_order`，老导出还有 `insertion_order` 版 lorebook。导入按书探测方言（`packages/st-compat/src/worldbook/normalize.ts` 的 `StEntryDialect`），**归一到一种语义、回写时按方言还原拼写**——方言不是语义，不进原生文件。
+- **无原生语义的字段不进模型**：`addMemo` / `automationId` 等直接落 `compat`，由 compat 保证往返（避免"声明了却没处放"的静默丢失）。
+- **2026-09-07 修订（S10 落码同步）**：样例补齐 `activation.scanDepth/caseSensitive/matchWholeWords`（条目级可空覆盖）与 `group.scoring`（useGroupScoring）；`placement.slot` 枚举对齐 contracts `WorldbookPositionSchema`，废弃原 `charBefore/charAfter/atDepth` 拼写（C4：不重造同义核心类型）。
 - 存储：`data/worldbooks/*.dgworld`，Zod 校验；导出回酒馆时 `zoning/meta/compat 之外的本有能力字段`（如 zoning）提示丢弃，其余无损。
 
 ### 5.4 会话存储与消息树
