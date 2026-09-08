@@ -5,7 +5,7 @@
 
 **项目一句话**：仿 SillyTavern 的本地 AI RP 客户端，两大差异化——缓存友好型世界书（稳态命中率 ≥70%、输入成本削减 ≥60%）+ Agent 化对话（Agent Runtime / Roleplay Runtime 替代 MVU 填表插件）。
 
-**当前状态**（2026-09-06）：P0 已完成并提交里程碑（63aa7e1);**P1 细化会话已完成**——[docs/p1-plan.md](./docs/p1-plan.md) 落盘(S9–S15 会话切分 / R-P1-1–6 范围裁决 / §4.11 P1 DoD);下一会话 = **S9(WP1.1a 资产导入:ST 卡 → 原生 .dgcard)**,见 [docs/p1-plan.md](./docs/p1-plan.md) §11 看板。
+**当前状态**（2026-09-08）：P0 已完成并提交里程碑（63aa7e1);P1 进行中——S9（卡导入）与 S10（世界书导入）已完成（migration v4 落 worldbook_entries/entry_versions）；**A 档架构守卫已落地**（`tests/architecture.test.ts` 五组断言 + 修复 contract/spec 漂移 + 修 CI lint 虚红）；全量 **219 测试绿**；下一会话 = **S11(WP1.2 世界书激活层全集:compiler-spec §23–§29)**,**出场即解锁 P2 并行(B1)**,见 [docs/p1-plan.md](./docs/p1-plan.md) §11 看板。
 
 ## 1. 开工必读顺序（每次会话，顺序执行）
 
@@ -41,6 +41,8 @@
 4. **会话收尾**写 `.workbuddy/memory/YYYY-MM-DD.md`（改了什么/为什么/踩了什么坑）；跨会话决策落 §38。
 5. **架构扩展限制**：不得为局部需求新造 Service / Manager / Engine / Runtime / Store 类模块或新包——先回答"现有模块为何满足不了"；确需新建，按纪律 3 先落 spec 骨架并落 §38。类型层面的同类约束见 shared-contracts C4（不重造、不复制、不定义同义核心类型）。
 6. **代码风格底线**：显式类型（禁 `any` 出口）、禁 magic string（枚举/常量收 contracts）、小函数、单向依赖；机械执行交给 ESLint + `tsc --strict`，本条只立底线。
+7. **纪律必须有机器卡点**：凡是能一句话说清、能用一行断言表达的纪律，写进 **`tests/architecture.test.ts`（架构守卫 / fitness function）**，不要只写在文档里。新增门禁当下必须是绿的。
+   **门禁红了必须当天修**——红了不修的门禁等于没有门禁（2026-09-08 教训：CI 的 lint 段自 9/6 建立起就因 Node globals 缺失虚红两天，无人察觉，形同摆设）。
 
 ## 4. 决策协议（何时直接做、何时停下来问）
 
@@ -85,7 +87,6 @@ reference/SillyTavern/  ← 外部参照代码（只读，不是本仓库代码�
 ## 7. 勿做清单（红线）
 
 - **不内置任何用户提示词/预设文本**（作者授权边界）：只做导入并保留作者声明。
-- **不收录越狱提示词/规避配方**；指令安全只做 authority/trust 机制与差分测量（instruction-security-spec §2/§23.3）。
 - **不绕过 Compiler 拼 prompt**：任何"图省事直接拼字符串"的路径都会踩 §5.5 不变量断言（technical-plan §8.5）。
 - SQLite 是唯一目标库；事件名不用大写枚举、一律取 §5.4 权威域；适配器只翻译不做语义（provider-adapter PV1）。
 
@@ -100,3 +101,6 @@ reference/SillyTavern/  ← 外部参照代码（只读，不是本仓库代码�
 - 2026-09-05 三版（小步同步：当前状态更新为 S1 完成、决策计数 31→33；License 定 **Apache-2.0**（§38 决策 33），开源挂账登记 implementation-plan §10 #14–#16。开源评审"重排 13 包结构"方案拒绝——违反 §7 结构 / 纪律 5 / shared-contracts C4）。
 - 2026-09-06 四版（**项目更名：DesireGrimoire → WhisperTavern**，用户指令。全仓机械替换两形态：`@desiregrimoire/*` 作用域包名 → `@whispertavern/*`（118 处，含 pnpm-lock 同步 sed + `pnpm install` 重链接）；`DesireGrimoire` 品牌串/类型名 → `WhisperTavern`（91 处，含 `DesireGrimoireDb`→`WhisperTavernDb`）。工作区目录同步改名。**保留项**：`.dg*` 资产扩展名（.dgcard/.dgpreset/.dgworld）与 `dg` 内部前缀暂不迁移——属公共契约破坏性变更（决策协议 c），是否改 `.wt*` 另议需登记 §38；`.workbuddy/memory/2026-09-04、05.md` 两年日记按留痕原则不改写）。验证：grep 复核清零 + 全量测试。
 - 2026-09-06 五版（**更名重链接修复与四版记录更正**，决策 36）：四版所谓"pnpm install 重链接"实测并未在改名后生效——pnpm 工作区 junction 的 Target 是绝对路径，文件夹改名不自动更新，即使 grep 清零 + lockfile 干净，junction 仍指向已不存在的旧路径 `D:\Workspace\DesireGrimoire\...`，node_modules 呈死链接失效态。重跑 `pnpm install --frozen-lockfile` 修复（重装遇 better-sqlite3 `ERR_PNPM_ENOENT` 的 Windows 已知瞬态，清理残留后重跑成功），修后 `@whispertavern` 全部 junction 指回 `WhisperTavern` 路径、`@desiregrimoire` 死链接清除、旧名 grep 清零、全量 192 测试绿。**沉淀约定（§38 决策 36）：目录/工作区改名不得只以 grep 清零为验收，必须重跑 `pnpm install` 并核验 workspace junction 的 Target。**
+- 2026-09-07 六版（**外部多智能体提案评审**，决策 37）：评审"主 Agent 动态调度 Character / Event / State / Memory / Writer 子智能体 + Simulation Agent + Agent Orchestrator"方案，结论 = 约 80% 已被现有 spec 覆盖且口径更严，**仅 3 项真增量**（Agent Tree 递归护栏 / World State 全局态 / Simulation Agent）。作者拍板**采纳①护栏（P3）+ ③World State 规则版（P4，禁额外 LLM 调用）**，②Simulation Agent 暂缓至 P5 决策点。三条明确拒绝：重写 api-spec 为 Agent Orchestration API Spec（毁决策 16/19/27 事件名权威与版本机器）、每轮走 Director 多 Agent（撞 R1/C1）、Style Policy 塞 system prompt（踩"不用 Prompt 修架构问题"红线）。**新增全局判据（后续任何多 Agent 提案先过此条）：每轮 N 次调用 = N 个独立新前缀、只共享前缀可命中，与核心 KPI（命中率 ≥70% / 成本削减 ≥60%）直接冲突——多 Agent 只能是 Balanced/Deep 可选档，新增子 Agent 必须申报"几次调用、能否共享前缀"。** 挂账 implementation-plan §10 #17/#18/#19。
+- 2026-09-07 七版（**S9/S10 完成后状态同步**）：当前状态改为 S11 待办；WP1.1a/WP1.1b 进 implementation-plan §12 看板。**新增两条可执行约定**：③原生资产格式新增语义字段时须同步 technical-plan §5.3/§5.10 样例（S10 已补 `activation.scanDepth/caseSensitive/matchWholeWords`、`group.scoring`，slot 枚举对齐 contracts `WorldbookPositionSchema`）；④本机跑含 better-sqlite3 的测试须用系统 node 24（`C:\Program Files\nodejs\node.exe`），托管 node 22 的 NODE_MODULE_VERSION 不匹配会整片失败。
+- 2026-09-08 八版（**可维护性体检 + A 档架构守卫落地**）：体检量化基线见 `.workbuddy/memory/2026-09-08.md`（源码 7186 行 / 文档 23742 行 ≈ 3.3:1；注释密度 1:34.7 对纪律 1:10；coverage 报告停在 9-05 不可信）。**新增纪律 7：纪律必须有机器卡点**，落地 `tests/architecture.test.ts`（A 事件名权威域 / B 依赖方向 / C 禁 any / D 测试门禁完整性 / E Capability 权威域），并在根 `vitest.config.ts` 以 inline project 挂载。守卫首跑即抓出真实漂移：`contracts` 的 `ProviderCapabilities.instructionLayers` 未登记于 technical-design §18.2，已补 spec（含修订注记）。**同批修复 CI lint 段自 9/6 起的虚红**（`tests/smoke/*.mjs` 缺 Node globals）。全量 219 测试绿。

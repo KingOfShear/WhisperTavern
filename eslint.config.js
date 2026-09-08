@@ -34,6 +34,14 @@ export default tseslint.config(
     },
   },
   {
+    // 一次性运维/冒烟脚本:Node 直接运行、不在任一包的 tsconfig 内,flat config 默认无 globals,
+    // 不显式声明会让 `pnpm lint` 长期虚红——门禁红了没人修 = 门禁不存在(2026-09-08 教训)。
+    files: ['tests/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', fetch: 'readonly', TextDecoder: 'readonly' },
+    },
+  },
+  {
     // 依赖方向约束(shared-contracts-spec §1 / S2 验收):contracts 是 DAG 最底层,
     // 零 IO、零工作区依赖;违规导入在 lint 门禁直接红。
     files: ['packages/contracts/**/*.ts'],

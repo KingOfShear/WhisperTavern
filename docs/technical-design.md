@@ -307,7 +307,7 @@ type Segment = {
 
 V2 最重要的架构原则之一。一个世界书条目同时拥有两个正交的 placement：
 
-- **Semantic Placement** 回答：酒馆语义要求它出现在哪里？（如 `slot: charBefore`、`atDepth(4)`）
+- **Semantic Placement** 回答：酒馆语义要求它出现在哪里？（如 `slot: before`、`depth(4)`；槽位枚举唯一权威 = contracts `WorldbookPositionSchema`，对应 ST position 0–7）
 - **Cache Placement** 回答：为了缓存，它在物理 Prompt 中应如何组织？（如 `zone: stableWB, physicalOrder: 4`）
 
 二者不能混为一谈。酒馆兼容语义由 Semantic Placement 层严格保证（§12、§27.2），缓存优化只发生在 Cache Placement 层。
@@ -510,8 +510,14 @@ type ProviderCapabilities = {
   structuredOutput: 'none' | 'json_mode' | 'json_schema'
   parallelToolCalls: boolean
   toolChoice: boolean
+
+  // 补（2026-09-08，architecture.test.ts 守卫抓出的漂移）：
+  // instruction-security §18 登记点，P0 三家均 'flat'；真实分层落地时同步本节。
+  instructionLayers: 'flat' | 'system' | 'system+developer'
 }
 ```
+
+> **修订（2026-09-08）**：补 `instructionLayers` —— 该字段 P0 已在 `packages/contracts` 的 `ProviderCapabilitiesSchema` 落地，本节权威表漏登记，由架构守卫测试（`tests/architecture.test.ts` 组 E）双向比对抓出。**权威表与 contracts 必须逐字段相等**，任一侧新增都要同步另一侧。
 
 > **补（2026-09，收编 agent-runtime-spec）**：Director 选人（§80）、Checker 结论、Workflow 条件分支都依赖结构化输出。能力不足时的降级链：`json_schema` → `json_mode`（只保证是合法 JSON，不保证 schema）→ 提示词约束 + Runtime 校验 + `repairAttempts` 内修复（agent-runtime-spec §82），修复仍失败则 `STRUCTURED_OUTPUT_INVALID`，不静默降级为自然语言解析。
 
@@ -1056,6 +1062,22 @@ SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@prim
 35. **P0 完成记录（2026-09-06,S8/WP0.9 收官）**:DoD 七条逐项核验（implementation-plan §4.10）——①真实四链路:机制全就绪,冒烟脚本 tests/smoke/real-provider-smoke.mjs（env-var 驱动、密钥不入库）,**真实执行待用户以自有 key 冒烟后勾销**;②streaming/取消/partial:e2e 锁定(取消→CANCELLED→partial 前缀可查);③generation+usage 入库 + 重启恢复:e2e 锁定(usage_source 分对/重启后消息树/运行记录/快照可查);④快照重建模型可见内容:e2e(serialized.parts ≡ generations.request.messages);⑤无绕过路径:fake 调用入口四不变量闸口 + 故意违规测试变红;⑥金样 G2/G4 + fixture T1/T4/T6/T10/T11/T12/T14×3 家全绿;⑦lint + tsc strict + 全量 177 测试 CI 绿。P0 范围外挂账:§152 的资产 CRUD 已于 S8 补齐(migration v3);swipe 生成填充、代理管道、Inspector 完整形态随 P1。**P1 起步前置:P1 细化会话产出 p1-plan(§11 阶段计划约定)。**
 
 36. **目录/工作区改名后 node_modules junction 失效的修复约定（2026-09-06，承接 AGENTS§9 四版更名）**:更名后实测发现 pnpm 工作区 junction（`node_modules/.pnpm/node_modules/@whispertavern/*` 及各 workspace 包）其 Target 为**绝对路径**——文件夹改名不会自动更新，即便源码 grep 清零 + lockfile 干净，junction 仍指向旧路径 `D:\Workspace\DesireGrimoire\...`（已不存在），node_modules 处于死链接失效态。**四版所记"pnpm install 重链接"实际未在改名后生效，本条更正该记录**。修复：重跑 `pnpm install --frozen-lockfile`（重装遇 `ERR_PNPM_ENOENT`，即 better-sqlite3 rename 撞既有目录的 Windows pnpm 已知瞬态，清理该包残留后重跑成功）；修复后核验 `@whispertavern` 9 个 junction 全部指向 `D:\Workspace\WhisperTavern\...`、`@desiregrimoire` 死链接清除、旧名全仓 grep 清零、全量 192 测试绿。**沉淀约定：本仓库做目录/工作区改名时，除源码与 lockfile 机械替换外，必须重跑 `pnpm install` 并核验 workspace junction 的 Target——绝对路径型 junction 是 grep 看不见的旧路径残留，不得只以 grep 清零为验收**。
+
+37. **外部多智能体提案评审与增量取舍（2026-09-07，作者拍板）**：评审 ChatGPT「主 Agent 调度 Character / Event / State / Memory / Writer 子智能体 + Simulation Agent + Agent Orchestrator + 递归护栏 + API 以 `/runs` 为中心」方案，结论——**约 80% 已被现有设计覆盖且口径更严**，仅 3 项为真增量，3 条建议明确拒绝。
+
+    **已覆盖、不新增**（下会话不必再议，防重复造轮子）：Director 主调度 = agent-runtime-spec §80 + [dialogue-director-spec](./specs/dialogue-director-spec.md)（结构化 `nextAgent` 输出，禁自然语言解析）；子 Agent 分发与树形 = §14 Parent Run / §15 Run Tree / §64 Agent Node / Workflow DAG；并行·超时·重试·取消·预算 = §43–51 / §68–69 / §93–94；Agent 间交换结构化事实 = §70（Artifact / Message / Event）+ §81 Structured Output + 决策 14（冻结产物不进稳定前缀）；Writer / Checker / Critic = AgentType `writer|checker|editor` + roleplay-runtime-spec §28 Quality Gate；去 AI 味 = Expression History 五层重复检测 + `aiPatternRisk`；API 以 `/runs` 为中心 = api-spec V2.1 已定稿（`runs/:id/events|cancel|replay` 齐全）。
+
+    **明确拒绝 3 条**：①**重写 api-spec 为 "Agent Orchestration API Spec"**——会毁掉决策 16/19/27 确立的事件名权威清单与版本机器，属破坏性变更；②**每轮都走 Director 多 Agent**——撞 R1/C1 硬裁决（单聊快速路径禁止额外模型调用）；③**Style Policy 塞进 system prompt**——踩「不用 Prompt 修架构问题」红线，风格约束应落表达历史与用户 preset 资产，不落架构层。
+
+    **采纳 2 项（本次拍板）**：
+    - **增量① Agent Tree 递归护栏**：现有有 Workflow DAG 与 Budget，但缺 `maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 上限。按纪律 5 **不新造模块**，落 agent-runtime-spec §39（Budget System）与 §93（Scheduler）——新增字段 + 超限拒绝 spawn + 对应诊断码。归 **P3**。
+    - **增量③ World State 全局态（规则版）**：现有只有 `roleplay_states`（per chat×character）+ `relationship_states`（边）+ `story_threads`，缺地点 / 时间 / 物品 / 任务 / 派系 / 知识。补全局世界状态表 + **规则化推演**，归 **P4**；落 roleplay-runtime-spec 扩展章节 + database-schema 补表，按纪律 3 先落 spec 骨架再写码。**硬约束：不引入额外 LLM 调用**——沿用 R1/C1 与决策 24 的缓存纪律，世界动态一律落 `fresh` / `injection` / `tail`，绝不进稳定前缀。
+
+    **暂缓（增量② Simulation Agent）**：agent-runtime-spec §58 的 Simulation 是**另一义**（不调真实 Provider 的 dry-run / mock），与"世界按自身规则自推"无关；独立 LLM 世界推演 Agent 留 **P5**，待 P4 规则版实测数据（场景覆盖率 / 延迟 / 成本）再决定是否引入。
+
+    **判定依据（本次分析的核心发现，后续任何多 Agent 提案都先过这一条）**：多 Agent 每轮 N 次调用 = N 个独立新前缀，只有共享前缀可命中缓存，与本项目核心 KPI（稳态命中率 ≥70%、输入成本削减 ≥60%）**直接冲突**。故多 Agent 只能是 Balanced / Deep **可选档**，绝不可成为默认路径；新增任何子 Agent 都必须申报"它带来几次调用、是否可共享前缀"。
+
+    还账登记：implementation-plan §10 #17（护栏，P3）/ #18（World State，P4）。
 
 ## 39. 风险与对策
 
