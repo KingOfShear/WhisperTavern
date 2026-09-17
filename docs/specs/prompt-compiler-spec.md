@@ -2186,14 +2186,6 @@ NON_DETERMINISTIC_MACRO
 
 PROMPT_CONTEXT_TOO_LARGE   // 补（2026-09）：裁剪后仍放不进模型上下文窗口
 
-// 补（2026-09-05，instruction-security-spec §21 注册表）：指令安全五码
-AUTHORITY_OVERRIDE_DENIED    // 低档段试图覆盖高档（R2/R3 违例），拒绝该覆盖请求
-UNTRUSTED_IN_STABLE_ZONE     // untrusted 段进入稳定前缀（I3 违例），非 strict 自动降位
-UNCONTAINED_UNTRUSTED        // untrusted 段将进入模型可见区但缺边界段，自动补封装
-INSTRUCTION_SOURCE_MISMATCH  // 内容文本自述指令身份与来源档位不符，只报告不改档
-OVERRIDE_SLOT_ACTIVE         // 本轮编译含用户 override 槽位（审计用，带 segmentId）
-```
-
 `PROMPT_CONTEXT_TOO_LARGE` 是**可降级但不可盲目重试**的诊断码。消费方（Agent Runtime）的处理口径见 agent-runtime-spec §49.1：降级后**只有当 replacement generation 确实前进**才允许重试一次，否则原错误保持权威。Compiler 侧只负责报码与提供裁剪建议，不参与重试决策。
 
 ---

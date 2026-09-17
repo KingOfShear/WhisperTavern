@@ -22,15 +22,12 @@ describe('POST /api/v2/characters/import(S9)', () => {
     const body = (await res.json()) as {
       data: {
         character: { id: string; name: string; version: number }
-        report: { asset: { sourceFormat: string }; roleAssignments: { path: string; authority: string }[] }
+        report: { asset: { sourceFormat: string } }
       }
     }
     expect(body.data.character.name).toBe('S9卡')
     expect(body.data.character.version).toBe(1)
     expect(body.data.report.asset.sourceFormat).toBe('st-v3')
-    expect(body.data.report.roleAssignments).toEqual(
-      expect.arrayContaining([{ path: 'persona.*', authority: 'character' }]),
-    )
     const list = (await (await app.request('/api/v2/characters')).json()) as { data: { name: string }[] }
     expect(list.data.some((c) => c.name === 'S9卡')).toBe(true)
   })
@@ -134,17 +131,15 @@ describe('POST /api/v2/worldbooks/import(S10)', () => {
   const post = async (payload: unknown): Promise<Response> =>
     app.request('/api/v2/worldbooks/import', { method: 'POST', body: JSON.stringify(payload) })
 
-  it('老格式(裸 uid 键对象):注册 + 条目落库 + 报告档位(R-P1-3/I1)', async () => {
+  it('老格式(裸 uid 键对象):注册 + 条目落库(R-P1-3/I1)', async () => {
     fresh()
     const res = await post({ filename: '地点.json', base64: Buffer.from(JSON.stringify(OLD_LOREBOOK), 'utf8').toString('base64'), name: '地点' })
     expect(res.status).toBe(201)
     const body = (await res.json()) as {
-      data: { worldbook: { id: string; entryCount: number }; report: { asset: { sourceFormat: string }; roleAssignments: { authority: string }[] } }
+      data: { worldbook: { id: string; entryCount: number }; report: { asset: { sourceFormat: string } } }
     }
     expect(body.data.worldbook.entryCount).toBe(2)
     expect(body.data.report.asset.sourceFormat).toBe('st-lorebook-legacy')
-    // 档位:世界书条目按来源一律 world(内容自述无效)
-    expect(body.data.report.roleAssignments.every((r) => r.authority === 'world')).toBe(true)
 
     const rows = harness.open().store.sqlite
       .prepare('SELECT entry_key, name, enabled, position, insertion_order, activation_mode, source_data FROM worldbook_entries WHERE worldbook_id = ? ORDER BY entry_key')

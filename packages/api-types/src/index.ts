@@ -78,6 +78,10 @@ export type MessageDto = Pick<
   'id' | 'chatId' | 'parentMessageId' | 'sequence' | 'role' | 'authorType' | 'content' | 'createdAt' | 'variantGroupId' | 'variantIndex'
 >
 
+/** §16 响应附带的兄弟链投影(§17 修订):同 variant_group 的未删兄弟(含自身,index 升序) */
+export type MessageVariantRefDto = { id: string; variantIndex: number | null }
+export type MessageWithVariantsDto = MessageDto & { variants: MessageVariantRefDto[] }
+
 export type CreateMessageRequest = {
   parentId?: string
   role: Extract<MessageRole, 'user' | 'system' | 'narrator'>
@@ -111,7 +115,6 @@ export type CompilePreviewDto = {
   hashes: PromptHashes
   serialized: SerializedPrompt
   diagnostics: Diagnostic[]
-  authorityFingerprint?: string
 }
 
 export type PromptSnapshotDto = CompilePreviewDto & {

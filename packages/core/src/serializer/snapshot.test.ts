@@ -108,44 +108,9 @@ describe('core/serializer(Snapshot 构建器)', () => {
     expect(withTail.hashes.final).not.toBe(after.hashes.final)
   })
 
-  it('指令元数据变化不进八区哈希,但反映在 authorityFingerprint(I5/§19.1)', () => {
-    const withInstruction: PromptIR = {
-      ...baseIR,
-      segments: baseIR.segments.map((s) =>
-        s.id === 'worldbook:book1:entry:183'
-          ? {
-              ...s,
-              instruction: {
-                authority: 'world' as const,
-                trust: 'semi_trusted' as const,
-                scope: 'roleplay' as const,
-              },
-            }
-          : s,
-      ),
-    }
-    const plain = buildPromptSnapshot(input(withInstruction))
-    const fingerprinted = buildPromptSnapshot(input(withInstruction))
-    expect(fingerprinted.hashes.final).toBe(plain.hashes.final)
-    expect(fingerprinted.authorityFingerprint).toBeDefined()
-
-    const reRanked: PromptIR = {
-      ...withInstruction,
-      segments: withInstruction.segments.map((s) =>
-        s.id === 'worldbook:book1:entry:183' && s.instruction
-          ? { ...s, instruction: { ...s.instruction, authority: 'memory' as const } }
-          : s,
-      ),
-    }
-    const changed = buildPromptSnapshot(input(reRanked))
-    expect(changed.hashes.final).toBe(plain.hashes.final)
-    expect(changed.authorityFingerprint).not.toBe(plain.authorityFingerprint)
-  })
-
-  it('无 instruction 的段不产指纹;全空 IR 全区哈希 = SHA-256(空字节)外部基准', () => {
+  it('全空 IR:全区哈希 = SHA-256(空字节)外部基准', () => {
     const emptyIR: PromptIR = { schemaVersion: 1, segments: [], zones: [], metadata: {} }
     const snapshot = buildPromptSnapshot(input(emptyIR))
-    expect(snapshot.authorityFingerprint).toBe(SHA256_EMPTY)
     expect(snapshot.hashes.header).toBe(SHA256_EMPTY)
     expect(snapshot.hashes.stableWB).toBe(SHA256_EMPTY)
     expect(snapshot.hashes.final).toBe(SHA256_EMPTY)

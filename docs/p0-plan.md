@@ -2,7 +2,7 @@
 
 > **文件：** `docs/p0-plan.md`
 > **版本：** V1.0（2026-09-05，P0 开工前落成——implementation-plan B4 滚动细化的首例）
-> **状态：** **Archived(执行记录)**——P0 于 2026-09-06 完成(§13 看板全 ✅、§38 决策 35);后续执行以 implementation-plan 与 p1-plan 为准
+> **状态：** **Archived(执行记录)**——P0 于 2026-09-06 完成(§13 看板全 ✅、§38 决策 35);后续执行以 implementation-plan 与 p1-plan 为准。**2026-09-08 注：指令安全特性已随 §38 决策 37 撤下；本文 G2/G4 等引用仅作当时执行留痕，不代表当前交付。**
 > **文档层级：** [implementation-plan.md](./implementation-plan.md) §4（WP 概览与 DoD）的**会话级执行明细**。设计语义一律指向 spec，本文只管"会话里具体干什么"。
 > **上游锚点：** implementation-plan §3 DAG / §4 WP / §4.10 P0 DoD 与 Non-goals；AGENTS.md 会话纪律。
 
@@ -31,9 +31,8 @@ R-P0-1  宏引擎不在 P0：预设文本中的 {{macro}} 原样透传 + info �
         （MACRO_UNEXPANDED_P0），P2 的 Macro Engine 接管。P0 验收不含 ST 资产导入。
 R-P0-2  预算只有硬上限：序列化后超过模型 maxContextTokens → PROMPT_CONTEXT_TOO_LARGE
         报错终止；不做裁剪 / Elastic History / CachePlan（P2）。
-R-P0-3  指令安全 P0 = 元数据基线：instruction 字段 + §10 默认推导 + 可触发的不变量
-        断言（I1/I4/I5）+ 诊断码 AUTHORITY_OVERRIDE_DENIED / UNTRUSTED_IN_STABLE_ZONE
-        （后者 P0 无 untrusted 源，码注册但不可触发）。G2/G4 金样必须绿。
+R-P0-3  ~~指令安全 P0 = 元数据基线~~：instruction 字段 + 默认推导 + 不变量断言
+        与相关诊断码均于 2026-09-08 随指令安全特性撤下；G2/G4 金样随之撤载。
 R-P0-4  CachePlan 为空：P0 不产出任何缓存断点标记（automatic-prefix 家族本来就
         无需标记；Anthropic cache_control 从 WP2.4 开始）。
 R-P0-5  FTS5 / sqlite-vec 不启用（P4）；build 期排除扩展依赖。
@@ -75,8 +74,8 @@ R-P0-7  多 choice / swipe 后端在 P0 只做消息树基础操作（api-spec �
    - placement.ts SemanticPlacement / CachePlacement / Stability（§12–§17）
    - snapshot.ts  PromptSnapshot / 八区哈希形状（§66–§67）
    - diagnostics.ts Diagnostic 形状（§70）
-   - instruction.ts InstructionMetadata / Authority / Trust / Scope
-     （instruction-security §6–§9 草案类型收编）
+   - （instruction.ts InstructionMetadata / Authority / Trust / Scope 类型已随
+     指令安全特性撤下）
    - provider.ts  ProviderChatRequest / StreamEvent / ProviderError
      （provider-adapter §6 / §8.1 / §12 码表）
    - chat.ts      P0 运行态最小集（chats / messages / 分支形状——按 database-schema
@@ -95,8 +94,7 @@ R-P0-7  多 choice / swipe 后端在 P0 只做消息树基础操作（api-spec �
 ```text
 1. 段模型实现（packages/core/ir/）：以 contracts 类型为准的运行时构造器 +
    不可变性保证（冻结 / readonly）
-2. Snapshot 构建器：八区哈希逐字节计算（compiler-spec §67）；Snapshot 不可变
-   （§68）；authorityFingerprint 元数据（instruction-security §19.1）
+2. Snapshot 构建器：八区哈希逐字节计算（compiler-spec §67）；Snapshot 不可变（§68）
 3. token 计数双模式（§52）：本地估算器（选型注意 provider-adapter §23 开放点 2，
    与 S4' 协调——openai 系 tiktoken 逼近，其余启发式）+ countTokensNative 钩子接口
 4. 不可变性 / 确定性单测：同输入 → 同哈希（字节级）
@@ -237,8 +235,8 @@ X6  决策出现分叉 → 按 AGENTS §4 决策协议判级：触碰公共语�
 |---|---|---|---|
 | S1 | WP0.1 | ✅ | 2026-09-05 完成:pnpm workspaces + §7 目录全就位(9 包含 agent/st-compat 占位壳)+ TS strict 基线 + ESLint/Vitest/CI 三段门禁全绿(fake provider ×7 形状测试);`pnpm -r lint && pnpm -r typecheck && pnpm -r test` 验收通过。注:adapters/src/contract.ts 为归一契约**临时占位,S2 收编入 contracts 后删除**;CI 首跑待仓库推送远端后验证(当前无 remote)。 |
 | S2 | WP0.2 | ✅ | 2026-09-05 完成：contracts 八模块（core/placement/instruction/ir/diagnostics/snapshot/provider/chat）Zod-first 同源 + 30 条单测（round-trip/branded ID/枚举穷尽）+ 零 IO lint 约束；adapters 临时 contract.ts 已删除、import 走 @whispertavern/contracts；api-types 建壳（type-only 投影约定）；shared-contracts-spec 升 V2.0（还账 #1 勾销）。注：SerializedPart/providerStrategy/PromptMetadata/registeredBy 四个开放形状记录于 spec §2.3，随 WP0.4/WP2.4 定稿。 |
-| S3 | WP0.3 | ✅ | 2026-09-05 完成：core/ir 段构造器（contracts schema 验证后深冻结，§68 运行期兜底）；serializer 八区哈希（netstring 框架化 (id,role,content)，§57"哈希是验证手段"，空区=SHA-256 空字节外部基准测试）；authorityFingerprint（§19.1，覆盖显式 instruction 段）；token 双模式（§52 tokenCountMode 记录 + 本地估算器误差基线在案，tiktoken 选型仍挂 WP0.5 还账 #2）；零 IO 双保险（imports 约束测试 + ESLint）。 contracts 增 tokenCountMode/authorityFingerprint 两字段（均 spec 强制）。 |
-| S4 | WP0.4 | ✅ | 2026-09-05 完成:管线八阶段(normalize→指令解析→宏扫描→I3 隔离→排序→硬上限→IR 组装(I5 断言)→snapshot)+ strict/preview 升格 + §10 推导表(instruction-security)+ R2/R3 越权裁决 + I4 INVARIANT_VIOLATION + 宏透传 MACRO_UNEXPANDED_P0 + Trace(§101);金样 G2(空槽零字节差异)/G4(自述不改档)绿;67 测试全绿。明确不做按 Non-goals:宏展开/三区填充/裁剪/CachePlan。contracts 增 compiler.ts(§88/§72/§101 收编)。 |
+| S3 | WP0.3 | ✅ | 2026-09-05 完成：core/ir 段构造器（contracts schema 验证后深冻结，§68 运行期兜底）；serializer 八区哈希（netstring 框架化 (id,role,content)，§57"哈希是验证手段"，空区=SHA-256 空字节外部基准测试）；token 双模式（§52 tokenCountMode 记录 + 本地估算器误差基线在案，tiktoken 选型仍挂 WP0.5 还账 #2）；零 IO 双保险（imports 约束测试 + ESLint）。 contracts 增 tokenCountMode 字段（spec 强制）。 |
+| S4 | WP0.4 | ✅ | 2026-09-05 完成:管线八阶段(normalize→指令解析→宏扫描→I3 隔离→排序→硬上限→IR 组装(I5 断言)→snapshot)+ strict/preview 升格 + §10 推导表+ R2/R3 越权裁决 + I4 INVARIANT_VIOLATION + 宏透传 MACRO_UNEXPANDED_P0 + Trace(§101);金样 G2(空槽零字节差异)/G4(自述不改档)绿;67 测试全绿。明确不做按 Non-goals:宏展开/三区填充/裁剪/CachePlan。contracts 增 compiler.ts(§88/§72/§101 收编)。 |
 | S4'-a/b/c | WP0.5 | ✅ | S4'-c 完成(2026-09-05):gemini adapter(usageMetadata 累积末帧定稿/thought parts→reasoning_delta/SAFETY→finish content_filter/context-cache 族/systemInstruction 顶层化/x-goog-api-key 头)+ **fixture 全家桶**(§20 必测 T1/T4/T6/T10/T11/T12 × 3 家 + T14 重复回放 PV7 硬门禁;合成字节流由 record-fixtures.mjs 确定性生成,18 份 JSON 只读)。**WP0.5 出场:还账 #2 勾销**。前段——S4'-a 完成(2026-09-05):openai-compat adapter(SSE 共用解析 R1-R3/DeepSeek reasoning_content→reasoning_delta/usage include_usage+estimated 降级/错误表驱动 §12/分层超时 §14/PV6 取消/R5 伪造 200/PV5 redact/capabilities 静态预设+覆盖);ProviderCapabilities §18.2 定稿入 contracts(还账 #2 第一半);开放点 2 tokenizer 选型落定(adapter-spec V1.1:P0 启发式,tiktoken 归 P2)。15 条契约测试(T1/T4/T5/T6/T10/T11/T12+401/429/redact/超时)。**S4'-b 完成(2026-09-05)**:anthropic adapter(usage 双帧合成 PV3/thinking+签名载体 PV8/stop_reason 映射/流内 error 分类/请求翻译 system 顶层化+max_tokens 必填);contracts reasoning_delta 增 signature 载体(adapter-spec V1.2 §8.1 同步)。15 条契约测试(T1/T3/T4/T5/T6/T10/T11/T12/401/429/529/redact/超时/capabilities/请求翻译)。待:S4'-c gemini+fixture 全家桶。 |
 | S5 | WP0.6 | ✅ | 2026-09-05 完成:Event Bus(§5.4 目录源码常量化 + durable 同步落库/deferred 批量/live 内存 + D5 吞订阅者异常);迁移器(§77/78:checksum 可重复检测/事务原子/integrity check/失败回滚/用户侧备份);消息树五操作(§16–§22,leaf 指针唯一,建分支即激活 §21"只改 active leaf");dispatchGeneration(§5.5 四不变量断言独立导出,故意违规路径测试变红);usage 入库(generations.usage_source 分对 reported/estimated,§52 V2.7 注记)。P0 建表 = p0-plan 清单(chats/messages/chat_branches/providers/generations/events/schema_metadata/migrations);快照注册表 P0 内存态,prompt_snapshots 表随 S6。 |
 | S6 | WP0.7 | ✅ | 2026-09-06 完成:Hono 骨架(createApp 组合根,app.request 契约测试不走端口)+ §152 P0 路由(chats CRUD/消息树/generate 立即返回 ids/runs cancel/SSE events/compile/snapshot 查询/providers CRUD+models/密钥只写)+ 错误信封 §7-§8(ProviderError→§8 码映射)+ Request ID §5 + EventBus 按 run 分配 sequence(§27)+ Last-Event-ID 续传(活跃=buffer 重放,已结束=events 表 durable 行重放,§141 live 不落库)+ SecretStore R-P0-6 定案(§38 决策 34)+ migration v2(runs/prompt_snapshots,§34/§39 P0 子集)。11 条契约测试全绿。挂账:§152 的 characters/worldbooks/presets CRUD 归 S8(需 §6-§11 资产表迁移)。 |
@@ -247,4 +245,4 @@ X6  决策出现分叉 → 按 AGENTS §4 决策协议判级：触碰公共语�
 
 ---
 
-*关联文档：[implementation-plan.md](./implementation-plan.md)（WP 概览 / DoD / 还账总表）· AGENTS.md（会话纪律）· [prompt-compiler-spec](./specs/prompt-compiler-spec.md) · [provider-adapter-spec](./specs/provider-adapter-spec.md) · [instruction-security-spec](./specs/instruction-security-spec.md) · [database-schema](./specs/database-schema.md) · [api-spec](./specs/api-spec.md) · [shared-contracts-spec](./specs/shared-contracts-spec.md)*
+*关联文档：[implementation-plan.md](./implementation-plan.md)（WP 概览 / DoD / 还账总表）· AGENTS.md（会话纪律）· [prompt-compiler-spec](./specs/prompt-compiler-spec.md) · [provider-adapter-spec](./specs/provider-adapter-spec.md) · [database-schema](./specs/database-schema.md) · [api-spec](./specs/api-spec.md) · [shared-contracts-spec](./specs/shared-contracts-spec.md)*

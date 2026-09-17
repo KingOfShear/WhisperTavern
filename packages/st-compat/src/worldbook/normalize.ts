@@ -13,7 +13,6 @@ import {
 } from './types'
 import {
   WORLDBOOK_FIELD_MAP,
-  WORLD_ROLE_ASSIGNMENTS,
   type EntryContainer,
   type WorldbookImportReport,
   type WorldbookImportResult,
@@ -284,7 +283,6 @@ function normalize(
     },
     fieldMap: [...WORLDBOOK_FIELD_MAP],
     compatFields,
-    roleAssignments: [...WORLD_ROLE_ASSIGNMENTS],
     warnings,
   }
   return { worldbook, report, dialect }

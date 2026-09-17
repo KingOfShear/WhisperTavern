@@ -308,7 +308,6 @@ const CLAUDE_BASE: ProviderCapabilities = {
   structuredOutput: 'none',
   parallelToolCalls: false,
   toolChoice: true,
-  instructionLayers: 'flat',
 }
 
 const REASONING_PATTERN = /^claude-(3-7|4|opus-4|sonnet-4)/i

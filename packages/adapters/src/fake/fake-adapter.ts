@@ -59,7 +59,6 @@ export class FakeProviderAdapter implements ProviderAdapter {
       structuredOutput: 'none',
       parallelToolCalls: false,
       toolChoice: false,
-      instructionLayers: 'flat',
     }
   }
 

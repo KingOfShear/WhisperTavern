@@ -334,7 +334,7 @@ header → stableWB → freshWB → summary → history → injection → tail
 
 V2 草案曾把 summary 移到 history 之后，理由是"新摘要块插入会使 history 整体位移"。经成本对比后**维持 summary → history 布局**：
 
-- 旧布局：摘要链字节**每轮都处于缓存前缀内**（按约 1/10 价计费）；新增摘要块（每 40–80 楼一次）使历史重发一次，属显式失效事件。
+- 旧布局：摘要链字节**每轮都处于缓存前缀内**（按约 1/10 价计费）；新增摘要块（每 39–80 楼一次）使历史重发一次，属显式失效事件。
 - history 之后布局：history 每轮追加导致前缀匹配止于 history 末尾，**摘要链永远无法命中缓存**，每轮按全价重发全部摘要 token 且随链增长——长对话累计成本远高于前者。
 
 若未来需要"摘要贴近末端"的注意力收益，应以一个**有大小上限的滚动 recap** 注入 tail 区实现，而不是移动 summary 区。摘要块结构（`SummaryBlock`：id/seq/content/coversMessageRange/frozenAt）与"冻结后不可原地修改，修改 = 创建新版本"语义见 [worldbook-cache-design.md](./worldbook-cache-design.md)。
@@ -445,7 +445,7 @@ tail / RAG        ← 缓存零伤害（位于历史后，裁剪不位移任何�
 → header          ← 几乎不动
 ```
 
-> 修正说明：初版把 freshWB 排在 injection 之前是缓存成本倒置（裁 injection 免费、裁 freshWB 要位移整个 history）。上表是**纯缓存成本序**；若 tail 中有语义上必须保留的内容（如风格/越狱指令），可在 policy 中标记 protect 使其跳过裁剪——裁剪策略可配置，最终顺序以 CachePlan 的 reasons 记录。
+> 修正说明：初版把 freshWB 排在 injection 之前是缓存成本倒置（裁 injection 免费、裁 freshWB 要位移整个 history）。上表是**纯缓存成本序**；若 tail 中有语义上必须保留的内容（如风格），可在 policy 中标记 protect 使其跳过裁剪——裁剪策略可配置，最终顺序以 CachePlan 的 reasons 记录。
 
 ## 16. Elastic History
 
@@ -510,14 +510,8 @@ type ProviderCapabilities = {
   structuredOutput: 'none' | 'json_mode' | 'json_schema'
   parallelToolCalls: boolean
   toolChoice: boolean
-
-  // 补（2026-09-08，architecture.test.ts 守卫抓出的漂移）：
-  // instruction-security §18 登记点，P0 三家均 'flat'；真实分层落地时同步本节。
-  instructionLayers: 'flat' | 'system' | 'system+developer'
 }
 ```
-
-> **修订（2026-09-08）**：补 `instructionLayers` —— 该字段 P0 已在 `packages/contracts` 的 `ProviderCapabilitiesSchema` 落地，本节权威表漏登记，由架构守卫测试（`tests/architecture.test.ts` 组 E）双向比对抓出。**权威表与 contracts 必须逐字段相等**，任一侧新增都要同步另一侧。
 
 > **补（2026-09，收编 agent-runtime-spec）**：Director 选人（§80）、Checker 结论、Workflow 条件分支都依赖结构化输出。能力不足时的降级链：`json_schema` → `json_mode`（只保证是合法 JSON，不保证 schema）→ 提示词约束 + Runtime 校验 + `repairAttempts` 内修复（agent-runtime-spec §82），修复仍失败则 `STRUCTURED_OUTPUT_INVALID`，不静默降级为自然语言解析。
 
@@ -1044,26 +1038,22 @@ Prompt Compiler 模块另有验收"五问"（源自 [specs/prompt-compiler-spec.
 27. **API 规格收编**（specs/api-spec.md V2.1，2026-09-05）：HTTP/SSE 控制面契定为第四份模块规格——路由/信封/错误码/幂等/并发（version + If-Match）/SSE 协议（run 内 sequence 单调递增 + Last-Event-ID 断线续传）/长任务"立即返回 runId + SSE"原则/分阶段 API 范围（P0→P5）。同时确立**文档优先序：模块规格（对象形状/状态机）> API 规格（线格式投影）> 总设计（架构口径）**；事件名与持久化分档一律以 §5.4 权威表为准——API 初稿的 agent.* 平铺命名、generation.usage、workflow.node_*、message.branch_changed 作废并入既有事件，provider/import/export/memory/artifact 五个域反哺进权威表并带分档；DTO 口径：PromptSnapshot hashes 以 compiler-spec §67 八区为准、SegmentSnapshot stability 三值为五级投影、AgentBudget 补 maxInvocationsPerRun/resultBudgetTokens；§151 包结构修正并采纳 **packages/api-types** 进 §7；M2–M5 重映射 P2–P5。
 28. **Roleplay Runtime 模块化收编**（specs/roleplay-runtime-spec.md V1.1，2026-09-05，裁决 R1–R6）：把"RP 智能"从 Kemini 式提示词技巧升级为运行时模块（Character State / Emotion / Emotion Transition / Relationship 边模型 / Behavior Director / Initiative / Story Momentum / Novelty / Anti-Repetition / Life Texture / Event Sourcing / Quality Gate），落在 Agent Runtime 与 Prompt Compiler 之间。五条裁决 + 一条持久化裁决：**R1 Fast 默认单调用**（延续 C1，禁止每条消息额外调用；Behavior Directive 由规则推导折叠进单次 Prompt，LLM Director/Critic 仅 Deep 可选）；**R2 命名**（Behavior/Dialogue Director ≠ 群聊/工作流 Director）；**R3 记忆集成**（在四层记忆上扩展，只向 Memory Runtime 查询）；**R4 缓存兼容**（RP 动态落 fresh/injection/tail、绝不进稳定前缀，延续 C2；tail 白名单段按 C6/决策 24 复用 snapshotId）；**R5 两层裁剪**（RP 语义优先级选内容，§15 缓存成本序管裁剪）；**R6 折中 5 表持久化**（roleplay_states + story_threads + roleplay_snapshots + relationship_states 边表 + character_state_events 事件溯源，database-schema §29.1–29.5；Directive / QualityReport 存 artifacts）。`roleplay.*` 事件域并入 §5.4 权威清单（含 durability 分档）。阶段：RP Fast 归 P4，Deep/Benchmark/Inspector 归 P5。文档优先序下为**第五份模块规格**；其 **Director 与 Quality 细节下沉为两个子规格** [specs/dialogue-director-spec.md](./specs/dialogue-director-spec.md)、[specs/roleplay-quality-spec.md](./specs/roleplay-quality-spec.md)（roleplay-runtime-spec §21/§28 引用），Quality 事件统一并入 `roleplay.*` 权威域。
 
-29. **共享契约 + 评价引擎收编**（specs/shared-contracts-spec.md、specs/roleplay-evaluation-engine-spec.md，2026-09-05）：①**Shared Contracts** 确立 `packages/contracts` 为核心类型 + Zod Schema 单一真相源，`packages/api-types`（决策 27）降为其线格式投影；跨模块形状（branded ID / Timestamp / Versioned / Result / StatePatch / Ownership）在此收编，Run / Attempt / StepRun 等只**引用 agent-runtime C5、不重造**；**事件命名不用大写枚举**，一律取 §5.4 权威域（决策 16/19）；`Conversation = chats 别名`（不引平行概念）、`MessageRole.character ≠ assistant`。②**Roleplay Evaluation Engine** 为 Quality（roleplay-quality-spec）的**实现层**（特征提取 / 各评价 Engine / 评分 / Decision / Replay / 版本化），事件并入 `roleplay.*`，Fast 默认本地规则、Slow LLM 归 P5。两规格均入 §40.1 层级。
+29. **共享契约 + 评价引擎收编**（specs/shared-contracts-spec.md、specs/roleplay-evaluation-engine-spec.md，2026-09-05）：①**Shared Contracts** 确立 `packages/contracts` 为核心类型 + Zod Schema 单一真相源，`packages/api-types`（决策 27）降为其线格式投影；跨模块形状（branded ID / Timestamp / Versioned / Result / StatePatch / Ownership）在此收编，Run / Attempt / StepRun 等只**引用 agent-runtime C5、不重造**；**事件命名不用大写枚举**，一律取 §5.4 权威域（决策 16/19）；`Conversation = chats 别名`（不引平行概念）、`MessageRole.character ≠ assistant`。②**Roleplay Evaluation Engine** 为 Quality（roleplay-quality-spec）的**实现层**（特征提取 / 各评价 Engine / 评分 / Decision / Replay / 版本化），事件并入 `roleplay.*`，Fast 默认本地规则、Slow LLM 归 P5。两规格均入 §39.1 层级。
 
-**收编指令安全与信任边界规格（2026-09-05，原创规格——非 ChatGPT 文档收编，源自"破甲研究"对话的架构化落地）**：
+30. **Provider Adapter 规格骨架**（specs/provider-adapter-spec.md V1.0，2026-09-05，P0 前落骨架）：**第六份模块规格**；同时**修订三岔分工**（决策 26 ②）——Provider 拆两层：**归一契约 / 流式事件 / 工具与 reasoning 归一 / 错误分类 / usage 归一 / 不变量 / 契约测试在 specs/**，接入方式 / 自定义插头 / 代理 / 密钥存储留 technical-plan §5.1。八条裁决 PV1–PV8：①只翻译不做语义（不改内容字节、不裁剪、不重排——语义修改权唯一在 Compiler）；②重试决策归 Operation 层（C5），适配器内部唯一例外 = 同 Provider 多 key 轮换（§41.1，受 AgentBudget 约束、不派生新 Snapshot）；③usage 恰好一次且在 finish 前（Anthropic 双帧合成 / Gemini 累积定稿是实现点）；④错误必分类——ProviderError 码表唯一权威、表驱动映射，UNKNOWN fail-closed 不自动重试；⑤密钥零泄漏（统一 redact 中间件，错误/日志/快照/fixture 全覆盖）；⑥取消优先（AbortSignal 贯穿 + partial 事件 + CANCELLED 终止）；⑦fixture 确定性回放（同字节 → 同事件序列，契约测试硬门禁）；⑧reasoning 不丢弃——归一为 reasoning_delta，是否回传历史由 Context Policy 定，唯一硬约束 = Anthropic thinking 签名块工具循环中原样回传。工程细节首次成文：SSE 多字节 UTF-8 增量解码缓冲、分层超时（connect / first-token / idle）、伪造 200 → PARSE_ERROR、usage 缺失 estimated 降级（不入命中率分母）、三层事件映射（provider 归一事件 → §5.4 generation.* → api-spec SSE，provider 事件不出进程）。P0 范围：三类 adapter + 流式 + usage + 错误分类 + 取消/超时 + redact + fixture T1/T4/T6/T10/T11/T12/T14 + 单 key + 代理。
 
-30. **Instruction Security 规格**（specs/instruction-security-spec.md V1.0）：把"酒馆破甲差异"与"Prompt Injection"统一抽象为 **authority（来源权威）/ trust（内容可信度）/ scope（生效领域）三个正交编译元数据** + 覆盖裁决与 untrusted 封装规则，落在 Prompt Compiler 与 Agent Runtime 之间的策略层（跨模块规格，非新运行时模块：零事件域、零数据表、零哈希区变更）。七条裁决：①**authority 只由来源登记投影（compiler §10 → §38 决策 30 的默认推导表），内容文本自述一律无效**（世界书写"忽略以上指令"仍是 world 档）；②**无静默提升**——trust 升级只有三条显式路径（用户操作 / 资产声明经确认 / 编译器内建段）；③**untrusted 永禁入稳定前缀**（header/stableWB/summary；strict 下 compile fail）；④**override 槽位 = ST Jailbreak/Post-History 的语义化升级**（位阶高于 character/world 低于 platform/agent），仅随用户显式 preset/chat 配置产生、默认关闭，平台与 Agent 不得自动注入；⑤**元数据默认不进模型可见字节**（与 §5.5 一致），可见化唯一途径 = platform 档边界段封装（untrusted 只经 tail/injection 入区）；⑥快照**不加第九哈希区**，只增 authorityFingerprint 元数据供环境 A/B 对照（§38 决策 30 的 §23 附录）；⑦向 compiler 诊断体系增 5 码（AUTHORITY_OVERRIDE_DENIED / UNTRUSTED_IN_STABLE_ZONE / UNCONTAINED_UNTRUSTED / INSTRUCTION_SOURCE_MISMATCH / OVERRIDE_SLOT_ACTIVE，compiler-spec §71 已同步）。**边界声明：不收录任何具体越狱提示词/规避配方，不承诺"破甲效果"**——效果属外部变量，评估一律走 Request Fingerprint 对照法（不可测则不验收）。落地：P0 编译器元数据基线（缺省推导 = 零字节差异），P1 槽位 UI + 导入报告 + Inspector，P3 随 Agent 工具流启用 untrusted 回灌与结构化提升，P4 网络/记忆候选通道，P5 插件 API。**晚补 V1.1（同日）**：规格增 §2.1 五层定位（Provider Policy / Runtime Policy / Instruction Authority / Context·Intent / Model Learned Safety + Input·Output·Tool 三闸；第 2–4 层可精确定位，第 1/5 层与外闸只测不猜）与 §23.1–23.3 Safety Boundary Differential Test（固定变量、单变量变更，产出 Risk Response Matrix / Safety Behavior Compatibility Matrix，回答"同一模型为何在不同 Runtime 表现不同"）；归因纪律：措辞改变行为不得反推关键词机制；研究边界：不产「绕过改述」词表、不维护风险词表、中性改述文本属用户资产不内置。
+31. **实施计划总纲**（docs/implementation-plan.md V1.0，2026-09-05）：新增**执行层文档**——只管工作包（WP）分解 / 构建顺序 / 依赖 / 验收触发 / 还账映射 / 状态看板，**零设计语义**（防平行详设边界写入其 §1：内容长出设计细节即移入 spec 留指针）；里程碑内容/规模/验收权威仍是 §36，冲突以 §36 为准。机制四条：①P0 分解为 9 个 WP（会话粒度 1–2 会话/包，B3），入场/出场条件显式；②**滚动细化原则**（B4）——P1–P5 仅初版分解，各里程碑开工首会话先细化并落前置 spec（如 WP4.1 memory-runtime 骨架），防止过度规划过期；③三份 spec 的同步挂账汇总为**还账总表**（implementation-plan §10）并逐项绑定 WP，出场必须勾销；④全局构建原则 B1–B4 成文（价值序 P2 优先 / 防腐化序门禁先行 / 会话粒度 / 滚动细化）。顺带修正 provider-adapter-spec §4 包名笔误（packages/provider → packages/adapters，对齐 §7，spec 升 V1.0.1）。
 
-31. **Provider Adapter 规格骨架**（specs/provider-adapter-spec.md V1.0，2026-09-05，P0 前落骨架）：**第六份模块规格**；同时**修订三岔分工**（决策 26 ②）——Provider 拆两层：**归一契约 / 流式事件 / 工具与 reasoning 归一 / 错误分类 / usage 归一 / 不变量 / 契约测试在 specs/**，接入方式 / 自定义插头 / 代理 / 密钥存储留 technical-plan §5.1。八条裁决 PV1–PV8：①只翻译不做语义（不改内容字节、不裁剪、不重排——语义修改权唯一在 Compiler）；②重试决策归 Operation 层（C5），适配器内部唯一例外 = 同 Provider 多 key 轮换（§41.1，受 AgentBudget 约束、不派生新 Snapshot）；③usage 恰好一次且在 finish 前（Anthropic 双帧合成 / Gemini 累积定稿是实现点）；④错误必分类——ProviderError 码表唯一权威、表驱动映射，UNKNOWN fail-closed 不自动重试；⑤密钥零泄漏（统一 redact 中间件，错误/日志/快照/fixture 全覆盖）；⑥取消优先（AbortSignal 贯穿 + partial 事件 + CANCELLED 终止）；⑦fixture 确定性回放（同字节 → 同事件序列，契约测试硬门禁）；⑧reasoning 不丢弃——归一为 reasoning_delta，是否回传历史由 Context Policy 定，唯一硬约束 = Anthropic thinking 签名块工具循环中原样回传。工程细节首次成文：SSE 多字节 UTF-8 增量解码缓冲、分层超时（connect / first-token / idle）、伪造 200 → PARSE_ERROR、usage 缺失 estimated 降级（不入命中率分母）、三层事件映射（provider 归一事件 → §5.4 generation.* → api-spec SSE，provider 事件不出进程）。P0 范围：三类 adapter + 流式 + usage + 错误分类 + 取消/超时 + redact + fixture T1/T4/T6/T10/T11/T12/T14 + 单 key + 代理。
+32. **开源许可证与开源边界**（2026-09-05）：项目以 **Apache-2.0** 开源（LICENSE 已落仓库根，官方原文）；执行挂账登记 implementation-plan §10 #14–#16。配套四条：①**依赖许可证兼容性纪律**——运行时依赖禁引入 GPL/AGPL 类许可证（发布套件挂账 #14，公开推送前生效）；②**与 SillyTavern 的边界**——reference/ 永远只读参照、st-compat 只重实现格式语义不搬代码，避免被 ST 的 AGPL-3.0 传染而被迫改许可证；③**数据边界不变**——data/ 全忽略不入库、密钥走 keychain（R-P0-6）、fixture/日志强制 redact（X3/PV5）、不内置用户提示词（AGENTS §7 原红线即开源边界）；④**Sanitized Debug Export / Reproduction Bundle**（RedactionPolicy：去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full，导出可 Replay）挂账 WP1.5 细化会话，Plugin 信任分档挂账 WP5（#15/#16）。同日开源评审中"重排为 13 包结构"方案**拒绝**（违反 §7 / 纪律 5 / shared-contracts C4）；该评审其余条目大半已被既有设计覆盖（§6 存储原则 / §21.5 Capability / §29 插件权限 / database-schema §77/78 迁移流程），不另立 open-source 文档（决策 26 ②）。
 
-32. **实施计划总纲**（docs/implementation-plan.md V1.0，2026-09-05）：新增**执行层文档**——只管工作包（WP）分解 / 构建顺序 / 依赖 / 验收触发 / 还账映射 / 状态看板，**零设计语义**（防平行详设边界写入其 §1：内容长出设计细节即移入 spec 留指针）；里程碑内容/规模/验收权威仍是 §36，冲突以 §36 为准。机制四条：①P0 分解为 9 个 WP（会话粒度 1–2 会话/包，B3），入场/出场条件显式；②**滚动细化原则**（B4）——P1–P5 仅初版分解，各里程碑开工首会话先细化并落前置 spec（如 WP4.1 memory-runtime 骨架），防止过度规划过期；③三份 spec 的同步挂账汇总为**还账总表**（implementation-plan §10）并逐项绑定 WP，出场必须勾销；④全局构建原则 B1–B4 成文（价值序 P2 优先 / 防腐化序门禁先行 / 会话粒度 / 滚动细化）。顺带修正 provider-adapter-spec §4 包名笔误（packages/provider → packages/adapters，对齐 §7，spec 升 V1.0.1）。
-
-33. **开源许可证与开源边界**（2026-09-05）：项目以 **Apache-2.0** 开源（LICENSE 已落仓库根，官方原文）；执行挂账登记 implementation-plan §10 #14–#16。配套四条：①**依赖许可证兼容性纪律**——运行时依赖禁引入 GPL/AGPL 类许可证（发布套件挂账 #14，公开推送前生效）；②**与 SillyTavern 的边界**——reference/ 永远只读参照、st-compat 只重实现格式语义不搬代码，避免被 ST 的 AGPL-3.0 传染而被迫改许可证；③**数据边界不变**——data/ 全忽略不入库、密钥走 keychain（R-P0-6）、fixture/日志强制 redact（X3/PV5）、不内置用户提示词（AGENTS §7 原红线即开源边界）；④**Sanitized Debug Export / Reproduction Bundle**（RedactionPolicy：去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full，导出可 Replay）挂账 WP1.5 细化会话，Plugin 信任分档挂账 WP5（#15/#16）。同日开源评审中"重排为 13 包结构"方案**拒绝**（违反 §7 / 纪律 5 / shared-contracts C4）；该评审其余条目大半已被既有设计覆盖（§6 存储原则 / §21.5 Capability / §29 插件权限 / database-schema §77/78 迁移流程），不另立 open-source 文档（决策 26 ②）。
-
-34. **密钥存储选型(R-P0-6 定案,S6/WP0.7 实施)**:
+33. **密钥存储选型(R-P0-6 定案,S6/WP0.7 实施)**:
 SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@primno/dpapi 可选依赖,DPAPI protect/unprotect,每密钥一个受保护 blob);②**EncryptedFileSecretStore**(兜底,AES-256-GCM,master key 落 0600 文件)。createSecretStore 按平台/可用性自动选择;providers 表只存 secretRef(`secret://provider.<id>` 形态),HTTP 响应零回显(PV5)。诚实边界:兜底方案防误分享/误提交,不防本机攻击者;P5 Tauri 换 OS keychain 强绑定。同会话落地:runs/prompt_snapshots P0 子集表(migration v2)、EventBus 按 run 分配 SSE sequence(§27 续传依据)。
 
-35. **P0 完成记录（2026-09-06,S8/WP0.9 收官）**:DoD 七条逐项核验（implementation-plan §4.10）——①真实四链路:机制全就绪,冒烟脚本 tests/smoke/real-provider-smoke.mjs（env-var 驱动、密钥不入库）,**真实执行待用户以自有 key 冒烟后勾销**;②streaming/取消/partial:e2e 锁定(取消→CANCELLED→partial 前缀可查);③generation+usage 入库 + 重启恢复:e2e 锁定(usage_source 分对/重启后消息树/运行记录/快照可查);④快照重建模型可见内容:e2e(serialized.parts ≡ generations.request.messages);⑤无绕过路径:fake 调用入口四不变量闸口 + 故意违规测试变红;⑥金样 G2/G4 + fixture T1/T4/T6/T10/T11/T12/T14×3 家全绿;⑦lint + tsc strict + 全量 177 测试 CI 绿。P0 范围外挂账:§152 的资产 CRUD 已于 S8 补齐(migration v3);swipe 生成填充、代理管道、Inspector 完整形态随 P1。**P1 起步前置:P1 细化会话产出 p1-plan(§11 阶段计划约定)。**
+34. **P0 完成记录（2026-09-06,S8/WP0.9 收官）**:DoD 七条逐项核验（implementation-plan §4.10）——①真实四链路:机制全就绪,冒烟脚本 tests/smoke/real-provider-smoke.mjs（env-var 驱动、密钥不入库）,**真实执行待用户以自有 key 冒烟后勾销**;②streaming/取消/partial:e2e 锁定(取消→CANCELLED→partial 前缀可查);③generation+usage 入库 + 重启恢复:e2e 锁定(usage_source 分对/重启后消息树/运行记录/快照可查);④快照重建模型可见内容:e2e(serialized.parts ≡ generations.request.messages);⑤无绕过路径:fake 调用入口四不变量闸口 + 故意违规测试变红;⑥金样 G2/G4 + fixture T1/T4/T6/T10/T11/T12/T14×3 家全绿（G2/G4 已于 2026-09-08 随指令安全特性撤下，见决策 37）;⑦lint + tsc strict + 全量 177 测试 CI 绿（P0 时点数值）。P0 范围外挂账:§152 的资产 CRUD 已于 S8 补齐(migration v3);swipe 生成填充、代理管道、Inspector 完整形态随 P1。**P1 起步前置:P1 细化会话产出 p1-plan(§11 阶段计划约定)。**
 
-36. **目录/工作区改名后 node_modules junction 失效的修复约定（2026-09-06，承接 AGENTS§9 四版更名）**:更名后实测发现 pnpm 工作区 junction（`node_modules/.pnpm/node_modules/@whispertavern/*` 及各 workspace 包）其 Target 为**绝对路径**——文件夹改名不会自动更新，即便源码 grep 清零 + lockfile 干净，junction 仍指向旧路径 `D:\Workspace\DesireGrimoire\...`（已不存在），node_modules 处于死链接失效态。**四版所记"pnpm install 重链接"实际未在改名后生效，本条更正该记录**。修复：重跑 `pnpm install --frozen-lockfile`（重装遇 `ERR_PNPM_ENOENT`，即 better-sqlite3 rename 撞既有目录的 Windows pnpm 已知瞬态，清理该包残留后重跑成功）；修复后核验 `@whispertavern` 9 个 junction 全部指向 `D:\Workspace\WhisperTavern\...`、`@desiregrimoire` 死链接清除、旧名全仓 grep 清零、全量 192 测试绿。**沉淀约定：本仓库做目录/工作区改名时，除源码与 lockfile 机械替换外，必须重跑 `pnpm install` 并核验 workspace junction 的 Target——绝对路径型 junction 是 grep 看不见的旧路径残留，不得只以 grep 清零为验收**。
+35. **目录/工作区改名后 node_modules junction 失效的修复约定（2026-09-06，承接 AGENTS§9 四版更名）**:更名后实测发现 pnpm 工作区 junction（`node_modules/.pnpm/node_modules/@whispertavern/*` 及各 workspace 包）其 Target 为**绝对路径**——文件夹改名不会自动更新，即便源码 grep 清零 + lockfile 干净，junction 仍指向旧路径 `D:\Workspace\DesireGrimoire\...`（已不存在），node_modules 处于死链接失效态。**四版所记"pnpm install 重链接"实际未在改名后生效，本条更正该记录**。修复：重跑 `pnpm install --frozen-lockfile`（重装遇 `ERR_PNPM_ENOENT`，即 better-sqlite3 rename 撞既有目录的 Windows pnpm 已知瞬态，清理该包残留后重跑成功）；修复后核验 `@whispertavern` 9 个 junction 全部指向 `D:\Workspace\WhisperTavern\...`、`@desiregrimoire` 死链接清除、旧名全仓 grep 清零、全量 192 测试绿。**沉淀约定：本仓库做目录/工作区改名时，除源码与 lockfile 机械替换外，必须重跑 `pnpm install` 并核验 workspace junction 的 Target——绝对路径型 junction 是 grep 看不见的旧路径残留，不得只以 grep 清零为验收**。
 
-37. **外部多智能体提案评审与增量取舍（2026-09-07，作者拍板）**：评审 ChatGPT「主 Agent 调度 Character / Event / State / Memory / Writer 子智能体 + Simulation Agent + Agent Orchestrator + 递归护栏 + API 以 `/runs` 为中心」方案，结论——**约 80% 已被现有设计覆盖且口径更严**，仅 3 项为真增量，3 条建议明确拒绝。
+36. **外部多智能体提案评审与增量取舍（2026-09-07，作者拍板）**：评审 ChatGPT「主 Agent 调度 Character / Event / State / Memory / Writer 子智能体 + Simulation Agent + Agent Orchestrator + 递归护栏 + API 以 `/runs` 为中心」方案，结论——**约 80% 已被现有设计覆盖且口径更严**，仅 3 项为真增量，3 条建议明确拒绝。
 
     **已覆盖、不新增**（下会话不必再议，防重复造轮子）：Director 主调度 = agent-runtime-spec §80 + [dialogue-director-spec](./specs/dialogue-director-spec.md)（结构化 `nextAgent` 输出，禁自然语言解析）；子 Agent 分发与树形 = §14 Parent Run / §15 Run Tree / §64 Agent Node / Workflow DAG；并行·超时·重试·取消·预算 = §43–51 / §68–69 / §93–94；Agent 间交换结构化事实 = §70（Artifact / Message / Event）+ §81 Structured Output + 决策 14（冻结产物不进稳定前缀）；Writer / Checker / Critic = AgentType `writer|checker|editor` + roleplay-runtime-spec §28 Quality Gate；去 AI 味 = Expression History 五层重复检测 + `aiPatternRisk`；API 以 `/runs` 为中心 = api-spec V2.1 已定稿（`runs/:id/events|cancel|replay` 齐全）。
 
@@ -1079,18 +1069,20 @@ SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@prim
 
     还账登记：implementation-plan §10 #17（护栏，P3）/ #18（World State，P4）。
 
-## 39. 风险与对策
+37. **撤下指令安全特性（2026-09-08，Breaking: Y）**：删除指令安全模块——其 spec 文件已删、原相关决策已移除并按序重排编号（31→30…37→36）。本次**连代码 / 契约 / 诊断码 / 能力 / 测试 / 架构守卫同步撤下**：authority/trust/scope 类型（contracts 的 `instruction.ts` 删除）、快照 authority 指纹字段、ProviderCapabilities 的指令分层能力字段、override 槽位 / I3 缓存安全规则、越权与不可信相关诊断码（P0_DIAGNOSTIC_CODES 现存 5 码：MACRO_UNEXPANDED_P0 / PROMPT_CONTEXT_TOO_LARGE / EMPTY_SEGMENT / DUPLICATE_SEGMENT_ID / STABILITY_OVERRIDE）、st-compat 档位报告与金样 G2/G4。**迁移说明**：`prompt_snapshots` 表保留 authority 指纹列（向后兼容，新快照不再写入，快照已存旧值可容忍）；Compiler 不再区分可信/不可信内容。文档侧同步改写/删除 compiler / shared-contracts / provider-adapter / api / ui-design / implementation-plan / p1-plan / p0-plan 相关表述；AGENTS §9 增九版记录（决策计数 36→37）。
+
+## 38. 风险与对策
 
 完整风险清单（语义长尾、provider 缓存策略变动、usage 不回传降级、最小前缀阈值、群聊 TTL、摘要链质量、Agent 延迟）见 [technical-plan.md](./technical-plan.md) §10。
 
-## 40. 文档层级与差异化定位
+## 39. 文档层级与差异化定位
 
-### 40.1 文档层级
+### 39.1 文档层级
 
 ```text
 technical-design.md（本文件，唯一总设计）
 ├─ technical-plan.md          → 工程实施规格（子系统细节 / 数据模型列级定义 / 测试基建 / 风险 / 决策记录）
-├─ implementation-plan.md     → 实施计划总纲（WP 分解 / 构建顺序 / 验收触发 / 还账映射 / 状态看板；执行层文档，零设计语义，§38 决策 32）
+├─ implementation-plan.md     → 实施计划总纲（WP 分解 / 构建顺序 / 验收触发 / 还账映射 / 状态看板；执行层文档，零设计语义，§38 决策 31）
 │  ├─ p0-plan.md              → P0 实施明细计划（已归档执行记录，2026-09-06 P0 完成）
 │  └─ p1-plan.md              → P1 实施明细计划（ST Compatibility:S9–S15 会话切分 / 范围裁决 R-P1-1–6——B4 滚动细化）
 ├─ worldbook-cache-design.md  → Cache Engine 详细规格
@@ -1106,8 +1098,7 @@ technical-design.md（本文件，唯一总设计）
     └─ specs/roleplay-quality-spec.md → Roleplay Quality 子规格（QualityDimensions / HardConstraints / Decision / Profile）
         └─ specs/roleplay-evaluation-engine-spec.md → Quality 实现层（特征提取 / 各评价 Engine / 评分 / Decision / Replay）
 └─ specs/shared-contracts-spec.md → 跨模块共享契约（packages/contracts 单一真相源，§38 决策 29）
-└─ specs/instruction-security-spec.md → Instruction Security / Trust Boundary（authority/trust/scope 元数据与覆盖裁决、untrusted 封装；跨 Compiler 与 Agent Runtime 的策略层，§38 决策 30）
-└─ specs/provider-adapter-spec.md → Provider Adapter 模块规格（流式/工具/reasoning 归一、错误分类学、多 key 轮换、能力探测降级链、缓存标记翻译、fixture 契约测试；第六份模块规格，§38 决策 31；接入实务留 technical-plan §5.1）
+└─ specs/provider-adapter-spec.md → Provider Adapter 模块规格（流式/工具/reasoning 归一、错误分类学、多 key 轮换、能力探测降级链、缓存标记翻译、fixture 契约测试；第六份模块规格，§38 决策 30；接入实务留 technical-plan §5.1）
 ```
 
 外部参照（不是本项目的真相源，仅作设计与语义对照）：
@@ -1122,7 +1113,7 @@ DeepSeek Harness           → agent-loop 脊柱机械结构参照
       不借鉴其编码领域能力（bash / LSP / sandbox / 代码运行时）与 Cordis 插件框架
 ```
 
-### 40.2 真正的差异化
+### 39.2 真正的差异化
 
 核心卖点不是"比 SillyTavern 更漂亮"，也不只是"支持 Agent"：
 
@@ -1166,4 +1157,4 @@ Hermes 的 `state.db` 会话账本、分层系统提示可缓存、代理自主�
 
 ---
 
-*关联文档：[technical-plan.md](./technical-plan.md) · [implementation-plan.md](./implementation-plan.md) · [worldbook-cache-design.md](./worldbook-cache-design.md) · [ui-design.md](./ui-design.md) · [st-reference-analysis.md](./st-reference-analysis.md) · [hushenfu-v18-analysis.md](./hushenfu-v18-analysis.md) · [specs/prompt-compiler-spec.md](./specs/prompt-compiler-spec.md) · [specs/database-schema.md](./specs/database-schema.md) · [specs/agent-runtime-spec.md](./specs/agent-runtime-spec.md) · [specs/api-spec.md](./specs/api-spec.md) · [specs/roleplay-runtime-spec.md](./specs/roleplay-runtime-spec.md) · [specs/shared-contracts-spec.md](./specs/shared-contracts-spec.md) · [specs/instruction-security-spec.md](./specs/instruction-security-spec.md) · [specs/provider-adapter-spec.md](./specs/provider-adapter-spec.md)*
+*关联文档：[technical-plan.md](./technical-plan.md) · [implementation-plan.md](./implementation-plan.md) · [worldbook-cache-design.md](./worldbook-cache-design.md) · [ui-design.md](./ui-design.md) · [st-reference-analysis.md](./st-reference-analysis.md) · [hushenfu-v18-analysis.md](./hushenfu-v18-analysis.md) · [specs/prompt-compiler-spec.md](./specs/prompt-compiler-spec.md) · [specs/database-schema.md](./specs/database-schema.md) · [specs/agent-runtime-spec.md](./specs/agent-runtime-spec.md) · [specs/api-spec.md](./specs/api-spec.md) · [specs/roleplay-runtime-spec.md](./specs/roleplay-runtime-spec.md) · [specs/shared-contracts-spec.md](./specs/shared-contracts-spec.md) · [specs/provider-adapter-spec.md](./specs/provider-adapter-spec.md)*

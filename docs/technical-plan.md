@@ -23,7 +23,7 @@
 
 ### 5.1 Provider 适配层
 
-> **分工（决策 31，2026-09-05）**：归一契约 / 流式事件 / 工具与 reasoning 归一 / 错误分类学 / usage 归一 / 不变量 / 契约测试的**真相源在 [specs/provider-adapter-spec.md](./specs/provider-adapter-spec.md)**；本节只保留**接入方式与生态实务**（四类接入、自定义插头、代理、密钥存储）。两者禁止互相抄写。
+> **分工（决策 30，2026-09-05）**：归一契约 / 流式事件 / 工具与 reasoning 归一 / 错误分类学 / usage 归一 / 不变量 / 契约测试的**真相源在 [specs/provider-adapter-spec.md](./specs/provider-adapter-spec.md)**；本节只保留**接入方式与生态实务**（四类接入、自定义插头、代理、密钥存储）。两者禁止互相抄写。
 
 - **统一 ChatRequest/ChatResponse IR**：消息、工具调用、采样参数、usage。适配器只做协议翻译。
 - **接入方式（P0 交付，用户可自助添加）**：

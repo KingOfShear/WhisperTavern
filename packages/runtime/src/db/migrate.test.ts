@@ -22,19 +22,19 @@ describe('迁移器(database-schema §77/§78)', () => {
   it('全新库:开发期自动应用 → schema_version 到位、integrity ok、可重复执行为空', () => {
     const store = createDatabase(tempDbPath())
     try {
-      expect(store.appliedMigrations).toEqual({ from: 0, to: 4 })
-      expect(currentVersion(store.sqlite)).toBe(4)
+      expect(store.appliedMigrations).toEqual({ from: 0, to: 6 })
+      expect(currentVersion(store.sqlite)).toBe(6)
       expect(store.sqlite.pragma('integrity_check', { simple: true })).toBe('ok')
       // §78-1 可重复检测:再跑一次 = 无待应用
       expect(pendingVersions(store.sqlite)).toEqual([])
-      expect(migrate(store.sqlite)).toEqual({ from: 4, to: 4 })
+      expect(migrate(store.sqlite)).toEqual({ from: 6, to: 6 })
       // 权威表存在性抽查
       const tables = (
         store.sqlite
           .prepare<[]>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
           .all() as { name: string }[]
       ).map((r) => r.name)
-      for (const table of ['chats', 'messages', 'chat_branches', 'providers', 'generations', 'events', 'runs', 'prompt_snapshots', 'worldbook_entries', 'worldbook_entry_versions']) {
+      for (const table of ['chats', 'messages', 'chat_branches', 'providers', 'generations', 'events', 'runs', 'prompt_snapshots', 'worldbook_entries', 'worldbook_entry_versions', 'worldbook_runtime_entries', 'worldbook_activations', 'chat_worldbooks']) {
         expect(tables).toContain(table)
       }
     } finally {
@@ -58,14 +58,14 @@ describe('迁移器(database-schema §77/§78)', () => {
     const store = createDatabase(tempDbPath())
     try {
         const badMigration: Migration = {
-          version: 5,
-          name: 'bad-v5',
+          version: 7,
+          name: 'bad-v7',
           // 故意引用不存在的表,语句级失败
           sql: 'CREATE TABLE cache_runtime_states AS SELECT * FROM no_such_table_v2;',
           checksum: 'x',
         }
         expect(() => migrate(store.sqlite, [badMigration])).toThrow(MigrationError)
-        expect(currentVersion(store.sqlite)).toBe(4)
+        expect(currentVersion(store.sqlite)).toBe(6)
       const tables = (
         store.sqlite.prepare<[]>("SELECT name FROM sqlite_master WHERE type='table'").all() as {
           name: string
@@ -73,8 +73,8 @@ describe('迁移器(database-schema §77/§78)', () => {
       ).map((r) => r.name)
       expect(tables).not.toContain('cache_runtime_states')
       // 修复后同一库可继续迁移(失败可恢复)
-      const good: Migration = { version: 5, name: 'good-v5', sql: 'CREATE TABLE tmp_v5 (id TEXT);', checksum: 'y' }
-      expect(migrate(store.sqlite, [good]).to).toBe(5)
+      const good: Migration = { version: 7, name: 'good-v7', sql: 'CREATE TABLE tmp_v7 (id TEXT);', checksum: 'y' }
+      expect(migrate(store.sqlite, [good]).to).toBe(7)
     } finally {
       store.close()
     }
@@ -86,8 +86,8 @@ describe('迁移器(database-schema §77/§78)', () => {
     const store = createDatabase(path, { autoMigrate: false })
     try {
       const result = migrateWithBackup(store.sqlite, path)
-      expect(result.to).toBe(4)
-      expect(currentVersion(store.sqlite)).toBe(4)
+      expect(result.to).toBe(6)
+      expect(currentVersion(store.sqlite)).toBe(6)
       expect(result.backupPath).toBeDefined()
       expect(existsSync(result.backupPath ?? '')).toBe(true)
     } finally {

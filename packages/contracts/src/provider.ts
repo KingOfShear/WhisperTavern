@@ -136,7 +136,7 @@ export interface ProviderChatRequest extends z.infer<typeof ProviderChatRequestP
 }
 
 /**
- * Provider 能力声明 —— 总设计 §18.2 权威形状 + instruction-security §18 登记点
+ * Provider 能力声明 —— 总设计 §18.2 权威形状
  * (WP0.5 S4'-a 定稿,implementation-plan 还账 #2;替代 P0 初版 {streaming} 占位)。
  * 降级链语义(能力缺失时的行为)见 provider-adapter-spec §15。
  */
@@ -155,8 +155,6 @@ export const ProviderCapabilitiesSchema = z.object({
   structuredOutput: z.enum(['none', 'json_mode', 'json_schema']),
   parallelToolCalls: z.boolean(),
   toolChoice: z.boolean(),
-  /** instruction-security §18 登记点:P0 三家均 'flat';真实分层落地时同步总设计 §18.2 */
-  instructionLayers: z.enum(['flat', 'system', 'system+developer']),
 })
 export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>
 

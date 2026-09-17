@@ -309,7 +309,6 @@ const GEMINI_BASE: ProviderCapabilities = {
   structuredOutput: 'json_mode',
   parallelToolCalls: false,
   toolChoice: true,
-  instructionLayers: 'flat',
 }
 
 function familyPreset(model: string): ProviderCapabilities {

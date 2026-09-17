@@ -40,6 +40,8 @@ export {
   createBranch,
   createChat,
   createMessage,
+  deleteChat,
+  deleteMessage,
   editMessage,
   activeLeafId,
   loadBranch,

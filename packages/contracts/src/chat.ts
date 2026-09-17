@@ -99,3 +99,22 @@ export const ChatBranchSchema = z.object({
   updatedAt: TimestampSchema,
 })
 export type ChatBranch = z.infer<typeof ChatBranchSchema>
+
+/**
+ * chat↔worldbook 绑定契约(database-schema §17.5 `chat_worldbooks`;S11/WP1.2 激活层接线前提)。
+ * 语义:一个 chat 激活哪些 worldbook。worldbook 自身的 scan 配置(scan_depth/recursive)在
+ * worldbooks 表;本契约只表达"绑了谁"以及可选的**每 chat 覆盖**(null = 跟随 worldbook 默认)。
+ * 不存世界书条目级状态——那归 worldbook_runtime_entries(§15)。
+ */
+export const ChatWorldbookBindingSchema = z.object({
+  chatId: ChatIdSchema,
+  worldbookId: z.string().min(1),
+  /** 绑定顺序(同 chat 内多书排序,影响 freshWB 拼接与激活优先级) */
+  order: z.number().int().nonnegative(),
+  /** 每 chat 覆盖:null = 用 worldbooks.scan_depth 默认 */
+  scanDepthOverride: z.number().int().nonnegative().nullable(),
+  /** 每 chat 覆盖:null = 用 worldbooks.recursive 默认 */
+  recursiveOverride: z.boolean().nullable(),
+  createdAt: TimestampSchema,
+})
+export type ChatWorldbookBinding = z.infer<typeof ChatWorldbookBindingSchema>

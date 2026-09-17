@@ -12,6 +12,9 @@ export const API_ERROR_CODES = [
   'BAD_REQUEST',
   'VALIDATION_ERROR',
   'NOT_FOUND',
+  'WORLDBOOK_NOT_FOUND',
+  'PRESET_NOT_FOUND',
+  'PERSONA_NOT_FOUND',
   'CONFLICT',
   'PROMPT_COMPILE_FAILED',
   'PROMPT_BUDGET_EXCEEDED',
@@ -44,6 +47,9 @@ export function httpStatusFor(code: string): number {
     case 'NOT_FOUND':
     case 'GENERATION_NOT_FOUND':
     case 'PROVIDER_NOT_FOUND':
+    case 'WORLDBOOK_NOT_FOUND':
+    case 'PRESET_NOT_FOUND':
+    case 'PERSONA_NOT_FOUND':
       return 404
     case 'CONFLICT':
     case 'IDEMPOTENCY_CONFLICT':

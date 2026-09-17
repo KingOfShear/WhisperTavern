@@ -28,6 +28,31 @@ export const WorldbookPositionSchema = z.enum([
 export type WorldbookPosition = z.infer<typeof WorldbookPositionSchema>
 
 /**
+ * ST position 0-7 → 原生 slot 枚举(权威:st-reference-analysis §2 / world-info.js :855)。
+ * 单一真相源(C4):st-compat / runtime 共用,禁止各处再定义一份同义数组。
+ * 下标即 ST 原 position 值(数据库 worldbook_entries.position 列存的就是它)。
+ */
+export const WORLDBOOK_SLOT_BY_ST_POSITION = [
+  'before',
+  'after',
+  'anTop',
+  'anBottom',
+  'depth',
+  'emTop',
+  'emBottom',
+  'outlet',
+] as const satisfies readonly WorldbookPosition[]
+
+/** slot 枚举 → ST position 原值(回库 / 反向查表用) */
+export const ST_POSITION_BY_SLOT: Record<WorldbookPosition, number> = WORLDBOOK_SLOT_BY_ST_POSITION.reduce(
+  (acc, slot, index) => {
+    acc[slot] = index
+    return acc
+  },
+  {} as Record<WorldbookPosition, number>,
+)
+
+/**
  * 语义槽位(compiler-spec §12)。worldbook position 取值保持 ST 原始拼写
  * (anTop/emTop 等)——它们是酒馆生态的线上协议词,纠正拼写 = 破坏导入兼容。
  */

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { CardParseError } from './png'
 import { readCardFromCharx } from './charx'
 import { readCardFromPng } from './png'
-import { CARD_ROLE_ASSIGNMENTS, type CardImportResult, type ImportReport, type SourceFormat } from './report'
+import { type CardImportResult, type ImportReport, type SourceFormat } from './report'
 import {
   StCardDataSchema,
   StCardRootSchema,
@@ -19,8 +19,7 @@ import {
  * - 双层冗余归一:V2/V3 以 data{} 为准,顶层旧字段仅在 data 缺失时兜底;
  * - 运行态剥离:avatar/chat/talkativeness/fav 不进卡文件(§5.10 分离原则);
  * - 内嵌书抽取:character_book → 独立 ExtractedWorldbook(双向引用由注册侧落库);
- * - 未建模字段 → compat(路径化键,导出回写);
- * - 档位:roleAssignments 仅按来源(character/world),I1——内容自述无效。
+ * - 未建模字段 → compat(路径化键,导出回写)。
  */
 
 const RUNTIME_STATE_FIELDS = ['avatar', 'chat', 'talkativeness', 'fav'] as const
@@ -136,7 +135,6 @@ function normalize(
     ],
     compatFields: [...new Set([...compatFields, ...Object.keys(dgCard.compat)])],
     droppedRuntimeState,
-    roleAssignments: [...CARD_ROLE_ASSIGNMENTS],
     warnings,
   }
   return { card: dgCard, report, extractedWorldbook, assetFiles }

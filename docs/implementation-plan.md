@@ -1,10 +1,10 @@
 # WhisperTavern V2 — 实施计划总纲（Implementation Plan）
 
 > **文件：** `docs/implementation-plan.md`
-> **版本：** V2.3（2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 32/35）
+> **版本：** V2.5（2026-09-15：S13/WP1.4 完成进看板 + §10 #20 勾销（api-spec §48 拼写对齐 contracts，方案 A）；V2.4：2026-09-12：P0 DoD/看板收口——G2/G4 随指令安全特性撤下的引用清理，测试数改引 p1-plan §11；V2.3：2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 31/34）
 > **状态：** Active（随执行滚动更新——WP 状态看板在 §12，每完成一个包即更新）
 > **文档层级：** [technical-design.md](./technical-design.md) 之下的**执行层文档**。与 AGENTS.md 的分工：AGENTS 管**会话纪律**（怎么读、怎么改、何时问），本文管**执行顺序**（做什么、先做哪个、做到什么程度算完）。
-> **决策锚点：** technical-design §38 **决策 32**。
+> **决策锚点：** technical-design §38 **决策 31**。
 > **维护纪律：** ①本文**零设计语义**（§1 边界）；②里程碑内容/规模/验收的权威是总设计 §36，冲突以 §36 为准；③每个 WP 出场必须完成其"还账"义务（§10）；④阶段推进在 §38 留痕。
 
 ---
@@ -66,7 +66,7 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 
 ## WP0.2 contracts 骨架 + shared-contracts 充实（chat 面）
 - **交付**：`packages/contracts` 第一版——IR 段模型 / Zone 与双 Placement / PromptRole / Diagnostics 形状 / chat 面运行态最小集；Zod schema 与类型同源。
-- **还账**：shared-contracts-spec 从骨架充实为 P0 范围真相源（收编 compiler-spec §6–§17、instruction-security §9、provider-adapter §6 的草案类型）。
+- **还账**：shared-contracts-spec 从骨架充实为 P0 范围真相源（收编 compiler-spec §6–§17、provider-adapter §6 的草案类型）。
 - **入场**：WP0.1。
 
 ## WP0.3 core：段模型 + Snapshot 结构 + token 计数双模式
@@ -75,7 +75,7 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 
 ## WP0.4 Compiler 最小管线
 - **交付**：P0 范围组装（preset 段 / persona / 角色卡描述 / 历史 / tail）+ Diagnostics 体系 + CompileMode（strict / preview）+ 编译结果与快照落点；Zone 类型全套就位但 stableWB/freshWB/summary 留空实现（P1/P2 填充）。
-- **金样**：instruction-security G2（override 空槽零字节差异）、G4（档位不随文本变）——P0 范围内的两条。
+- **金样**：G2/G4 于 2026-09-08 随指令安全特性撤载一并移除——原为越权槽位/档位稳定性两条。
 - **入场**：WP0.3。
 
 ## WP0.5 adapters：三类适配器 + fixture 测试
@@ -97,7 +97,7 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 - **入场**：WP0.7。
 
 ## WP0.9 P0 端到端验收
-- **交付**：四家 provider 流式聊天全链路演示；重启恢复；usage 入库可查；Snapshot 可查（Inspector 最简形态：能看每轮发了什么）；CI 全绿（不变量断言 + 金样 G2/G4 + fixture 七条）。
+- **交付**：四家 provider 流式聊天全链路演示；重启恢复；usage 入库可查；Snapshot 可查（Inspector 最简形态：能看每轮发了什么）；CI 全绿（不变量断言 + fixture 七条；G2/G4 已随指令安全特性撤下）。
 - **出场 = P0 完成**，在 §38 记录并更新 §12 看板。
 
 ## 4.10 P0 Definition of Done（含 Non-goals）
@@ -105,13 +105,13 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 验收清单（全绿 = P0 完成，对应 WP0.9）：
 
 ```text
-☑ 四家 provider（OpenAI 兼容 / DeepSeek / Anthropic / Gemini）各跑通一条真实流式链路——机制全就绪;真实冒烟脚本 tests/smoke/real-provider-smoke.mjs 待用户以自有 key 执行(§38 决策 35)
+☑ 四家 provider（OpenAI 兼容 / DeepSeek / Anthropic / Gemini）各跑通一条真实流式链路——机制全就绪;真实冒烟脚本 tests/smoke/real-provider-smoke.mjs 待用户以自有 key 执行(§38 决策 34)
 ☑ streaming 正常渲染；中途取消产生 partial 且已生成部分可查——apps/server e2e(DoD 2)
 ☑ generation + usage 入库；重启后完整恢复（消息树 / 运行记录 / 快照可查）——apps/server e2e(DoD 3,usage_source 分对)
 ☑ Snapshot 能重建模型实际收到的内容（§5.5 不变量断言 CI 绿）——e2e:serialized.parts ≡ request.messages(DoD 4)
 ☑ 无任何路径绕过 Compiler 拼 prompt（断言门禁）——fake 调用入口四不变量闸口,故意违规变红(DoD 5)
-☑ 金样 G2/G4 + fixture T1/T4/T6/T10/T11/T12/T14 全绿——core + adapters 套件(DoD 6)
-☑ lint + tsc strict + 全量测试 CI 绿——177 tests / 四段门禁(DoD 7)
+☑ fixture T1/T4/T6/T10/T11/T12/T14 全绿——core + adapters 套件（G2/G4 已随指令安全特性撤下，DoD 6）
+☑ lint + tsc strict + 全量测试 CI 绿——四段门禁(DoD 7；测试数随阶段增长，见 p1-plan §11)
 ```
 
 **P0 明确不做**（防止会话把 P1–P5 提前实现）：
@@ -119,7 +119,7 @@ P0 验收标准（总设计 §36）：四家 provider 流式聊天、可保存�
 ```text
 ✗ 世界书激活语义与 stableWB/freshWB 分区（P1/P2）
 ✗ Macro Engine / CachePlan / 预算裁剪 / Elastic History（P2）
-✗ override 槽位 UI 与 Inspector 完整形态（P1——P0 只交付元数据基线与 G2/G4 金样）
+✗ Prompt Inspector 完整形态（P1）
 ✗ Memory / Summary / Agent / Workflow / Tool / 群聊 / 插件 / 桌面化（P3–P5）
 ```
 
@@ -129,14 +129,14 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 
 | WP | 内容 | 关键锚点 / 还账 |
 |---|---|---|
-| WP1.1 | 资产导入：卡 V2/V3/PNG/charx + 原生 .dgcard/.dgworld/.dgpreset | technical-plan §5.3/§5.10；导入不改档（instruction-security §20） |
+| WP1.1 | 资产导入：卡 V2/V3/PNG/charx + 原生 .dgcard/.dgworld/.dgpreset | technical-plan §5.3/§5.10；导入不改档 |
 | WP1.2 | 世界书激活层全集（触发/递归/sticky/cooldown/group/蓝绿灯） | compiler-spec §23–§29；**此包出场即解锁 P2 并行**（B1） |
 | WP1.3 | 预设映射 + Persona 库 + ST Prompt Mapping | compiler-spec §80–§81 |
 | WP1.4 | 编辑/swipe/分支完整交互 + 消息树 API 完整 | api-spec §16–§23 |
-| WP1.5 | Prompt Inspector v1（段/哈希/diff 视图） | **前置还账**：ui-design 补 override 编辑器 + 档位徽标小节；api-spec SegmentSnapshot 补 authority 只读字段（instruction-security §25） |
-| WP1.6 | 金样测试体系完整（真实资产导入→编译→序列化） | technical-plan §8.2；override 槽位 UI 随 WP1.5 交付（默认关） |
+| WP1.5 | Prompt Inspector v1（段/哈希/diff 视图） | override 编辑器/档位徽标随指令安全撤下，不再交付 |
+| WP1.6 | 金样测试体系完整（真实资产导入→编译→序列化） | technical-plan §8.2 |
 
-出场（§36）：目录内真实资产导入跑通、金样绿、Import Compatibility Report 产出（含"档位与越权槽位"小节）。
+出场（§36）：目录内真实资产导入跑通、金样绿、Import Compatibility Report 产出。
 
 ## 4.11 P1 Definition of Done（含 Non-goals,S8 细化会话产出）
 
@@ -147,8 +147,8 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 ☑(待执行) 世界书激活层全集语义单测 + 真实书金样(compiler-spec §23–§29)
 ☑(待执行) 预设映射(ST Prompt Order §80–§81)→ contributions 顺序
 ☑(待执行) 消息树完整交互(编辑变体/swipe 生成填充/分支激活,§16–§23 契约测试)
-☑(待执行) Prompt Inspector v1(段/哈希/diff + authority 徽标;override 槽位 UI 默认关)
-☑(待执行) Import Compatibility Report(含"档位与越权槽位"小节,instruction-security §25)
+☑(待执行) Prompt Inspector v1（段/哈希/diff 视图）
+☑(待执行) Import Compatibility Report（字段映射/compat 清单）
 ☑(待执行) 金样测试体系(真实资产脱敏 → 导入→编译→序列化,technical-plan §8.2)
 ☑(待执行) lint + tsc strict + 全量测试 CI 绿
 ```
@@ -180,9 +180,9 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 | WP | 内容 | 关键锚点 |
 |---|---|---|
 | WP3.1 | 执行四层 Run/Attempt/StepRun/Operation + 事件 durability 全量 | agent-runtime-spec §4 / §5.4 |
-| WP3.2 | Tool Runtime + 审批 fail-closed + **untrusted 工具回灌流** | agent-runtime §36/§115；instruction-security P3 还账；provider-adapter §23 开放点 3（thinking 回传默认）在此定 |
+| WP3.2 | Tool Runtime + 审批 fail-closed | agent-runtime §36/§115；provider-adapter §23 开放点 3（thinking 回传默认）在此定 |
 | WP3.3 | Workflow DAG + Director 三路径 | 总设计 §23 |
-| WP3.4 | Artifact 冻结/提升（提升 = 显式确认，不自动） | compiler-spec §87；instruction-security §14 |
+| WP3.4 | Artifact 冻结/提升（提升 = 显式确认，不自动） | compiler-spec §87 |
 | WP3.5 | Resume/Replay + §174 十个必测场景 | agent-runtime §173/§174 |
 
 # 8. P4 工作包分解（初版）
@@ -191,14 +191,14 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 |---|---|---|
 | WP4.1 | **前置：memory-runtime-spec 骨架**（四层记忆/双检索/Scribe 实施语义） | 挂账还清后 WP4.2 才开工 |
 | WP4.2 | Summary 链 + 四层记忆 + FTS5/sqlite-vec 双检索 | 总设计 §25；database §25 |
-| WP4.3 | 网络搜索工具（结果注 tail / agent 工具，untrusted 通道 + origin 溯源） | instruction-security §13/§15 |
+| WP4.3 | 网络搜索工具（结果注 tail / agent 工具，origin 溯源） | （—） |
 | WP4.4 | 群聊 + per-char 缓存命名空间 | 总设计 §26；worldbook-cache-design §6 |
 | WP4.5 | Roleplay Fast 档（三表 + BD 规则推导 + Story Thread） | roleplay-runtime-spec；R1 单调用 |
-| WP4.6 | scope 边界确认还账（roleplay scope 与 BD/世界书文本指令归属） | instruction-security §25 |
+| WP4.6 | ~~scope 边界确认还账~~（roleplay scope 与指令归属——随指令安全撤下） | （—） |
 
 # 9. P5 工作包分解（初版）
 
-Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录导入；Tauri 桌面壳；i18n + Skill 对齐 agentskills.io；Roleplay Deep 档（LLM Director/Critic/Quality Gate）；**前置还账：evaluation-engine-spec 充实**；差分测量工具（instruction-security §23.1 全套）+ 指纹对照报告。
+Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录导入；Tauri 桌面壳；i18n + Skill 对齐 agentskills.io；Roleplay Deep 档（LLM Director/Critic/Quality Gate）；**前置还账：evaluation-engine-spec 充实**。
 
 # 10. 还账总表（跨 spec 挂账的执行映射）
 
@@ -206,26 +206,27 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 
 | # | 挂账 | 绑定 WP | 出处 |
 |---|---|---|---|
-| 1 | ~~shared-contracts 充实（chat 面）~~ **✅ 2026-09-05 WP0.2 勾销**（spec 升 V2.0：§2.1 模块清单 / §2.2 Schema 同源 / §2.3 开放形状 / §2.4 C1–C4 自查 / §9.1 落地证据） | WP0.2 | shared-contracts / instruction-security §25 / provider-adapter §22 |
-| 2 | ~~ProviderCapabilities 定稿 + 本地 tokenizer 选型~~ **✅ 2026-09-05 WP0.5 勾销**（§18.2 全形 + instructionLayers 收编 contracts；tokenizer 选型 = P0 启发式估算、tiktoken 归 P2,adapter-spec V1.1 §23） | WP0.5 | 总设计 §18.2；adapter §23 开放点 2 |
+| 1 | ~~shared-contracts 充实（chat 面）~~ **✅ 2026-09-05 WP0.2 勾销**（spec 升 V2.0：§2.1 模块清单 / §2.2 Schema 同源 / §2.3 开放形状 / §2.4 C1–C4 自查 / §9.1 落地证据） | WP0.2 | shared-contracts / provider-adapter §22 |
+| 2 | ~~ProviderCapabilities 定稿 + 本地 tokenizer 选型~~ **✅ 2026-09-05 WP0.5 勾销**（§18.2 全形；tokenizer 选型 = P0 启发式估算、tiktoken 归 P2,adapter-spec V1.1 §23） | WP0.5 | 总设计 §18.2；adapter §23 开放点 2 |
 | 3 | ~~api-spec generation SSE 投影复核~~ **✅ 2026-09-05 WP0.7 勾销**（三层映射落地:provider 归一 → bus generation.*(§5.4 分档)→ SSE 信封{id,type,runId,timestamp,sequence,data},run 内 sequence 单调 + Last-Event-ID 续传;契约测试锁定) | WP0.7 | provider-adapter §22 |
-| 4 | ui-design 补 override 编辑器 + 档位徽标；api-spec 补 authority DTO | WP1.5 | instruction-security §25 |
+| 4 | ~~ui-design override 编辑器 + 档位徽标；api-spec authority DTO~~ **✅ 2026-09-08 随指令安全特性撤下** | WP1.5 | — |
 | 5 | 剩余诊断码随触发源落地（P0 两码 → P3 全量） | WP0.4 / WP3.2 | compiler-spec §71 |
 | 6 | Gemini explicit caching 评估 | WP2.4 | adapter §23 开放点 1 |
-| 7 | untrusted 工具回灌 + 结构化/审批提升 | WP3.2 | instruction-security §14 |
+| 7 | ~~untrusted 工具回灌~~（随指令安全撤下）；结构化/审批提升 | WP3.2 | — |
 | 8 | memory-runtime-spec 骨架 | WP4.1 | 上次文档盘点结论 |
-| 9 | roleplay scope 边界确认 | WP4.6 | instruction-security §25 |
-| 10 | evaluation-engine-spec 充实 + 差分测量工具 | P5 | 各挂账 |
+| 9 | ~~roleplay scope 边界确认~~（随指令安全撤下） | WP4.6 | — |
+| 10 | evaluation-engine-spec 充实 | P5 | 各挂账 |
 | 11 | 重启恢复逐状态矩阵核对 + non-idempotent 工具对账（reconciliation）——§50/§51–55 已有幂等分类与 Resume 骨架，补"每状态重启后行为"表 | WP3.1 | agent-runtime-spec §50/§51–55 |
 | 12 | 工程性能预算三档（target / warning / hard-limit；compile 侧已有 compiler-spec §126，补 worldbook 匹配 / SQLite / UI / 检索） | WP2 细化 | compiler-spec §126 |
 | 13 | 升级/备份/回滚流程（backup → migration → validate → rollback） | WP5 | 总设计 §36 P5 |
-| 14 | **开源发布套件**：LICENSE 落盘（§38 决策 33）、SECURITY.md / CONTRIBUTING.md（引用 AGENTS 决策协议与纪律 5，不复写）/ CODE_OF_CONDUCT.md / Issue·PR 模板（architecture_proposal 对齐 §37 四问）/ 产品化 README；依赖许可证兼容性纪律（运行时依赖禁引入 GPL/AGPL） | 开源/推送公开仓库**前**（用户触发，不绑阶段 WP） | 2026-09-05 开源评审择优 |
+| 14 | **开源发布套件**：LICENSE 落盘（§38 决策 32）、SECURITY.md / CONTRIBUTING.md（引用 AGENTS 决策协议与纪律 5，不复写）/ CODE_OF_CONDUCT.md / Issue·PR 模板（architecture_proposal 对齐 §37 四问）/ 产品化 README；依赖许可证兼容性纪律（运行时依赖禁引入 GPL/AGPL） | 开源/推送公开仓库**前**（用户触发，不绑阶段 WP） | 2026-09-05 开源评审择优 |
 | 15 | **Sanitized Debug Export / Reproduction Bundle**：RedactionPolicy（去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full；密钥沿用 PV5 redact），导出可 Replay | WP1.5（Inspector v1）细化会话 | 总设计 §19/§32；provider-adapter §17.2 |
 | 16 | Plugin 信任分档（built-in / trusted / community / untrusted）补入 §29 权限模型——P0–P4 只按 §21.5 Capability 执行 | WP5 细化会话 | 总设计 §29/§21.5 |
-| 17 | **Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落 | P3 | §38 决策 37 增量①；agent-runtime-spec §39/§93 |
-| 18 | **World State 全局态（规则版）**：地点/时间/物品/任务/派系/知识补表 + 规则化推演；**禁止额外 LLM 调用**（R1/C1）；按纪律 3 先落 roleplay-runtime-spec 扩展章节 + database-schema 补表 | P4 | §38 决策 37 增量③；roleplay-runtime-spec；database-schema |
-| 19 | Simulation Agent（LLM 世界推演）决策点：凭 P4 规则版实测（覆盖率/延迟/成本）决定是否引入 | P5 决策点 | §38 决策 37 暂缓项 |
-| 20 | **世界书槽位/逻辑枚举三套拼写归一**：api-spec §48 Worldbook Entry DTO 用 `ANTop/ANBottom/atDepth` + `selectiveLogic: 'AND_ANY'`，与 contracts `WorldbookPositionSchema`（`anTop/anBottom/depth`）+ `keyword_logic`（`andAny/andAll/notAny/notAll`）冲突（S10 落码时发现）。候选：A 改 api-spec 对齐 contracts（推荐，DTO 是投影）；B 在 st-compat 加适配层（多一层转换，反对）。**属公共契约变更，需作者拍板后再动** | S13(WP1.4) 前 | api-spec §48；contracts placement；database-schema §13 |
+| 17 | **Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落 | P3 | §38 决策 36 增量①；agent-runtime-spec §39/§93 |
+| 18 | **World State 全局态（规则版）**：地点/时间/物品/任务/派系/知识补表 + 规则化推演；**禁止额外 LLM 调用**（R1/C1）；按纪律 3 先落 roleplay-runtime-spec 扩展章节 + database-schema 补表 | P4 | §38 决策 36 增量③；roleplay-runtime-spec；database-schema |
+| 19 | Simulation Agent（LLM 世界推演）决策点：凭 P4 规则版实测（覆盖率/延迟/成本）决定是否引入 | P5 决策点 | §38 决策 36 暂缓项 |
+| 20 | ~~**世界书槽位/逻辑枚举三套拼写归一**~~ **✅ 2026-09-15 S13 开工前勾销(作者拍板方案 A)**:api-spec §48 修订对齐 contracts 单一真相源——`selectiveLogic` 取 `andAny/andAll/notAny/notAll`(对齐 `keyword_logic`)、`position` 取 `anTop/anBottom/depth/emTop/emBottom`(对齐 `WorldbookPositionSchema`);Breaking: N(§152 P0 范围未投产,无消费方) | ~~S13(WP1.4) 前~~ | api-spec §48;contracts placement;database-schema §13 |
+| 21 | **外部方向背书：SKILL.state（arXiv 2608.26263，EMNLP）**：以"显式可变执行状态替换 append-only 历史、推理丢弃只保留验证后的 ΔΣ 字典更新"实现 prompt 足印 `O(T²)→O(T)`——为 #18 World State 规则版与 **agent 执行循环有界状态**提供生产验证背书（2026-09-09 摘要已阅；§5.1 PDF 拉取确认基线=ReAct 逐条 append / Summarization 记忆压缩 / 本方法，口径=准确率·平均 prompt 大小·累计 token）。**量化结果（§5.2–5.6）待补**，纳入 #18 的定量判定留待该数字。**约束：只作用于 agent/工具执行子路径，不适用于 RP 聊天历史（历史即产品）** | P4（#18 细化时） | §38 决策 36 增量③；shared-contracts §StatePatch
 
 # 11. 会话运转节奏（与 AGENTS.md 衔接）
 
@@ -244,18 +245,21 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 |---|---|---|
 | WP0.1 bootstrap | ✅ | 2026-09-05 S1 完成（pnpm workspaces + §7 目录 + 三段门禁绿 + fake provider 骨架；详见 p0-plan §13 恢复点注记） |
 | WP0.2 contracts | ✅ | 2026-09-05 S2 完成（八模块 Zod-first + 30 单测 + 零 IO lint 约束；adapters 收编完毕，还账 #1 勾销） |
-| WP0.3 core 段模型/Snapshot/token | ✅ | 2026-09-05 S3 完成（构造器深冻结 + 八区哈希 netstring 规范框架化 + authorityFingerprint + 双模式 token 估算；零 IO 约束测试 + lint 双保险；16 条新测试） |
-| WP0.4 Compiler 最小管线 | ✅ | 2026-09-05 S4 完成（P0 管线 + strict/preview + §10 推导表 + I4/R2/R3/I3/I5 断言 + 宏透传 R-P0-1 + 硬上限 R-P0-2 + Trace；金样 G2/G4 绿；14 条新测试） |
+| WP0.3 core 段模型/Snapshot/token | ✅ | 2026-09-05 S3 完成（构造器深冻结 + 八区哈希 netstring 规范框架化 + 快照 authority 指纹（随指令安全撤下）+ 双模式 token 估算；零 IO 约束测试 + lint 双保险；16 条新测试） |
+| WP0.4 Compiler 最小管线 | ✅ | 2026-09-05 S4 完成（P0 管线 + strict/preview + §10 推导表 + I4/R2/R3/I3/I5 断言 + 宏透传 R-P0-1 + 硬上限 R-P0-2 + Trace；金样 G2/G4 与越权断言当时绿，已于 2026-09-08 随指令安全特性撤下；14 条新测试） |
 | WP0.5 adapters ×3 | ✅ | 2026-09-05 S4'-a/b/c 完成（openai-compat / anthropic / gemini + 共享 SSE/HTTP/超时层 + fixture 全家桶 T1/T4/T6/T10/T11/T12/T14 ×3 家;还账 #2 勾销;73 条 adapter 测试） |
 | WP0.6 runtime 事件/持久化 | ✅ | 2026-09-05 S5 完成（Event Bus 分档落库 + §77/78 迁移器（备份/integrity/回滚）+ 消息树五操作 + dispatchGeneration 四不变量闸口；38 条新测试） |
-| WP0.7 server 传输层 | ✅ | 2026-09-06 S6 完成（Hono 骨架 + §152 P0 路由 + 信封/Request ID + SSE 续传 + SecretStore R-P0-6 定案(§38 决策 34)+ migration v2(runs/prompt_snapshots);11 条契约测试;§152 的 characters/worldbooks/presets CRUD 挂 S8 补齐(需 §6-§11 资产表迁移)） |
+| WP0.7 server 传输层 | ✅ | 2026-09-06 S6 完成（Hono 骨架 + §152 P0 路由 + 信封/Request ID + SSE 续传 + SecretStore R-P0-6 定案(§38 决策 33)+ migration v2(runs/prompt_snapshots);11 条契约测试;§152 的 characters/worldbooks/presets CRUD 挂 S8 补齐(需 §6-§11 资产表迁移)） |
 | WP0.8 web Chat UI | ✅ | 2026-09-06 S7 完成（脚手架 + api-types 填充 + SSE 客户端 + 工作台 + 设置页 + 快照面板；真机冒烟全链路绿；类型零 any） |
 | WP0.9 P0 端到端验收 | ✅ | 2026-09-06 S8 完成（e2e ×3 + 资产 CRUD 补齐 + 冒烟脚本;DoD 见 §4.10 勾选;真实四链路待用户 key 冒烟） |
 | WP1.1a 卡导入 | ✅ | 2026-09-06 S9 完成（st-compat 卡模块 + 三载体归一 + .dgcard + 导入路由 + 兼容报告；详见 p1-plan §11） |
 | WP1.1b 世界书导入 | ✅ | 2026-09-07 S10 完成（st-compat 世界书模块：三容器 × 两代字段集 → .dgworld + 方言回写往返；migration v4 worldbook_entries/entry_versions；POST /api/v2/worldbooks/import；全量 208 测试绿；详见 p1-plan §11） |
+| WP1.2 世界书激活层 | ✅ | 2026-09-12 S11 完成（core 激活管线 §23–§29 + ChatWorldbookBinding 契约 + chat_worldbooks v6 + 绑定路由 + startRun 接线；全量 233 绿；**P2 解锁（B1）达成**；详见 p1-plan §11） |
+| WP1.3 预设映射 + Persona | ✅ | 2026-09-15 S12 完成（st-compat 预设模块 + buildPreset/PersonaContributions 接线 + 导入/绑定路由；详见 p1-plan §11） |
+| WP1.4 消息树完整交互 | ✅ | 2026-09-15 S13 完成（§16–§23 全路由：swipe 生成填充/编辑变体/软删/分支/激活/chats DELETE/messages 分页 + web 交互面；全量 262 绿；详见 p1-plan §11） |
 
 （P1–P5 WP 在各阶段开工细化时进看板。）
 
 ---
 
-*关联文档：[technical-design.md](./technical-design.md)（§36 路线图权威 / §38 决策 32）· [technical-plan.md](./technical-plan.md)（§8 测试基建 / §9 路线图指针）· [AGENTS.md](../AGENTS.md)（会话纪律）· 全部模块规格（设计真相源）*
+*关联文档：[technical-design.md](./technical-design.md)（§36 路线图权威 / §38 决策 31）· [technical-plan.md](./technical-plan.md)（§8 测试基建 / §9 路线图指针）· [AGENTS.md](../AGENTS.md)（会话纪律）· 全部模块规格（设计真相源）*

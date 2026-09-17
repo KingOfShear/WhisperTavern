@@ -291,13 +291,12 @@ describe('openai-compat:分层超时与多字节(§14/R1)', () => {
 })
 
 describe('openai-compat:capabilities(§15,还账 #2 定稿)', () => {
-  it('静态预设表按模型族匹配;用户覆盖最高;instructionLayers 登记 flat', () => {
+  it('静态预设表按模型族匹配;用户覆盖最高', () => {
     const a = adapter(async () => sseResponse([]))
     expect(a.capabilities('deepseek-r1').reasoning).toBe(true)
     expect(a.capabilities('deepseek-chat').cacheType).toBe('automatic-prefix')
     expect(a.capabilities('gpt-4o').vision).toBe(true)
     expect(a.capabilities('llama3.2')).toMatchObject({ tools: false, cacheType: 'none' })
-    expect(a.capabilities('unknown-model').instructionLayers).toBe('flat')
 
     const overridden = adapter(async () => sseResponse([]), { maxContextTokens: 999 })
     expect(overridden.capabilities('deepseek-chat').maxContextTokens).toBe(999)

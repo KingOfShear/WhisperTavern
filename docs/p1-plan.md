@@ -16,7 +16,7 @@ S10 WP1.1b 世界书导入:老 8 字段/现代 42 字段 → .dgworld(语义不�
 S11 WP1.2  世界书激活层全集(§23–§29;激活条目进 prompt,缓存分区仍空)               1–2 会话
 S12 WP1.3  预设映射(ST Prompt Order §80–§81)+ Persona 库                           1 会话
 S13 WP1.4  消息树完整交互:编辑变体/swipe 生成填充/分支激活 API 完整                 1 会话
-S14 WP1.5  Prompt Inspector v1 + override 槽位 UI(默认关)+ 还账 #4/#15              1–2 会话
+S14 WP1.5  Prompt Inspector v1 + 导出(sanitized debug export,还账 #15)         1–2 会话
 S15 WP1.6  金样测试体系(真实资产脱敏 → 导入→编译→序列化)                          1 会话
 ```
 
@@ -32,16 +32,15 @@ R-P1-1  激活层与分区边界:P1 只做激活层(compiler-spec §23–§29—
 R-P1-2  导入支持面:ST 卡 V2/V3 JSON、PNG tEXt(chara+ccv3 双内嵌,优先 ccv3)、
         charx(ZIP);世界书老 8 字段与现代平铺字段;预设 JSON。**导出(PNG 双写/
         .dg 回写)不在 P1**(§21:导出随 P5);资产文件按混合存储落 data/(决策 11)。
-R-P1-3  导入不改档(instruction-security §15/I2-b):导入产物 authority 一律按 §10
-        来源推导(卡→character、书→world),卡文本自述一律无效;资产元数据声明提升
-        仅经用户确认路径,导入报告必须含"档位与越权槽位"小节(§25)。
+R-P1-3  导入不改结构:导入产物一律按来源组织映射(卡→character、书→world),卡
+        文本自述不改变映射结构;资产元数据声明提升仅经用户确认路径。
 R-P1-4  金样资产:真实资产经**结构等价脱敏**复制进 tests/fixtures/(AGENTS X3——
         密钥/NSFW 内容合成替换,协议形状与字节结构保持);测试不直接引用
         酒馆参考文件/ 与根目录原 json。
-R-P1-5  Override 槽位:UI 随 WP1.5 交付但**默认关**(§12.2);P0 的 preset 白名单
-        路径延续;UI 启用须显式用户操作并落资产元数据(R5)。
+R-P1-5  ~~Override 槽位~~(随指令安全特性撤下,不再交付);P0 的 preset 白名单
+        路径延续。
 R-P1-6  兼容报告:Import Compatibility Report 为 P1 出场要件——逐资产产出
-        (字段映射/未建模字段 compat 清单/档位与越权槽位),Technical 深度对齐
+        (字段映射/未建模字段 compat 清单),Technical 深度对齐
         technical-plan §5.9。
 ```
 
@@ -54,13 +53,13 @@ R-P1-6  兼容报告:Import Compatibility Report 为 P1 出场要件——逐资
    冗余归一)、PNG tEXt 块读取(chara/ccv3 base64,优先 ccv3)、charx 解包(ZIP)
 2. 归一 → 原生 .dgcard 模型(technical-plan §5.10 schema):定义与运行态分离,
    character_book 抽取为独立 .dgworld 双向引用,未建模字段进 compat
-3. Compatibility Report v1(字段映射表/compat 清单/档位小节)
+3. Compatibility Report v1（字段映射表/compat 清单）
 4. 落库:characters 注册索引 + version 1 快照(S8 迁移 v3 已备);资产文件落 data/
-5. 契约测试:三类载体 → 同一原生模型(结构等价);R-P1-3 档位断言
+5. 契约测试:三类载体 → 同一原生模型(结构等价)
 ```
 
 **验收**:三类载体样卡导入绿;报告产出;`pnpm -r test` 全绿。
-**spec 锚点**:technical-plan §5.10;instruction-security §15/§25。
+**spec 锚点**:technical-plan §5.10。
 
 # 4. S10 — WP1.1b 世界书导入
 
@@ -125,22 +124,19 @@ R-P1-6  兼容报告:Import Compatibility Report 为 P1 出场要件——逐资
 **验收**:api-spec §16–§23 逐路由契约测试;swipe 生成填充变体 e2e。
 **spec 锚点**:api-spec §16–§23;database-schema §19–§22。
 
-# 8. S14 — WP1.5 Inspector v1 + Override UI
+# 8. S14 — WP1.5 Inspector v1 + 导出
 
 **任务清单**:
 
 ```text
 1. Inspector v1(ui-design §30.2 精简版):段列表(来源/角色/区/stability)/
    八区哈希/诊断/serialized 原文;快照 diff(相邻两轮)
-2. authority/trust/scope 徽标 + untrusted origin 展示(instruction-security §19.2)
-3. override 槽位 UI(默认关,R-P1-5)+ sanitized debug export(还账 #15:
-   RedactionPolicy 去用户内容/匿名化 ID/默认 sanitized)
-4. 还账 #4:ui-design 补 override 编辑器与档位徽标小节;api-spec SegmentSnapshot
-   补 authority 只读字段(§25)
+2. sanitized debug export(还账 #15:RedactionPolicy 去用户内容/匿名化 ID/默认
+   sanitized)
 ```
 
 **验收**:Inspector 对真实编译结果展示;导出 sanitized bundle 可回放。
-**spec 锚点**:ui-design §30.2;instruction-security §19/§25;compiler-spec §101。
+**spec 锚点**:ui-design §30.2;compiler-spec §101。
 
 # 9. S15 — WP1.6 金样测试体系
 
@@ -149,7 +145,7 @@ R-P1-6  兼容报告:Import Compatibility Report 为 P1 出场要件——逐资
 ```text
 1. 真实资产脱敏复制进 tests/fixtures/assets/(R-P1-4):卡×3 载体、书×2 代、预设
 2. 金样:导入 → 编译 → 序列化 → 字节级快照(防语义回归;technical-plan §8.2)
-3. Import Compatibility Report 验收(出场要件,含"档位与越权槽位"小节)
+3. Import Compatibility Report 验收(出场要件)
 4. P1 DoD 核验 + 归档
 ```
 
@@ -161,8 +157,8 @@ R-P1-6  兼容报告:Import Compatibility Report 为 P1 出场要件——逐资
 延续 p0-plan §12 全部条款(X1–X6),P1 特别加:
 
 ```text
-X7  导入产物一律过 §10 推导投影,导入代码禁止任何"内容识别档位"路径(I1);
-    报告只报告,不改档。
+X7  导入产物一律按来源组织映射(卡→character、书→world),导入代码禁止任何
+    "内容识别语义归属"路径;报告只报告,不改结构。
 X8  真实资产只进 tests/fixtures/(脱敏后),原文件保持只读不引用(AGENTS §6)。
 ```
 
@@ -172,12 +168,12 @@ X8  真实资产只进 tests/fixtures/(脱敏后),原文件保持只读不引用
 |---|---|---|---|
 | S9 | WP1.1a | ✅ | 2026-09-06 完成:st-compat 卡模块落码(V2/V3 JSON 双层冗余归一 data 层优先/PNG tEXt chara+ccv3 优先 ccv3/charx fflate 解包)+ .dgcard 归一(运行态剥离/内嵌书抽取 passthrough/compat 收集/compatFields 全列)+ ImportReport(路径化、无内容值)+ server 导入路由(落盘 cards/<slug>/ + worldbooks 双向注册 + v1 快照)。10 条 st-compat 测试 + 5 条路由契约测试。踩坑:zod looseObject 不剥未知键(广收集靠 modeled 集合反查);report.compatFields 须从 compat 对象全列。 |
 | S10 | WP1.1b | ✅ | 2026-09-07 完成:st-compat 世界书模块落码(types/normalize/report)——三种容器(数组/uid 键对象/裸 uid 键对象)+ 两代字段集(老 8 字段 ↔ 现代 42 字段)→ 原生 .dgworld;零魔数(position 0-7→slot、selectiveLogic 0-3→logic、disable/enable 极性归一);**字段方言**(key/keys、disable/enabled、order/insertion_order)书级探测 + toStEntry 按方言回写,实现逐键往返无损;无原生语义字段(addMemo/automationId)刻意不进 schema,落 compat。migration v4 建 worldbook_entries + worldbook_entry_versions(database-schema §13/§14),POST /api/v2/worldbooks/import 落盘 + 注册 + 条目落库 + v1 快照;卡导入内嵌书由 passthrough 改为完整归一(characterRef 双向引用回填)。12 条 st-compat 单测 + 4 条路由契约测试(全量 208 绿)。踩坑:①zod looseObject 的字段不必"声明了就要有处放"——无原生语义的字段应当**不声明**,让它自动落 compat,否则往返会静默丢失;②迁移版本号硬编码在 migrate.test.ts / e2e.test.ts,新增 v4 需同步 4 处;③native 测试必须用系统 node 24 跑(better-sqlite3 编译于 NODE_MODULE_VERSION 137,托管 node 22 是 127)。 |
-| S11 | WP1.2 | ☐ | |
-| S12 | WP1.3 | ☐ | |
-| S13 | WP1.4 | ☐ | |
+| S11 | WP1.2 | ✅ | 2026-09-12 完成:core 激活管线(core/src/worldbook/activation.ts,compiler-spec §23–§29 全语义 + 23 条单测)+ migration v5(worldbook_runtime_entries/worldbook_activations,Drizzle 落定)已就位。**本会话补齐 chat↔worldbook 绑定契约**(阻塞解除):contracts 新增 `ChatWorldbookBinding`(shared-contracts-spec §5.1)+ DB `chat_worldbooks` 表(database-schema §18)+ migration v6 + server 绑定路由(GET/POST/DELETE `/api/v2/chats/:id/worldbooks`,WORLDBOOK_NOT_FOUND→404);ST position 0-7→slot 映射上提至 contracts(`WORLDBOOK_SLOT_BY_ST_POSITION`/`ST_POSITION_BY_SLOT`)满足 C4 避免 runtime→st-compat 反向依赖;runtime `buildWorldbookContributions` 接线 `run.ts` startRun(激活→contributions freshWB/injection + 状态落库 + 审计)+ 5 条绑定/激活集成测试。**全量 233 绿(28 文件)**。budget percent+cap 超预算裁剪留 P2(implementation-plan §5 挂账)。**WP1.2 出场 = P2 解锁(B1)已达成**。 |
+| S12 | WP1.3 | ✅ | 2026-09-15 完成:st-compat 预设导入模块(types/normalize/report,7 单测,§80–§81 映射 prompt_order→segments/marker→slot/参数方言归一/toStPreset 往返)+ runtime buildPresetContributions/buildPersonaContributions 接线 startRun + server 路由(POST /api/v2/presets/import 落 .dgpreset+注册+v1 快照;POST /api/v2/personas+GET 列表;PATCH /api/v2/chats/:id 单值绑定)+ 8 条 S12 集成测试(§81 编译顺序/Persona 注入 header/宏透传 MACRO_UNEXPANDED_P0/绑定 API 404·空体·解绑);顺带修复 core pipeline.ts 宏诊断持久化缺口(R-P0-1 info 诊断此前未落快照)。typecheck 四包全 0,core 44/架构 11 回归绿。S13 入场条件已满足。 |
+| S13 | WP1.4 | ✅ | 2026-09-15 完成:消息树完整交互。runtime:deleteMessage(软删+message.deleted+leaf 回退最近未删祖先)、deleteChat(§15 软删/purge,FK 拓扑序:chat_branches→messages→generations(经 runs 子查询)→runs→prompt_snapshots→绑定/运行时态/审计→chats)、startRun variantMessageId 接线(swipe 生成完成写入壳本身,chat.updated action=variant_filled;壳不入 prompt)、loadActiveChain 跳过软删消息、swipeMessage §20 角色校验(只允许 assistant/character)、createBranch/activateMessage 错误码对齐 §8(VALIDATION→VALIDATION_ERROR)。server:POST messages/:id/edit、swipe 建壳+生成返回{runId,messageId}、DELETE messages/:id、GET messages/:id、POST chats/:id/branch、DELETE chats/:id(soft+purge)、PATCH chats name、GET messages 分页(branch=active/limit/before/after 互斥游标)+ variants 兄弟链投影(§16/§17,api-spec 已补响应口径)。web:swipe ◀▶(n/m)+重摇/编辑/删除/分支菜单。14 条 S13 契约测试(swipe 生成填充 e2e:双变体共存+编译历史不含空壳)。踩坑:①fake 轮次按 provider 回放(adapter 每请求新建),多轮测试每轮一个 provider;②purge 必须 chat_branches 先于 messages(leaf/root/fork REFERENCES messages);③§5.4 无 chat.deleted,删除/清理用 chat.updated(action=deleted\|purged)。**全量 262 绿(31 文件),typecheck 五包 0**。 |
 | S14 | WP1.5 | ☐ | |
 | S15 | WP1.6 | ☐ | |
 
 ---
 
-*关联文档:[implementation-plan.md](./implementation-plan.md) §5/§4.11(P1 DoD)· 总设计 §36/§30 · [technical-plan.md](./technical-plan.md) §5.3/§5.9/§5.10/§8.2 · [prompt-compiler-spec](./specs/prompt-compiler-spec.md) §23–§29/§80–§81 · [instruction-security-spec](./specs/instruction-security-spec.md) §15/§25 · [ui-design.md](./ui-design.md) §30.2 · [p0-plan.md](./p0-plan.md)(已归档)*
+*关联文档:[implementation-plan.md](./implementation-plan.md) §5/§4.11(P1 DoD)· 总设计 §36/§30 · [technical-plan.md](./technical-plan.md) §5.3/§5.9/§5.10/§8.2 · [prompt-compiler-spec](./specs/prompt-compiler-spec.md) §23–§29/§80–§81 · [ui-design.md](./ui-design.md) §30.2 · [p0-plan.md](./p0-plan.md)(已归档)*

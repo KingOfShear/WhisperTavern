@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { CachePlacementSchema, SemanticPlacementSchema, StabilityClassSchema } from './placement'
-import { InstructionMetadataSchema } from './instruction'
 
 /**
  * Prompt IR —— compiler-spec §7–§11 的收编落地。
@@ -15,8 +14,7 @@ export const PromptRoleSchema = z.enum(['system', 'user', 'assistant', 'tool'])
 export type PromptRole = z.infer<typeof PromptRoleSchema>
 
 /**
- * 段来源登记表(compiler-spec §10)。13 变体覆盖全部注入面;instruction-security
- * §10 的默认推导表按此查表(source → authority/trust/scope)。
+ * 段来源登记表(compiler-spec §10)。13 变体覆盖全部注入面。
  */
 export const SegmentSourceSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('character'), assetId: z.string(), field: z.string() }),
@@ -36,8 +34,7 @@ export const SegmentSourceSchema = z.discriminatedUnion('type', [
 export type SegmentSource = z.infer<typeof SegmentSourceSchema>
 
 /**
- * Prompt Segment(compiler-spec §8 + §17 stabilityOverride + instruction-security §9
- * 的 `instruction` 扩展位)。
+ * Prompt Segment(compiler-spec §8 + §17 stabilityOverride)。
  */
 export const PromptSegmentSchema = z.object({
   /** 稳定语义 ID(assetId + logicalPath,§9.1);非 UUID */
@@ -54,8 +51,6 @@ export const PromptSegmentSchema = z.object({
   tokenCount: z.number().int().nonnegative(),
   dependencies: z.array(z.string()),
   enabled: z.boolean(),
-  /** 缺省即推导:不传时 Compiler 按 instruction-security §10 从 source 查表投影 */
-  instruction: InstructionMetadataSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 export type PromptSegment = z.infer<typeof PromptSegmentSchema>

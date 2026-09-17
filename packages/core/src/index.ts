@@ -10,7 +10,6 @@
 export {
   createPromptSegment,
   createPromptIR,
-  createInstructionMetadata,
   deepFreeze,
   type DeepReadonly,
 } from './ir/segment'
@@ -18,6 +17,11 @@ export {
   buildPromptSnapshot,
   type BuildPromptSnapshotInput,
 } from './serializer/snapshot'
+export {
+  diffSnapshots,
+  projectSegment,
+  type SnapshotDiffResult,
+} from './serializer/diff'
 export {
   estimateTokens,
   createTokenCounter,
@@ -35,8 +39,14 @@ export {
   type CompileOutcome,
 } from './compiler/pipeline'
 export {
-  deriveInstruction,
-  resolveInstruction,
-  outranks,
-  type DerivedInstruction,
-} from './compiler/derive'
+  activateWorldbook,
+  type WorldbookActivationInput,
+  type WorldbookActivationOutput,
+  type ActivationDescriptor,
+  type ActivationDecision,
+  type ActivationReason,
+  type ScanMessage,
+  type ScanContext,
+  type ScanParameters,
+  type ActivationRuntimeState,
+} from './worldbook/activation'

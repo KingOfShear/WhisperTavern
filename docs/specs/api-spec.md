@@ -1,6 +1,6 @@
 # WhisperTavern V2 API Specification
 
-> **Version:** 2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec）  
+> **Version:** 2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec）  
 > **Status:** Implementation Specification  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **HTTP/SSE API 模块详细规格**  
 > **Protocol:** HTTP/1.1 + SSE  
@@ -487,6 +487,8 @@ limit=100
 before=<messageId>
 after=<messageId>
 ```
+
+响应（S13/WP1.4 投影口径）：活跃链消息数组（根→叶）。链上每条消息附带 `variants`（§17 修订"兄弟链"的线格式投影：`{ id, variantIndex }[]`，未删兄弟按 index 升序、含自身；无变体组 = 空数组）——swipe ◀▶ 与变体计数的数据面。`before` 与 `after` 互斥；锚点不在活跃链上或 `limit` 非正整数 → 400。
 
 ---
 
@@ -1283,6 +1285,8 @@ type CreateWorldbookRequest = {
 
 # 48. Worldbook Entry
 
+> 拼写已按 §48 修订对齐 contracts（#20 勾销）；DTO 形状与语义不变。
+
 ```ts
 type WorldbookEntry = {
   uid: number
@@ -1298,21 +1302,21 @@ type WorldbookEntry = {
   selective?: boolean
 
   selectiveLogic?:
-    | 'AND_ANY'
-    | 'AND_ALL'
-    | 'NOT_ANY'
-    | 'NOT_ALL'
+    | 'andAny'
+    | 'andAll'
+    | 'notAny'
+    | 'notAll'
 
   constant?: boolean
 
   position:
     | 'before'
     | 'after'
-    | 'ANTop'
-    | 'ANBottom'
-    | 'atDepth'
-    | 'EMTop'
-    | 'EMBottom'
+    | 'anTop'
+    | 'anBottom'
+    | 'depth'
+    | 'emTop'
+    | 'emBottom'
     | 'outlet'
 
   depth?: number
@@ -1330,6 +1334,8 @@ type WorldbookEntry = {
 ```
 
 Worldbook API 必须保留这些语义字段，因为酒馆 1.18 的世界书不仅是关键词匹配，还包括 selective logic、recursive scan、scan depth、probability、sticky/cooldown/delay 等行为。
+
+【2026-09-15 修订】枚举拼写对齐 contracts 单一真相源（shared-contracts C4 / implementation-plan §10 #20 勾销）：`selectiveLogic` 取 `andAny/andAll/notAny/notAll`（对齐 `keyword_logic`），`position` 取 `anTop/anBottom/depth/emTop/emBottom`（对齐 `WorldbookPositionSchema` 的 slot 拼写）。Breaking: N（该 DTO 在 §152 P0 范围内未投产，无消费方）。
 
 ---
 

@@ -6,8 +6,6 @@ describe('contracts/diagnostics(诊断体系)', () => {
     for (const code of [
       'MACRO_UNEXPANDED_P0',
       'PROMPT_CONTEXT_TOO_LARGE',
-      'AUTHORITY_OVERRIDE_DENIED',
-      'UNTRUSTED_IN_STABLE_ZONE',
       'EMPTY_SEGMENT',
       'DUPLICATE_SEGMENT_ID',
       'STABILITY_OVERRIDE',

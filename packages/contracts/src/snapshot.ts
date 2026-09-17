@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { PromptIRSchema, PromptRoleSchema } from './ir'
+import { PromptIRSchema, PromptRoleSchema, SegmentSourceSchema } from './ir'
 import { DiagnosticSchema } from './diagnostics'
+import { PromptZoneNameSchema, StabilityClassSchema } from './placement'
 import { ChatIdSchema, RunIdSchema, SnapshotIdSchema, MessageIdSchema, TimestampSchema } from './core'
 
 /**
@@ -111,9 +112,123 @@ export const PromptSnapshotSchema = z.object({
   serialized: SerializedPromptSchema,
   hashes: PromptHashesSchema,
   diagnostics: z.array(DiagnosticSchema),
-  /** instruction-security §19.1 / §38 决策 30 ⑥:按 (segmentId, authority, trust, scope)
-   *  编译序的序列哈希;元数据不进八区字节,故不是第九哈希区 */
-  authorityFingerprint: z.string().optional(),
   createdAt: TimestampSchema,
 })
 export type PromptSnapshot = z.infer<typeof PromptSnapshotSchema>
+
+// ===== Prompt Diff(api-spec §38;S14/WP1.5 Inspector 相邻两轮对比的线格式)=====
+
+/**
+ * 单段 diff 判定(api-spec §38 SegmentDiff)。kind:
+ * - same      段 id 相同且 contentHash 一致(可命中缓存前缀);
+ * - changed   段 id 相同但内容变化(缓存从该段起失效);
+ * - added     B 新增段;removed   A 独有段(被删/被裁剪)。
+ * order 变化不单独判定——物理序变化表现为新增+移除的组合。
+ */
+export const SegmentDiffKindSchema = z.enum(['same', 'changed', 'added', 'removed'])
+export type SegmentDiffKind = z.infer<typeof SegmentDiffKindSchema>
+
+/** 段投影:Inspector 展示与 diff 共用(八区哈希口径,§67 修订) */
+export const SegmentProjectionSchema = z.object({
+  id: z.string().min(1),
+  source: SegmentSourceSchema,
+  role: PromptRoleSchema,
+  zone: PromptZoneNameSchema,
+  stability: StabilityClassSchema,
+  tokenCount: z.number().int().nonnegative(),
+  contentHash: z.string(),
+})
+export type SegmentProjection = z.infer<typeof SegmentProjectionSchema>
+
+export const SegmentDiffSchema = z.object({
+  kind: SegmentDiffKindSchema,
+  segmentId: z.string(),
+  /** added/removed 时缺省一侧;changed 时两侧都带 */
+  before: SegmentProjectionSchema.optional(),
+  after: SegmentProjectionSchema.optional(),
+})
+export type SegmentDiff = z.infer<typeof SegmentDiffSchema>
+
+export const PromptDiffSchema = z.object({
+  snapshotAId: SnapshotIdSchema,
+  snapshotBId: SnapshotIdSchema,
+  segments: z.array(SegmentDiffSchema),
+  /** 首个非 same 段(api-spec §38 firstDivergence;byteOffset 为该段内容内偏移,P0 省略) */
+  firstDivergence: z.object({ segmentId: z.string() }).optional(),
+  /** tokenDelta.fresh = 新增 token − 移除 token 的净值口径太粗,P0 给三项实测量 */
+  tokenDelta: z.object({
+    input: z.number().int(),
+    cached: z.number().int().nonnegative(),
+    fresh: z.number().int(),
+  }),
+  /** P0 启发式:首分歧段落在 worldbook 族区 → WORLD_BOOK_CONTENT_CHANGED;history → MESSAGE_EDITED */
+  cacheBreak: CacheBreakReasonSchema.optional(),
+})
+export type PromptDiff = z.infer<typeof PromptDiffSchema>
+
+// ===== Sanitized Debug Export(还账 #15;总设计 §19/§32,provider-adapter §17.2 PV5)=====
+
+/** 脱敏模式:sanitized(默认,去用户内容+匿名化)/ full(仅显式要求,保留原文) */
+export const RedactionModeSchema = z.enum(['sanitized', 'full'])
+export type RedactionMode = z.infer<typeof RedactionModeSchema>
+
+export const RedactionPolicySchema = z.object({
+  mode: RedactionModeSchema,
+  /** true = 用户/角色发言以 [user-content removed] 占位(P0 默认 true,§19 脱敏红线) */
+  stripUserContent: z.boolean(),
+  /** true = 消息/资产 ID 替换为稳定匿名别名(redact-1, redact-2 …) */
+  anonymizeIds: z.boolean(),
+  /** PV5 兜底:残留文本过密钥 redact(Bearer/sk- 形态;真实密钥表由 server 注入) */
+  redactSecrets: z.boolean(),
+})
+export type RedactionPolicy = z.infer<typeof RedactionPolicySchema>
+
+/**
+ * 导出请求体(api-spec §60 debug 分支的形状化)。resourceType 仅 'snapshot':
+ * 快照是 §19.2 所见即所发的证据链,P0 不导出会话全量。
+ */
+export const DebugExportRequestSchema = z.object({
+  resourceType: z.literal('snapshot'),
+  resourceId: SnapshotIdSchema,
+  policy: RedactionPolicySchema.partial({ mode: true }).optional(),
+})
+export type DebugExportRequest = z.infer<typeof DebugExportRequestSchema>
+
+/**
+ * 可回放 bundle:serialized.parts 经策略处理后的消息序列 + 逐段投影。
+ * 「可回放」口径:parts 按 buildGenerationRequest 同一投影规则还原为
+ * ProviderMessage 序列,可直接喂 FakeProviderAdapter 重放(S14 验收)。
+ */
+export const DebugExportBundleSchema = z.object({
+  format: z.literal('whispertavern-debug-bundle'),
+  version: z.number().int(),
+  exportedAt: TimestampSchema,
+  policy: RedactionPolicySchema,
+  snapshot: z.object({
+    id: SnapshotIdSchema,
+    chatId: z.string(),
+    runId: z.string().optional(),
+    provider: z.string(),
+    model: z.string(),
+    compilerVersion: z.string(),
+    hashes: PromptHashesSchema,
+    tokenCount: z.number().int().nonnegative(),
+    createdAt: TimestampSchema,
+  }),
+  /** 脱敏后的段投影(顺序即发送序);full 模式含 content 原文,sanitized 去内容 */
+  segments: z.array(
+    SegmentProjectionSchema.extend({ content: z.string().optional() }),
+  ),
+  /** 回放脚本:role/content 消息序列(策略处理后的 serialized.parts) */
+  messages: z.array(
+    z.object({
+      role: PromptRoleSchema,
+      content: z.string(),
+      segmentId: z.string().optional(),
+    }),
+  ),
+  /** ID 匿名化映射(仅 anonymizeIds=true 时非空;原始 ID 不出现) */
+  idMap: z.record(z.string(), z.string()),
+  diagnostics: z.array(DiagnosticSchema),
+})
+export type DebugExportBundle = z.infer<typeof DebugExportBundleSchema>

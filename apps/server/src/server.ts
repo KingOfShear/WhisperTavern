@@ -1,27 +1,35 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Hono } from 'hono'
-import { and, desc, eq, gt, ne } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
-import { compile } from '@whispertavern/core'
+import { compile, diffSnapshots } from '@whispertavern/core'
 import {
   importCard,
   importWorldbook,
   importWorldbookFromJson,
+  importPreset,
   isCardParseError,
   isWorldbookParseError,
+  isPresetParseError,
   SLOT_TO_ST_POSITION,
   type DgWorldbook,
+  type DgPreset,
 } from '@whispertavern/st-compat'
 import {
   activeLeafId,
   activateMessage,
   buildContributions,
+  createBranch,
   createChat,
   createMessage,
+  deleteChat,
+  deleteMessage,
+  editMessage,
   loadActiveChain,
   loadChat,
+  loadMessage,
   sha256Hex,
   startRun,
   swipeMessage,
@@ -33,6 +41,10 @@ import {
   characterVersions,
   characters as charactersTable,
   events as eventsTable,
+  generations as generationsTable,
+  messages as messagesTable,
+  personas as personasTable,
+  personaVersions,
   presetVersions,
   presets as presetsTable,
   promptSnapshots,
@@ -41,9 +53,11 @@ import {
   worldbookEntries,
   worldbookEntryVersions,
   worldbooks as worldbooksTable,
+  chatWorldbooks,
 } from '@whispertavern/runtime'
 import type { Chat, ChatId, MessageId, ProviderAdapter, ProviderChatRequest, SnapshotId } from '@whispertavern/contracts'
 import { httpStatusFor } from './api/errors'
+import { buildDebugBundle, resolvePolicy } from './api/debug-export'
 import { RunStreamRegistry } from './api/run-streams'
 import { SSE_HEADERS, sseFrame } from './api/types'
 import type { ServerDeps } from './api/types'
@@ -166,7 +180,7 @@ export function createApp(deps: ServerDeps): CreatedApp {
     }
   }
 
-  // ===== chats(§11–§13 P0 范围)=====
+  // ===== chats(§11–§15;S13 补 PATCH name / DELETE soft+purge)=====
 
   app.post('/api/v2/chats', async (c) => {
     const requestId = requestIdOf(c)
@@ -191,8 +205,9 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
   app.get('/api/v2/chats', (c) => {
     const requestId = requestIdOf(c)
+    // §15:软删 chat 不再出现在列表(事实行保留,恢复随 P5 备份/导入导出)
     const rows = deps.store.db.select().from(chatsTable).orderBy(desc(chatsTable.createdAt)).limit(100).all()
-    return ok(c, requestId, rows.map((row) => ({
+    return ok(c, requestId, rows.filter((row) => row.deletedAt == null).map((row) => ({
       id: row.id,
       title: row.title,
       modelProvider: row.modelProvider,
@@ -208,7 +223,76 @@ export function createApp(deps: ServerDeps): CreatedApp {
     return ok(c, requestId, chat.value)
   })
 
-  // ===== 消息树(§16–§22 P0 范围)=====
+  // §15 DELETE:默认软删(deleted_at 置位);?purge=true 连同消息/分支/生成记录彻底删除
+  app.delete('/api/v2/chats/:id', (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id') as ChatId
+    const purged = deleteChat(deps.store, deps.bus, { chatId, purge: c.req.query('purge') === 'true', now: nowIso() })
+    if (!purged.ok) return runtimeError(c, requestId, purged.error)
+    return ok(c, requestId, { chatId, purged: purged.value })
+  })
+
+  // S12(WP1.3)起:chat 单值绑定(chats 列直接承载;非多对多)。persona_id / preset_id
+  // 必须在各自资产表存在,否则 404;传 null 解除绑定。S13 补 §14 name(→ title 列)。
+  // characterIds(§14)为 P4 群聊面(chats.character_id 单聊单值,§17);worldbookIds 走 §18 绑定路由。
+  app.patch('/api/v2/chats/:id', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id') as ChatId
+    const chat = loadChat(deps.store, chatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    const now = nowIso()
+    const patch: Record<string, unknown> = {}
+
+    if (typeof body.name === 'string' && body.name !== '') {
+      patch.title = body.name
+    }
+
+    if (typeof body.personaId === 'string' && body.personaId !== '') {
+      const p = deps.store.db.select().from(personasTable).where(eq(personasTable.id, body.personaId)).get()
+      if (p === undefined) return fail(c, requestId, 'PERSONA_NOT_FOUND', `persona 不存在: ${body.personaId}`)
+      patch.personaId = body.personaId
+      patch.personaVersion = typeof body.personaVersion === 'number' ? body.personaVersion : p.version
+    } else if (body.personaId === null) {
+      patch.personaId = null
+      patch.personaVersion = null
+    }
+
+    if (typeof body.presetId === 'string' && body.presetId !== '') {
+      const pr = deps.store.db.select().from(presetsTable).where(eq(presetsTable.id, body.presetId)).get()
+      if (pr === undefined) return fail(c, requestId, 'PRESET_NOT_FOUND', `preset 不存在: ${body.presetId}`)
+      patch.presetId = body.presetId
+      patch.presetVersion = typeof body.presetVersion === 'number' ? body.presetVersion : pr.version
+    } else if (body.presetId === null) {
+      patch.presetId = null
+      patch.presetVersion = null
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return fail(c, requestId, 'VALIDATION_ERROR', '至少需要一个绑定字段(personaId 或 presetId)')
+    }
+    patch.updatedAt = now
+    deps.store.db.update(chatsTable).set(patch).where(eq(chatsTable.id, chatId)).run()
+
+    const reloaded = loadChat(deps.store, chatId)
+    if (!reloaded.ok) return runtimeError(c, requestId, reloaded.error)
+    const updated = reloaded.value
+    return ok(
+      c,
+      requestId,
+      {
+        id: chatId,
+        name: updated.title ?? null,
+        personaId: updated.personaId ?? null,
+        personaVersion: updated.personaVersion ?? null,
+        presetId: updated.presetId ?? null,
+        presetVersion: updated.presetVersion ?? null,
+      },
+      200,
+    )
+  })
+
+  // ===== 消息树(§16–§22;S13/WP1.4 完整交互)=====
 
   app.post('/api/v2/chats/:id/messages', async (c) => {
     const requestId = requestIdOf(c)
@@ -228,21 +312,105 @@ export function createApp(deps: ServerDeps): CreatedApp {
     return ok(c, requestId, { message: created.value.message, activeLeaf: created.value.activeLeaf }, 201)
   })
 
+  // §16 消息列表:活跃链 + 游标分页(limit/before/after;branch=active 为唯一取值)。
+  // 每条消息附带 variants(§17 修订"兄弟链"投影:id + variantIndex)——swipe ◀▶ 数据面。
   app.get('/api/v2/chats/:id/messages', (c) => {
     const requestId = requestIdOf(c)
     const chat = loadChat(deps.store, c.req.param('id') as ChatId)
     if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const branch = c.req.query('branch') ?? 'active'
+    if (branch !== 'active') {
+      return fail(c, requestId, 'VALIDATION_ERROR', `branch 只支持 active(分支管理经 active-leaf): ${branch}`)
+    }
     const chain = loadActiveChain(deps.store, activeLeafId(deps.store, chat.value.id))
     if (!chain.ok) return runtimeError(c, requestId, chain.error)
-    return ok(c, requestId, chain.value)
+    const paged = pageMessages(chain.value, c.req.query('before'), c.req.query('after'), c.req.query('limit'))
+    if (!paged.ok) return fail(c, requestId, 'VALIDATION_ERROR', paged.error)
+    return ok(c, requestId, paged.value.map((m) => ({ ...m, variants: variantSiblings(deps.store, m) })))
   })
 
-  // §20 swipe:同 variant_group 新建空兄弟壳(P0 建壳;生成填充随 P1 联调)
-  app.post('/api/v2/messages/:id/swipe', (c) => {
+  // §17 单条消息读取(含已删——历史事实可见,deletedAt 由调用方判)
+  app.get('/api/v2/messages/:id', (c) => {
+    const requestId = requestIdOf(c)
+    const loaded = loadMessage(deps.store, c.req.param('id') as MessageId)
+    if (!loaded.ok) return runtimeError(c, requestId, loaded.error)
+    return ok(c, requestId, loaded.value)
+  })
+
+  // §19 编辑:新建变体,原消息内容永不动;leaf 移到新版本
+  app.post('/api/v2/messages/:id/edit', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    if (typeof body.content !== 'string' || body.content === '') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'content 必填')
+    }
+    const edited = editMessage(deps.store, deps.bus, {
+      messageId: c.req.param('id') as MessageId,
+      content: body.content,
+      now: nowIso(),
+    })
+    if (!edited.ok) return runtimeError(c, requestId, edited.error)
+    return ok(c, requestId, edited.value, 201)
+  })
+
+  // §20 swipe(S13 完整语义):建壳 + 触发生成填充变体(P0 挂账解除);
+  // 生成完成写入壳本身(startRun variantMessageId),返回 { runId, messageId } 走 SSE。
+  app.post('/api/v2/messages/:id/swipe', async (c) => {
     const requestId = requestIdOf(c)
     const swiped = swipeMessage(deps.store, deps.bus, { messageId: c.req.param('id') as MessageId, now: nowIso() })
     if (!swiped.ok) return runtimeError(c, requestId, swiped.error)
-    return ok(c, requestId, { message: swiped.value }, 201)
+    const shell = swiped.value
+    const chat = loadChat(deps.store, shell.chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const resolved = resolveProvider(chat.value, await jsonBody(c))
+    if ('error' in resolved) return fail(c, requestId, resolved.error.code, resolved.error.message)
+    const controller = new AbortController()
+    const runId = uuidv7()
+    registry.track(runId, controller)
+    const started = startRun(
+      { store: deps.store, bus: deps.bus, snapshots: deps.snapshots, onUsageRecorded: () => deps.bus.flush() },
+      {
+        chatId: chat.value.id,
+        parentMessageId: (shell.parentMessageId ?? undefined) as string | undefined,
+        variantMessageId: shell.id,
+        adapter: resolved.adapter,
+        providerId: resolved.providerId,
+        model: resolved.model,
+        signal: controller.signal,
+        now: nowIso(),
+        runId,
+      },
+    )
+    if (!started.ok) {
+      registry.abort(runId) // 启动失败回收 track
+      return runtimeError(c, requestId, started.error)
+    }
+    return ok(c, requestId, { runId: started.value.runId, messageId: shell.id }, 201)
+  })
+
+  // §16–§23 删除:软删 + message.deleted;活跃指针回退最近未删祖先
+  app.delete('/api/v2/messages/:id', (c) => {
+    const requestId = requestIdOf(c)
+    const deleted = deleteMessage(deps.store, deps.bus, { messageId: c.req.param('id') as MessageId, now: nowIso() })
+    if (!deleted.ok) return runtimeError(c, requestId, deleted.error)
+    return ok(c, requestId, { messageId: c.req.param('id'), deletedAt: deleted.value.deletedAt, activeLeaf: deleted.value.fallbackLeafId ?? null })
+  })
+
+  // §21 分支:不复制聊天,只记录血缘位并切活跃指针(fork-and-continue)
+  app.post('/api/v2/chats/:id/branch', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    if (typeof body.fromMessageId !== 'string') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'fromMessageId 必填')
+    }
+    const branched = createBranch(deps.store, deps.bus, {
+      chatId: c.req.param('id') as ChatId,
+      fromMessageId: body.fromMessageId as MessageId,
+      name: typeof body.name === 'string' ? body.name : undefined,
+      now: nowIso(),
+    })
+    if (!branched.ok) return runtimeError(c, requestId, branched.error)
+    return ok(c, requestId, { branchId: branched.value.id, activeLeafId: branched.value.leafMessageId ?? null }, 201)
   })
 
   // §22 激活:leaf 指针唯一移动(变体切换/分支回退共用)
@@ -414,7 +582,6 @@ export function createApp(deps: ServerDeps): CreatedApp {
       hashes: snapshot.hashes,
       serialized: snapshot.serialized,
       diagnostics: snapshot.diagnostics,
-      authorityFingerprint: snapshot.authorityFingerprint,
     })
   })
 
@@ -436,9 +603,140 @@ export function createApp(deps: ServerDeps): CreatedApp {
       serialized: JSON.parse(row.serialized),
       hashes: JSON.parse(row.hashes),
       diagnostics: JSON.parse(row.diagnostics),
-      authorityFingerprint: row.authorityFingerprint,
       createdAt: row.createdAt,
     })
+  })
+
+  // ===== Inspector / Diff / Debug Export(S14/WP1.5;§107/§38 + 还账 #15)=====
+
+  /** prompt_snapshots 行 → PromptSnapshot 形状(ir 是权威段源,serialized 是发送原文) */
+  function loadSnapshotRow(snapshotId: string) {
+    const row = deps.store.db.select().from(promptSnapshots).where(eq(promptSnapshots.id, snapshotId)).get()
+    if (row === undefined) return undefined
+    return {
+      row,
+      snapshot: {
+        id: row.id,
+        chatId: row.chatId,
+        runId: row.runId ?? undefined,
+        messageId: row.messageId ?? undefined,
+        provider: row.provider,
+        model: row.model,
+        compilerVersion: row.compilerVersion,
+        ir: JSON.parse(row.ir),
+        cachePlan: JSON.parse(row.cachePlan),
+        serialized: JSON.parse(row.serialized),
+        hashes: JSON.parse(row.hashes),
+        diagnostics: JSON.parse(row.diagnostics),
+        createdAt: row.createdAt,
+      } as import('@whispertavern/contracts').PromptSnapshot,
+    }
+  }
+
+  // §107 Prompt Inspector API:run → snapshot + cachePlan + provider + usage + diagnostics + events
+  app.get('/api/v2/runs/:id/inspector', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) {
+      return fail(c, requestId, 'GENERATION_NOT_FOUND', `run 不存在: ${runId}`)
+    }
+    const loaded = loadSnapshotRow(run.snapshotId ?? '')
+    if (loaded === undefined) {
+      return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${String(run.snapshotId)}`)
+    }
+    const usageRow = deps.store.db
+      .select()
+      .from(generationsTable)
+      .where(eq(generationsTable.runId, runId))
+      .all()
+      .at(-1)
+    const events = deps.store.db
+      .select()
+      .from(eventsTable)
+      .where(and(eq(eventsTable.runId, runId), ne(eventsTable.durability, 'live')))
+      .orderBy(eventsTable.sequence)
+      .all()
+      .map((row) => ({
+        id: row.id,
+        type: row.eventType as RuntimeEvent['type'],
+        durability: row.durability as RuntimeEvent['durability'],
+        runId: row.runId ?? undefined,
+        sequence: row.sequence ?? 0,
+        timestamp: row.createdAt,
+        payload: JSON.parse(row.payload) as Record<string, unknown>,
+      }))
+    return ok(c, requestId, {
+      snapshot: loaded.snapshot,
+      cache: loaded.snapshot.cachePlan,
+      provider: { id: run.provider, model: run.model },
+      usage:
+        usageRow === undefined || usageRow.inputTokens === null || usageRow.outputTokens === null
+          ? undefined
+          : {
+              inputTokens: usageRow.inputTokens,
+              cachedInputTokens: usageRow.cachedTokens ?? 0,
+              outputTokens: usageRow.outputTokens,
+              source: usageRow.usageSource ?? 'estimated',
+            },
+      warnings: loaded.snapshot.diagnostics.filter((d) => d.level !== 'info'),
+      diagnostics: loaded.snapshot.diagnostics,
+      events,
+    })
+  })
+
+  // §38 Prompt Diff:相邻两轮快照对比(段级 kind + firstDivergence + tokenDelta + cacheBreak 启发式)
+  app.get('/api/v2/prompt-snapshots/:a/diff/:b', (c) => {
+    const requestId = requestIdOf(c)
+    const snapA = loadSnapshotRow(c.req.param('a'))
+    if (snapA === undefined) return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${c.req.param('a')}`)
+    const snapB = loadSnapshotRow(c.req.param('b'))
+    if (snapB === undefined) return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${c.req.param('b')}`)
+    const diff = diffSnapshots(snapA.snapshot, snapB.snapshot)
+    return ok(c, requestId, {
+      snapshotAId: snapA.snapshot.id,
+      snapshotBId: snapB.snapshot.id,
+      ...diff,
+    })
+  })
+
+  // 还账 #15:Sanitized Debug Export(默认 sanitized;密钥经 PV5 redact;bundle 可回放)
+  app.post('/api/v2/debug/export', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    const resourceType = body.resourceType
+    if (resourceType !== 'snapshot') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'resourceType 仅支持 snapshot(§60 debug 导出 P0 口径)')
+    }
+    const resourceId = typeof body.resourceId === 'string' ? body.resourceId : ''
+    const loaded = loadSnapshotRow(resourceId)
+    if (loaded === undefined) {
+      return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${resourceId}`)
+    }
+    const requested = typeof body.policy === 'object' && body.policy !== null ? (body.policy as Record<string, unknown>) : {}
+    const policy = resolvePolicy({
+      mode: requested.mode === 'full' ? 'full' : requested.mode === 'sanitized' ? 'sanitized' : undefined,
+      stripUserContent: typeof requested.stripUserContent === 'boolean' ? requested.stripUserContent : undefined,
+      anonymizeIds: typeof requested.anonymizeIds === 'boolean' ? requested.anonymizeIds : undefined,
+    })
+    // PV5 密钥表:全部 provider 的已存密钥进 redact(值本身不入 bundle,只做替换)
+    const secrets = deps.store.db
+      .select()
+      .from(providersTable)
+      .all()
+      .flatMap((row) => {
+        const config = JSON.parse(row.config) as { secretRef?: string }
+        if (config.secretRef === undefined) return []
+        const value = deps.secretStore.get(config.secretRef)
+        return value === undefined ? [] : [value]
+      })
+    const bundle = buildDebugBundle({
+      snapshot: loaded.snapshot,
+      policy,
+      secrets,
+      exportedAt: nowIso(),
+    })
+    return ok(c, requestId, bundle)
   })
 
   // ===== provider 配置与密钥(§152;密钥只写不读回,PV5/R-P0-6)=====
@@ -663,6 +961,67 @@ export function createApp(deps: ServerDeps): CreatedApp {
     return ok(c, requestId, { id, name, version: 1 }, 201)
   })
 
+  // S11(WP1.2):chat↔worldbook 绑定(§18 chat_worldbooks;激活层接线前提)
+  app.get('/api/v2/chats/:id/worldbooks', (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id') as ChatId
+    const rows = deps.store.db
+      .select()
+      .from(chatWorldbooks)
+      .where(eq(chatWorldbooks.chatId, chatId))
+      .orderBy(chatWorldbooks.orderIndex)
+      .all()
+    return ok(c, requestId, rows.map((r) => ({
+      worldbookId: r.worldbookId,
+      order: r.orderIndex,
+      scanDepthOverride: r.scanDepthOverride,
+      recursiveOverride: r.recursiveOverride,
+    })))
+  })
+
+  app.post('/api/v2/chats/:id/worldbooks', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id') as ChatId
+    const chat = loadChat(deps.store, chatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    const worldbookId = typeof body.worldbookId === 'string' ? body.worldbookId : ''
+    if (worldbookId === '') return fail(c, requestId, 'VALIDATION_ERROR', 'worldbookId 必填')
+    const wb = deps.store.db.select().from(worldbooksTable).where(eq(worldbooksTable.id, worldbookId)).get()
+    if (wb === undefined) return fail(c, requestId, 'WORLDBOOK_NOT_FOUND', `worldbook 不存在: ${worldbookId}`)
+    const existing = deps.store.db
+      .select()
+      .from(chatWorldbooks)
+      .where(and(eq(chatWorldbooks.chatId, chatId), eq(chatWorldbooks.worldbookId, worldbookId)))
+      .get()
+    if (existing !== undefined) return ok(c, requestId, { chatId, worldbookId, order: existing.orderIndex }, 200)
+    const order = typeof body.order === 'number' ? body.order : 0
+    const now = nowIso()
+    deps.store.db
+      .insert(chatWorldbooks)
+      .values({
+        chatId,
+        worldbookId,
+        orderIndex: order,
+        scanDepthOverride: typeof body.scanDepthOverride === 'number' ? body.scanDepthOverride : null,
+        recursiveOverride: body.recursiveOverride === true ? true : body.recursiveOverride === false ? false : null,
+        createdAt: now,
+      })
+      .run()
+    return ok(c, requestId, { chatId, worldbookId, order }, 201)
+  })
+
+  app.delete('/api/v2/chats/:id/worldbooks/:worldbookId', (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id') as ChatId
+    const worldbookId = c.req.param('worldbookId')
+    deps.store.db
+      .delete(chatWorldbooks)
+      .where(and(eq(chatWorldbooks.chatId, chatId), eq(chatWorldbooks.worldbookId, worldbookId)))
+      .run()
+    return ok(c, requestId, { chatId, worldbookId, unbound: true })
+  })
+
   app.get('/api/v2/presets', (c) => {
     const requestId = requestIdOf(c)
     const rows = deps.store.db.select().from(presetsTable).orderBy(desc(presetsTable.createdAt)).limit(100).all()
@@ -699,10 +1058,77 @@ export function createApp(deps: ServerDeps): CreatedApp {
     return ok(c, requestId, { id, name, version: 1 }, 201)
   })
 
+  // S12(WP1.3):ST 预设导入(§80–§81 prompts[] + prompt_order[] → .dgpreset)。
+  // 归一走 st-compat,落盘 .dgpreset 文件(事实源)+ presets 行(config=原生 JSON)+ v1 快照。
+  app.post('/api/v2/presets/import', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    if (typeof body.base64 !== 'string' || body.base64 === '') {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'base64(预设文件字节)必填')
+    }
+    let result
+    try {
+      result = importPreset(new Uint8Array(Buffer.from(body.base64, 'base64')), {
+        name: typeof body.name === 'string' && body.name !== '' ? body.name : undefined,
+      })
+    } catch (error) {
+      if (isPresetParseError(error)) return fail(c, requestId, 'VALIDATION_ERROR', error.message)
+      throw error
+    }
+    const presetId = persistPreset(deps, result.preset, result.report.asset.sourceFormat)
+    return ok(
+      c,
+      requestId,
+      {
+        preset: { id: presetId, name: result.preset.meta.name, segmentCount: result.preset.segments.length, version: 1 },
+        report: result.report,
+      },
+      201,
+    )
+  })
+
+  app.get('/api/v2/personas', (c) => {
+    const requestId = requestIdOf(c)
+    const rows = deps.store.db.select().from(personasTable).orderBy(desc(personasTable.createdAt)).limit(100).all()
+    return ok(c, requestId, rows.map((row) => ({ id: row.id, name: row.name, version: row.version })))
+  })
+
+  // S12(WP1.3):Persona 库创建(名称 + 描述 + 元数据)+ v1 快照(资产注册表口径)。
+  app.post('/api/v2/personas', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    const name = typeof body.name === 'string' ? body.name : ''
+    if (name === '') return fail(c, requestId, 'VALIDATION_ERROR', 'name 必填')
+    const id = uuidv7()
+    const now = nowIso()
+    const meta = typeof body.metadata === 'object' && body.metadata !== null ? (body.metadata as Record<string, unknown>) : {}
+    const description = typeof body.description === 'string' ? body.description : null
+    deps.store.db.insert(personasTable).values({
+      id,
+      name,
+      description,
+      metadata: JSON.stringify(meta),
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    const snapshot = JSON.stringify({ id, name, description, metadata: meta })
+    deps.store.db.insert(personaVersions).values({
+      id: uuidv7(),
+      personaId: id,
+      version: 1,
+      snapshot,
+      contentHash: sha256Hex(snapshot),
+      createdAt: now,
+    }).run()
+    return ok(c, requestId, { id, name, version: 1 }, 201)
+  })
+
   // —— 全局错误兜底(api-spec §7 信封;D2:对外只暴露一种归一化形式)——
   app.onError((error, c) => {
     const requestId = c.get('requestId') ?? `req_${uuidv7()}`
-    deps.logger?.('error', `request failed: ${requestId}`, String(error))
+    const message = error instanceof Error ? error.message : String(error)
+    deps.logger?.('error', `request failed: ${requestId}`, `${message}\n${error instanceof Error ? (error.stack ?? '') : ''}`)
     c.header('X-Request-ID', requestId)
     return c.json(
       { error: { code: 'PROVIDER_UNAVAILABLE', message: '内部错误(已记录)', retryable: false, requestId } },
@@ -715,6 +1141,56 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+/**
+ * §17 修订的"兄弟链"投影:同 variant_group 的全部未删兄弟(id + variantIndex,按 index 升序)。
+ * 无变体组的消息返回空数组——user 消息与单回复默认形态不变。
+ */
+function variantSiblings(
+  store: ServerDeps['store'],
+  message: { id: string; variantGroupId?: string },
+): { id: string; variantIndex: number | null }[] {
+  if (message.variantGroupId === undefined) return []
+  return store.db
+    .select({ id: messagesTable.id, variantIndex: messagesTable.variantIndex })
+    .from(messagesTable)
+    .where(and(eq(messagesTable.variantGroupId, message.variantGroupId), isNull(messagesTable.deletedAt)))
+    .orderBy(messagesTable.variantIndex)
+    .all()
+}
+
+/**
+ * §16 游标分页:活跃链(根→叶)上按 messageId 锚点裁剪。
+ * before=X → X 之前的消息(向上翻页);after=X → X 之后的消息(向下续读);
+ * limit 缺省 100。锚点不在链上 = VALIDATION_ERROR(400)。
+ */
+function pageMessages(
+  chain: readonly { id: string }[],
+  before: string | undefined,
+  after: string | undefined,
+  limitRaw: string | undefined,
+): { ok: true; value: readonly { id: string }[] } | { ok: false; error: string } {
+  if (before !== undefined && after !== undefined) {
+    return { ok: false, error: 'before 与 after 不可同时使用' }
+  }
+  let start = 0
+  let end = chain.length
+  if (before !== undefined) {
+    const idx = chain.findIndex((m) => m.id === before)
+    if (idx < 0) return { ok: false, error: `before 锚点不在活跃链上: ${before}` }
+    end = idx
+  }
+  if (after !== undefined) {
+    const idx = chain.findIndex((m) => m.id === after)
+    if (idx < 0) return { ok: false, error: `after 锚点不在活跃链上: ${after}` }
+    start = idx + 1
+  }
+  const limit = limitRaw === undefined ? 100 : Number.parseInt(limitRaw, 10)
+  if (!Number.isInteger(limit) || limit <= 0) {
+    return { ok: false, error: `limit 必须为正整数: ${String(limitRaw)}` }
+  }
+  return { ok: true, value: chain.slice(Math.max(start, end - limit), end) }
 }
 
 /**
@@ -801,6 +1277,43 @@ function persistWorldbook(
       createdAt: now,
     }).run()
   }
+  return id
+}
+
+/**
+ * 预设落盘 + 注册(决策 11 混合存储:.dgpreset 文件是事实源,presets 行是注册索引,
+ * config 列存原生 JSON 供 runtime builder 直接解析;v1 版本快照随建)。
+ */
+function persistPreset(deps: ServerDeps, preset: DgPreset, sourceFormat: string): string {
+  const id = uuidv7()
+  const now = nowIso()
+  const slug = preset.meta.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'preset'
+  const file = `presets/${slug}-${id.slice(0, 8)}.dgpreset.json`
+  mkdirSync(join(deps.assetsDir, 'presets'), { recursive: true })
+  writeFileSync(join(deps.assetsDir, file), JSON.stringify(preset, null, 2))
+
+  deps.store.db.insert(presetsTable).values({
+    id,
+    name: preset.meta.name,
+    description: null,
+    compilerMode: 'compatibility',
+    config: JSON.stringify(preset),
+    sourceFormat,
+    sourceData: JSON.stringify({ file }),
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  }).run()
+
+  const snapshot = JSON.stringify(preset)
+  deps.store.db.insert(presetVersions).values({
+    id: uuidv7(),
+    presetId: id,
+    version: 1,
+    snapshot,
+    contentHash: sha256Hex(snapshot),
+    createdAt: now,
+  }).run()
   return id
 }
 

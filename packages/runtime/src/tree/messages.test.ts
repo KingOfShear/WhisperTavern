@@ -261,7 +261,7 @@ describe('消息树(api-spec §16–§22 / database-schema §19–§22)', () => 
       now: NOW,
     })
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error.code).toBe('VALIDATION')
+    if (!result.ok) expect(result.error.code).toBe('VALIDATION_ERROR')
     store.close()
   })
 })

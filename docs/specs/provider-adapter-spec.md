@@ -4,9 +4,9 @@
 > **版本：** V1.2（2026-09-05 S4'-b 实施：§8.1 reasoning_delta 增 signature 载体（PV8/§11 签名块"缓存于消息组装侧"的归一流通道）；V1.1 S4'-a（开放点 2 落定、Capabilities 定稿）；V1.0.x 骨架期）
 > **状态：** Active（P0 范围定稿：§6–§8/§12/§14/§15 已随 S4'-a 实现落地并过契约测试；§16 缓存标记翻译随 WP2.4）
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Provider Adapter 模块规格（第六份模块规格）**
-> **决策锚点：** 技术总设计 §38 **决策 31**（含三岔分工修订：Provider 拆"归一契约"与"接入实务"两层）
-> **依赖：** 技术总设计 §18（Provider 层 / §18.2 Capabilities / §18.3 Usage）、[worldbook-cache-design.md](../worldbook-cache-design.md) §5（CachePlan→provider 原语翻译）、[agent-runtime-spec.md](./agent-runtime-spec.md)（C5 执行四层 / §49.1 反循环 / §115.1 审批）、[instruction-security-spec.md](./instruction-security-spec.md) §17–§18（分层投影与 capability）、[api-spec.md](./api-spec.md)（generation.* SSE 投影）
-> **分工声明：** 本规格管**归一契约**（请求/流式/工具/错误/usage 的统一形状与语义）；接入方式、自定义插头、代理、密钥存储等**生态实务**在 [technical-plan.md](../technical-plan.md) §5.1（决策 31 修订的分工边界，见 §3）。
+> **决策锚点：** 技术总设计 §38 **决策 30**（含三岔分工修订：Provider 拆"归一契约"与"接入实务"两层）
+> **依赖：** 技术总设计 §18（Provider 层 / §18.2 Capabilities / §18.3 Usage）、[worldbook-cache-design.md](../worldbook-cache-design.md) §5（CachePlan→provider 原语翻译）、[agent-runtime-spec.md](./agent-runtime-spec.md)（C5 执行四层 / §49.1 反循环 / §115.1 审批）、[api-spec.md](./api-spec.md)（generation.* SSE 投影）
+> **分工声明：** 本规格管**归一契约**（请求/流式/工具/错误/usage 的统一形状与语义）；接入方式、自定义插头、代理、密钥存储等**生态实务**在 [technical-plan.md](../technical-plan.md) §5.1（决策 30 修订的分工边界，见 §3）。
 
 ---
 
@@ -31,14 +31,14 @@ P0 验收（"三家流式聊天 + usage 入库"）的技术难点全部在本模
 适配器不做的事：
 ✗ 不修改内容字节（不 trim、不改写、不重排文本 delta）
 ✗ 不做裁剪 / 预算 / 放置决策（归 Compiler / CachePlanner）
-✗ 不理解角色 / 世界书 / 指令档位（instruction 层面仅按 §15 capability 透明投影）
+✗ 不理解角色 / 世界书 / 指令身份（仅按 §15 capability 透明投影，不做内容语义判断）
 ✗ 不做运行时重试决策（归 Operation 层，唯一例外见 PV2）
 ✗ 不做审批 / 权限判断（归 Agent Runtime）
 ```
 
 语义修改权唯一在 Prompt Compiler；协议翻译权唯一在 Adapter。两者之间没有第三层。
 
-# 3. 与三岔分工的关系（决策 31 修订）
+# 3. 与三岔分工的关系（决策 30 修订）
 
 决策 26 ② 原三岔把"Provider 实务"整体放 technical-plan §5。本规格落成后拆为两层：
 
@@ -203,7 +203,7 @@ P0 Chat 面恒为流式（非流式仅保留给内部批处理工具，不走本
 - 增量聚合：adapter 产出 `tool_call_delta`；**聚合为完整调用是 Runtime 的事**（对齐 agent-runtime §36.1–36.3：并行工具结果按 model order 回灌，聚合顺序同理按 index/model order，不按完成顺序）。
 - id 规则：OpenAI `call_*`、Anthropic `toolu_*` 原样保留；provider 不发 id 时 adapter 生成稳定 id（`tc_{index}`），并在契约测试锁定。
 - 回传格式：`role:'tool'`（OpenAI 系）/ `tool_result` block（Anthropic）/ functionResponse part（Gemini）——翻译由 adapter 做，组装由 Runtime 做。
-- 结果信任：回灌内容按 instruction-security §14 处理（adapter 无责，但不得在翻译层"顺手"改写结果文本）。
+- 结果信任：回灌内容按结果信任处理（adapter 无责，但不得在翻译层"顺手"改写结果文本）。
 
 # 11. 思考输出归一（PV8）
 
@@ -273,7 +273,6 @@ capabilities 来源三层（高→低）：用户手动覆盖 > 静态预设表�
 | structuredOutput | json_schema → json_mode → 提示词约束 + Runtime repair（§18.2 既有降级链） |
 | parallelToolCalls | 串行调用 |
 | usage 帧缺失（中转站常见） | §17.3 估算降级，标 `estimated` |
-| instructionLayers（决策 30 §18） | 缺省 'flat'，保守单层序列化 |
 
 # 16. 缓存标记翻译
 
@@ -361,11 +360,10 @@ T14 同 fixture 重复回放字节级一致（PV7）
 | 文档 | 同步点 | 时机 |
 |---|---|---|
 | technical-plan §5.1 | 已挂指向本规格（2026-09-05） | 已同步 |
-| technical-plan §7.2 | 三岔分工表述已修订（决策 31） | 已同步 |
+| technical-plan §7.2 | 三岔分工表述已修订（决策 30） | 已同步 |
 | shared-contracts-spec | §6 类型收编 `packages/contracts` | P0 实现期 |
-| technical-design §18.2 | ProviderCapabilities 为 adapter 声明的权威形状；instructionLayers 登记随实现 | 首个 adapter 落地 |
+| technical-design §18.2 | ProviderCapabilities 为 adapter 声明的权威形状 | 首个 adapter 落地 |
 | api-spec | generation.* SSE 投影口径复核（本规格 §19 映射）——✅ 2026-09-06 S6 复核:三层映射落地,bus 分档 + SSE sequence/续传实现 | 已同步 |
-| instruction-security-spec §18 | instructionLayers capability 探测落地 | P2 |
 
 # 23. 开放决策点（不阻塞 P0，实施期落定）
 
@@ -375,4 +373,4 @@ T14 同 fixture 重复回放字节级一致（PV7）
 
 ---
 
-*关联文档：[technical-design.md](../technical-design.md)（§18 / §38 决策 31）· [technical-plan.md](../technical-plan.md)（§5.1 接入实务 / §8.3 fixture 策略）· [worldbook-cache-design.md](../worldbook-cache-design.md) §5 · [agent-runtime-spec.md](./agent-runtime-spec.md) · [instruction-security-spec.md](./instruction-security-spec.md) · [api-spec.md](./api-spec.md) · [shared-contracts-spec.md](./shared-contracts-spec.md)*
+*关联文档：[technical-design.md](../technical-design.md)（§18 / §38 决策 30）· [technical-plan.md](../technical-plan.md)（§5.1 接入实务 / §8.3 fixture 策略）· [worldbook-cache-design.md](../worldbook-cache-design.md) §5 · [agent-runtime-spec.md](./agent-runtime-spec.md) · [api-spec.md](./api-spec.md) · [shared-contracts-spec.md](./shared-contracts-spec.md)*

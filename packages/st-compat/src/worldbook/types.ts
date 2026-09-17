@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import { WorldbookPositionSchema } from '@whispertavern/contracts'
+import {
+  WorldbookPositionSchema,
+  WORLDBOOK_SLOT_BY_ST_POSITION as ST_POSITION_TO_SLOT,
+  ST_POSITION_BY_SLOT as SLOT_TO_ST_POSITION,
+} from '@whispertavern/contracts'
+
+// 映射表单一真相源已上收 contracts(placement.ts, C4);此处仅为 st-compat / 服务端回库保留同名导出。
+export { ST_POSITION_TO_SLOT, SLOT_TO_ST_POSITION }
 
 /**
  * 原生 .dgworld 模型 —— technical-plan §5.3(格式真相源)。
@@ -14,23 +21,7 @@ import { WorldbookPositionSchema } from '@whispertavern/contracts'
  */
 
 // ===== 枚举映射表(ST 魔数 → 原生枚举)=====
-
-/** ST position 0-7 → 原生 slot(权威:st-reference-analysis §2 / world-info.js :855) */
-export const ST_POSITION_TO_SLOT = [
-  'before',
-  'after',
-  'anTop',
-  'anBottom',
-  'depth',
-  'emTop',
-  'emBottom',
-  'outlet',
-] as const
-
-/** slot → ST position 原值(回库用:database-schema §13 position 列要求存 ST 0-7 原值) */
-export const SLOT_TO_ST_POSITION: Record<(typeof ST_POSITION_TO_SLOT)[number], number> = Object.fromEntries(
-  ST_POSITION_TO_SLOT.map((slot, index) => [slot, index]),
-) as Record<(typeof ST_POSITION_TO_SLOT)[number], number>
+// 映射表单一真相源已上收 contracts(placement.ts, C4);此处仅为 st-compat / 服务端回库保留同名导出。
 
 /** ST selectiveLogic 0-3 → 原生 logic(database-schema §13 keyword_logic) */
 export const ST_SELECTIVE_LOGIC = ['andAny', 'andAll', 'notAny', 'notAll'] as const

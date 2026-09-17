@@ -5,7 +5,6 @@ import {
   StabilityClassSchema,
 } from './placement'
 import { PromptIRSchema, PromptSegmentSchema, SegmentSourceSchema, type PromptSegment } from './ir'
-import { InstructionMetadataSchema } from './instruction'
 
 /** 构造一个合法段(其余字段最小化),供变体替换 */
 function segment(overrides: Partial<PromptSegment>): PromptSegment {
@@ -76,22 +75,11 @@ describe('contracts/ir(Prompt IR)', () => {
     expect(SegmentSourceSchema.safeParse({ type: 'character' }).success).toBe(false)
   })
 
-  it('段缺省 instruction 时不阻断解析(缺省即推导,instruction-security §9)', () => {
-    const parsed = segment({})
-    expect(parsed.instruction).toBeUndefined()
-  })
-
-  it('段携带 instruction 元数据与 stabilityOverride 时 round-trip', () => {
-    const instruction = InstructionMetadataSchema.parse({
-      authority: 'character',
-      trust: 'semi_trusted',
-      scope: 'roleplay',
-    })
+  it('段携带 stabilityOverride 时 round-trip', () => {
     const parsed = roundTrip(
       PromptSegmentSchema,
-      segment({ instruction, stabilityOverride: 'session', id: 'worldbook:book1:entry:183' }),
+      segment({ stabilityOverride: 'session', id: 'worldbook:book1:entry:183' }),
     )
-    expect(parsed.instruction?.authority).toBe('character')
     expect(parsed.stabilityOverride).toBe('session')
   })
 

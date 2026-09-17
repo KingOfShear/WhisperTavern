@@ -302,7 +302,6 @@ describe('anthropic:capabilities(§15)与请求翻译', () => {
       reasoning: true,
       maxOutputTokens: 64000,
       systemRole: true,
-      instructionLayers: 'flat',
     })
     expect(a.capabilities('claude-3-5-sonnet').reasoning).toBe(false)
     const overridden = new AnthropicAdapter({

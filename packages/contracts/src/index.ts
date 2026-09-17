@@ -4,7 +4,6 @@
  * 模块清单(S2/WP0.2 落地,长期 §2 目录树在 P3+ 渐次归位):
  *   core         基础形状(Brand / Timestamp / Result / ID)
  *   placement    双 Placement + Stability + Zone(compiler-spec §12–§18)
- *   instruction  指令安全三元元数据(instruction-security §6–§9)
  *   ir           Prompt IR / Segment / Source / Role(compiler-spec §7–§11)
  *   diagnostics  诊断形状与 P0 码表(compiler-spec §70–§71)
  *   snapshot     Snapshot / 八区哈希 / CachePlan / 序列化(§54–§68)
@@ -18,7 +17,6 @@
  */
 export * from './core'
 export * from './placement'
-export * from './instruction'
 export * from './ir'
 export * from './diagnostics'
 export * from './snapshot'

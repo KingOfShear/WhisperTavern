@@ -12,8 +12,6 @@ import type { DeepReadonly } from '../ir/segment'
  * - 框架化字段 = (segmentId, role, content) + 区内 IR 数组序,netstring 长度前缀
  *   防分隔符碰撞。语义位(semanticPlacement)的变化若影响物理序,必须反映为
  *   IR 数组序变化——那是 Compiler 管线(S4,§93/§94)的职责。
- * - 指令元数据**永不进入字节**(instruction-security §17.1 / §5.5 不变量 3),
- *   因此不参与八区哈希;元数据审计走 authorityFingerprint(§19.1)。
  */
 
 /** §18 默认区序(Cache Serialization 默认策略,非酒馆语义槽位) */

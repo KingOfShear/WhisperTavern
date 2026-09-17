@@ -1,14 +1,9 @@
-import type { InstructionAuthority } from '@whispertavern/contracts'
 import type { DgWorldbook, StEntryDialect } from './types'
 
 /**
  * Worldbook Import Compatibility Report(p1-plan R-P1-6 出场要件)。
  * 与卡报告同源纪律:**只含字段路径与档位结论,不含条目内容**(内容属用户资产,
  * 随 .dgworld 落盘,不随报告外泄)。
- *
- * 档位断言(R-P1-3/I1):条目一律按来源推导为 world(instruction-security §10
- * worldbook entry 行)——导入层没有任何"内容识别档位"路径,条目正文自称系统
- * 提示/平台指令不影响本表;档位生效在 Compiler。
  */
 
 export type WorldbookSourceFormat = 'st-lorebook-legacy' | 'st-lorebook-modern' | 'st-embedded'
@@ -28,8 +23,6 @@ export interface WorldbookImportReport {
   fieldMap: { from: string; to: string }[]
   /** 未建模字段路径(值在 entry.compat,导出回写) */
   compatFields: string[]
-  /** 档位投影(仅按来源;I1:内容自述无效) */
-  roleAssignments: { path: string; authority: InstructionAuthority }[]
   warnings: string[]
 }
 
@@ -70,11 +63,4 @@ export const WORLDBOOK_FIELD_MAP: readonly { from: string; to: string }[] = [
   { from: 'outletName', to: 'placement.outletName' },
   { from: 'depth', to: 'placement.depth' },
   { from: 'role', to: 'placement.role' },
-]
-
-/** 世界书条目 → world 档(§10 worldbook entry 行;整本书无更高档来源) */
-export const WORLD_ROLE_ASSIGNMENTS: readonly { path: string; authority: InstructionAuthority }[] = [
-  { path: 'entries[].content', authority: 'world' },
-  { path: 'entries[].title', authority: 'world' },
-  { path: 'entries[].compat.*', authority: 'world' },
 ]

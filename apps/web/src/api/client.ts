@@ -1,4 +1,10 @@
-import type { ApiErrorBody, ApiEnvelope, MessageDto, PromptSnapshotDto, ProviderDto } from '@whispertavern/api-types'
+import type {
+  ApiErrorBody,
+  ApiEnvelope,
+  MessageWithVariantsDto,
+  PromptSnapshotDto,
+  ProviderDto,
+} from '@whispertavern/api-types'
 
 /**
  * HTTP 客户端薄壳(api-spec §6/§7):信封解包 + 错误归一。
@@ -41,13 +47,33 @@ export const api = {
   createChat: (body: { title?: string; systemPrompt?: string }) =>
     apiRequest<{ id: string; title: string | null }>('/api/v2/chats', { method: 'POST', body: JSON.stringify(body) }),
 
-  listMessages: (chatId: string) =>
-    apiRequest<MessageDtoLite[]>(`/api/v2/chats/${chatId}/messages`),
+  listMessages: (chatId: string, query = '') =>
+    apiRequest<MessageWithVariantsDto[]>(`/api/v2/chats/${chatId}/messages${query}`),
 
   createMessage: (chatId: string, body: { parentId?: string; role: 'user' | 'system' | 'narrator'; content: string }) =>
     apiRequest<{ message: MessageDtoLite; activeLeaf: string }>(`/api/v2/chats/${chatId}/messages`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  /** §19 编辑:新建变体,原消息内容永不动 */
+  editMessage: (messageId: string, content: string) =>
+    apiRequest<MessageDtoLite>(`/api/v2/messages/${messageId}/edit`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  /** 软删 + message.deleted;活跃指针回退最近未删祖先 */
+  deleteMessage: (messageId: string) =>
+    apiRequest<{ messageId: string; deletedAt: string; activeLeaf: string | null }>(`/api/v2/messages/${messageId}`, {
+      method: 'DELETE',
+    }),
+
+  /** §21 分支:不复制聊天,只记录血缘位并切活跃指针 */
+  createBranch: (chatId: string, fromMessageId: string) =>
+    apiRequest<{ branchId: string; activeLeafId: string | null }>(`/api/v2/chats/${chatId}/branch`, {
+      method: 'POST',
+      body: JSON.stringify({ fromMessageId }),
     }),
 
   generate: (chatId: string, body: { providerId?: string; model?: string; sampling?: { maxOutputTokens: number } }) =>
@@ -87,9 +113,16 @@ export const api = {
       body: JSON.stringify({ messageId }),
     }),
 
-  swipe: (messageId: string) =>
-    apiRequest<{ message: MessageDtoLite }>(`/api/v2/messages/${messageId}/swipe`, { method: 'POST' }),
+  /** §20 swipe:建壳 + 触发生成填充变体(S13);返回 runId/messageId,流走 SSE */
+  swipe: (messageId: string, body: { providerId?: string; model?: string } = {}) =>
+    apiRequest<{ runId: string; messageId: string }>(`/api/v2/messages/${messageId}/swipe`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 /** 列表面(裁剪自 MessageDto;完整形状见 api-types) */
-export type MessageDtoLite = Pick<MessageDto, 'id' | 'chatId' | 'role' | 'content' | 'variantGroupId' | 'variantIndex'>
+export type MessageDtoLite = Pick<
+  MessageWithVariantsDto,
+  'id' | 'chatId' | 'role' | 'content' | 'variantGroupId' | 'variantIndex' | 'variants'
+>

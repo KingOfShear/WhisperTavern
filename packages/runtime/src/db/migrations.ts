@@ -336,6 +336,85 @@ CREATE TABLE worldbook_entry_versions (
 );
 `
 
+/**
+ * v5 世界书运行时状态 + 激活审计(database-schema §15/§16,WP1.2 Activation Engine 有状态化)。
+ * 口径:worldbook_entries 是资产读模型(§13);本组表存 Runtime State(sticky/cooldown/delay/
+ * cache lifecycle,§27/§28 明确"sticky 属 Runtime State 而非 Prompt Segment"）。
+ * cache_state 取值:unseen|fresh|stable|stale|retired(§29);P2 前恒 unseen(毕业/退休归 WP2.2)。
+ */
+const V5_WORLDBOOK_RUNTIME = /* sql */ `
+CREATE TABLE worldbook_runtime_entries (
+    id                      TEXT PRIMARY KEY,
+
+    chat_id                 TEXT NOT NULL,
+    worldbook_entry_id      TEXT NOT NULL,
+
+    cache_state             TEXT NOT NULL DEFAULT 'unseen',
+    physical_order          INTEGER,
+
+    last_activated_at       TEXT,
+    last_activation_seq     INTEGER,
+
+    sticky_until_seq        INTEGER,
+    cooldown_until_seq      INTEGER,
+    delay_until_seq         INTEGER,
+
+    activation_count        INTEGER NOT NULL DEFAULT 0,
+
+    content_hash            TEXT,
+
+    updated_at              TEXT NOT NULL,
+
+    UNIQUE(chat_id, worldbook_entry_id)
+);
+
+CREATE TABLE worldbook_activations (
+    id                      TEXT PRIMARY KEY,
+
+    chat_id                 TEXT NOT NULL,
+    run_id                  TEXT,
+
+    worldbook_entry_id      TEXT NOT NULL,
+
+    activated               INTEGER NOT NULL,
+
+    reason                  TEXT,
+    matched_keywords        TEXT NOT NULL DEFAULT '[]',
+    source_message_ids      TEXT NOT NULL DEFAULT '[]',
+
+    score                   REAL,
+
+    activation_seq          INTEGER NOT NULL,
+
+    created_at              TEXT NOT NULL
+);
+
+CREATE INDEX idx_wb_runtime_chat ON worldbook_runtime_entries(chat_id);
+CREATE INDEX idx_wb_activations_chat ON worldbook_activations(chat_id);
+`
+
+/**
+ * v6 chat↔worldbook 绑定(WP1.2 激活层接线前提;database-schema §18 chat_worldbooks)。
+ * 主键 (chat_id, worldbook_id);scan_depth_override / recursive_override = NULL 时
+ * 跟随 worldbooks 表默认。条目级运行时状态不在此(归 worldbook_runtime_entries §15)。
+ */
+const V6_CHAT_WORLDBOOKS = /* sql */ `
+CREATE TABLE chat_worldbooks (
+    chat_id                 TEXT NOT NULL,
+    worldbook_id            TEXT NOT NULL,
+
+    order_index             INTEGER NOT NULL DEFAULT 0,
+    scan_depth_override     INTEGER,
+    recursive_override      INTEGER,
+
+    created_at              TEXT NOT NULL,
+
+    PRIMARY KEY (chat_id, worldbook_id)
+);
+
+CREATE INDEX idx_chat_worldbooks_chat ON chat_worldbooks(chat_id);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -360,5 +439,17 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'p1-worldbook-entries',
     sql: V4_WORLDBOOK_ENTRIES,
     checksum: sha256Hex(V4_WORLDBOOK_ENTRIES),
+  },
+  {
+    version: 5,
+    name: 'p1-worldbook-runtime-state',
+    sql: V5_WORLDBOOK_RUNTIME,
+    checksum: sha256Hex(V5_WORLDBOOK_RUNTIME),
+  },
+  {
+    version: 6,
+    name: 'p1-chat-worldbook-binding',
+    sql: V6_CHAT_WORLDBOOKS,
+    checksum: sha256Hex(V6_CHAT_WORLDBOOKS),
   },
 ]

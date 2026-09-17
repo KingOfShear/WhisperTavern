@@ -1,15 +1,12 @@
 import { z } from 'zod'
 import { PromptRoleSchema, SegmentSourceSchema } from './ir'
 import { SemanticPlacementSchema, StabilityClassSchema, PromptZoneNameSchema } from './placement'
-import { InstructionMetadataSchema } from './instruction'
 
 /**
  * Compiler 对外输入契约 —— compiler-spec §88(Prompt Contribution API)、§72
  * (CompileMode)、§101(Compile Trace)的收编落地。
  *
- * 铁律:Plugin/Agent 不直接修改 Prompt,只提交 Contribution(§88);
- * instruction 缺省时 Compiler 按 instruction-security §10 默认推导表投影
- * (缺省推导 = 零字节差异,决策 30)。
+ * 铁律:Plugin/Agent 不直接修改 Prompt,只提交 Contribution(§88)。
  */
 
 /** 贡献段载荷:内容 + 角色 + 缓存分区声明。tokenCount 缺省由本地估算器填充(§52) */
@@ -29,8 +26,8 @@ export const PromptContributionSegmentSchema = z.object({
 export type PromptContributionSegment = z.infer<typeof PromptContributionSegmentSchema>
 
 /**
- * Prompt Contribution(compiler-spec §88 + instruction-security §9 的 instruction
- * 扩展位)。id 必须稳定(assetId + logicalPath,§9),禁 randomUUID。
+ * Prompt Contribution(compiler-spec §88)。id 必须稳定(assetId + logicalPath,
+ * §9),禁 randomUUID。
  */
 export const PromptContributionSchema = z.object({
   id: z.string().min(1),
@@ -39,8 +36,6 @@ export const PromptContributionSchema = z.object({
   /** 冲突裁决优先级(§89);不参与排序键(§93 用 placement order) */
   priority: z.number().int(),
   semanticPlacement: SemanticPlacementSchema,
-  /** 缺省 → §10 来源推导;显式提供仅限 I2 三条合法路径(用户操作/资产声明/内建段) */
-  instruction: InstructionMetadataSchema.optional(),
 })
 export type PromptContribution = z.infer<typeof PromptContributionSchema>
 

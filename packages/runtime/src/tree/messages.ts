@@ -15,7 +15,7 @@ import {
 import { eq } from 'drizzle-orm'
 import type { EventBus } from '../events/bus'
 import type { WhisperTavernDb } from '../db/database'
-import { chatBranches, chats, messages } from '../db/schema'
+import { chatBranches, chatWorldbooks, chats, messages, promptSnapshots, runs, worldbookActivations, worldbookRuntimeEntries } from '../db/schema'
 import { uuidv7 } from '../util/id'
 
 /**
@@ -164,13 +164,71 @@ export function editMessage(
   return createVariant(store, bus, { ...input, kind: 'edited' })
 }
 
-/** §20/§22 swipe:同 variant_group 新建兄弟(空内容,由生成填充);S6 将其串接 dispatchGeneration */
+/**
+ * §20/§22 swipe:同 variant_group 新建兄弟(空内容,由生成填充);S13 起由 server 路由
+ * 串接 startRun 完成填充。§20"如果该消息是 assistant"——只允许 assistant/character
+ * (RP 语义回复角色),user/system 消息拒绝。
+ */
 export function swipeMessage(
   store: WhisperTavernDb,
   bus: EventBus,
   input: { messageId: MessageId; now: Timestamp },
 ): OpResult<Message> {
+  const source = loadMessage(store, input.messageId)
+  if (!source.ok) return source
+  if (source.value.role !== 'assistant' && source.value.role !== 'character') {
+    return opError('VALIDATION_ERROR', `swipe 只适用于 assistant/character 消息(§20): ${source.value.role}`)
+  }
   return createVariant(store, bus, { ...input, kind: 'swiped' })
+}
+
+/**
+ * S13(WP1.4)删除:软删(deleted_at 置位,事实行保留,database-schema §19)+ message.deleted。
+ * 活跃指针若落在被删消息上则回退到最近未删祖先(§21:leaf 是唯一活跃指针,不能悬空);
+ * 历史链载入时跳过已删消息(见 loadActiveChain),被删消息的子树不连带删除(分支语义保留)。
+ */
+export function deleteMessage(
+  store: WhisperTavernDb,
+  bus: EventBus,
+  input: { messageId: MessageId; now: Timestamp },
+): OpResult<{ deletedAt: Timestamp; fallbackLeafId: MessageId | undefined }> {
+  const loaded = loadMessage(store, input.messageId)
+  if (!loaded.ok) return loaded
+  if (loaded.value.deletedAt !== undefined) {
+    return { ok: true, value: { deletedAt: loaded.value.deletedAt, fallbackLeafId: undefined } } // 幂等
+  }
+  const chatId = loaded.value.chatId as ChatId
+  const leafBefore = activeLeafId(store, chatId)
+  store.db.transaction(() => {
+    store.db.update(messages).set({ deletedAt: input.now, updatedAt: input.now }).where(eq(messages.id, input.messageId)).run()
+    // 活跃指针在删除目标上(或其已删后代链上)→ 回退到最近未删祖先
+    let fallback: MessageId | undefined
+    if (leafBefore !== undefined && ancestorChain(store, leafBefore as MessageId).includes(input.messageId)) {
+      for (const id of ancestorChain(store, leafBefore as MessageId)) {
+        const row = store.db.select({ deletedAt: messages.deletedAt }).from(messages).where(eq(messages.id, id)).get()
+        if (id !== input.messageId && row?.deletedAt == null) {
+          fallback = id as MessageId
+          break
+        }
+      }
+      if (fallback !== undefined) {
+        store.db
+          .update(chatBranches)
+          .set({ leafMessageId: fallback, updatedAt: input.now })
+          .where(eq(chatBranches.id, activeBranchOrThrow(store, chatId)))
+          .run()
+      }
+    }
+  })
+  bus.publish({
+    type: 'message.deleted',
+    aggregateType: 'message',
+    aggregateId: input.messageId,
+    timestamp: input.now,
+    payload: { chatId, messageId: input.messageId },
+  })
+  const leafAfter = activeLeafId(store, chatId)
+  return { ok: true, value: { deletedAt: input.now, fallbackLeafId: leafAfter as MessageId | undefined } }
 }
 
 function createVariant(
@@ -255,7 +313,7 @@ export function createBranch(
   const fork = loadMessage(store, input.fromMessageId)
   if (!fork.ok) return fork
   if (fork.value.chatId !== input.chatId) {
-    return opError('VALIDATION', 'fromMessageId 不属于该 chat')
+    return opError('VALIDATION_ERROR', 'fromMessageId 不属于该 chat')
   }
   const active = activeBranch(store, input.chatId)
   if (!active.ok) return active
@@ -319,7 +377,7 @@ export function activateMessage(
   const target = loadMessage(store, input.messageId)
   if (!target.ok) return target
   if (target.value.chatId !== input.chatId) {
-    return opError('VALIDATION', 'messageId 不属于该 chat')
+    return opError('VALIDATION_ERROR', 'messageId 不属于该 chat')
   }
   const chain = ancestorChain(store, input.messageId)
 
@@ -361,6 +419,61 @@ export function activateMessage(
     payload: { action: 'activate_leaf', messageId: input.messageId, branchId: branch.id },
   })
   return { ok: true, value: { branchId: branch.id, activeLeafId: input.messageId } }
+}
+
+/**
+ * §15 DELETE chat:默认软删(deleted_at 置位,§15"默认: soft delete");
+ * purge=true 彻底删除(§15"彻底删除")——chat 本行先受 FK 约束的子表全清:
+ * messages / chat_branches / runs / prompt_snapshots 四表 REFERENCES chats;
+ * 无 FK 的从属行(生成记录、chat↔worldbook 绑定、世界书运行时态与审计)一并清,
+ * 不留孤儿。发 chat.updated(action=deleted|purged)——§5.4 无 chat.deleted 事件,目录不私增名。
+ */
+export function deleteChat(
+  store: WhisperTavernDb,
+  bus: EventBus,
+  input: { chatId: ChatId; purge: boolean; now: Timestamp },
+): OpResult<boolean> {
+  const chat = loadChat(store, input.chatId)
+  if (!chat.ok) return chat
+  if (input.purge) {
+    store.db.transaction(() => {
+      // 删除顺序随 FK 拓扑:chat_branches(root/leaf/fork → messages)必须先于 messages;
+      // runs / prompt_snapshots(→ chats)先于 chats 本行。
+      store.db.delete(chatBranches).where(eq(chatBranches.chatId, input.chatId)).run()
+      store.db.delete(messages).where(eq(messages.chatId, input.chatId)).run()
+      // generations 无 chat_id 列(§51:按 run 关联)——先删生成记录再删 runs(FK → chats)
+      store.sqlite
+        .prepare('DELETE FROM generations WHERE run_id IN (SELECT id FROM runs WHERE chat_id = ?)')
+        .run(input.chatId)
+      store.db.delete(runs).where(eq(runs.chatId, input.chatId)).run()
+      store.db.delete(promptSnapshots).where(eq(promptSnapshots.chatId, input.chatId)).run()
+      store.db.delete(chatWorldbooks).where(eq(chatWorldbooks.chatId, input.chatId)).run()
+      store.db.delete(worldbookRuntimeEntries).where(eq(worldbookRuntimeEntries.chatId, input.chatId)).run()
+      store.db.delete(worldbookActivations).where(eq(worldbookActivations.chatId, input.chatId)).run()
+      store.db.delete(chats).where(eq(chats.id, input.chatId)).run()
+    })
+    bus.publish({
+      type: 'chat.updated',
+      aggregateType: 'chat',
+      aggregateId: input.chatId,
+      timestamp: input.now,
+      payload: { action: 'purged' },
+    })
+  } else {
+    store.db
+      .update(chats)
+      .set({ deletedAt: input.now, updatedAt: input.now })
+      .where(eq(chats.id, input.chatId))
+      .run()
+    bus.publish({
+      type: 'chat.updated',
+      aggregateType: 'chat',
+      aggregateId: input.chatId,
+      timestamp: input.now,
+      payload: { action: 'deleted' },
+    })
+  }
+  return { ok: true, value: input.purge }
 }
 
 // —— 查询与映射 ——

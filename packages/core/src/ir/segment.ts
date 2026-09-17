@@ -1,4 +1,4 @@
-import { PromptSegmentSchema, type InstructionMetadata, type PromptIR, type PromptSegment } from '@whispertavern/contracts'
+import { PromptSegmentSchema, type PromptIR, type PromptSegment } from '@whispertavern/contracts'
 
 /**
  * 不可变性保证 —— p0-plan S3 任务 1(总设计 §7:core 纯 TS 无 IO)。
@@ -49,11 +49,4 @@ export function createPromptSegment(
 /** IR 构造器:段逐一冻结后整体冻结(§5:IR 是后续一切哈希的事实源) */
 export function createPromptIR(ir: DeepReadonly<PromptIR>): DeepReadonly<PromptIR> {
   return deepFreeze(ir)
-}
-
-/** 指令元数据构造器(instruction 元数据随段冻结,authorityFingerprint 的输入) */
-export function createInstructionMetadata(
-  metadata: DeepReadonly<InstructionMetadata>,
-): DeepReadonly<InstructionMetadata> {
-  return deepFreeze(metadata)
 }

@@ -49,13 +49,12 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
 |---|---|---|
 | `core.ts` | Brand（zod `$brand` 投影）/ Timestamp / Versioned / EntityBase / ImmutableRecord / Correlated / Result / ApplicationError / NormalizedScore；P0 业务 ID 九枚（User/Chat/Message/ChatBranch/Snapshot/Run/Character/Persona/Preset） | 本节基础形状；database-schema §3（UUIDv7）/ §4 |
 | `placement.ts` | SemanticPlacement（5 变体，worldbook position 保留 ST 拼写 anTop/emTop…）/ CachePlacement（7 区）/ StabilityClass（5 级）/ PromptZoneName | compiler-spec §12–§18 |
-| `instruction.ts` | InstructionAuthority（12 档）+ AUTHORITY_ORDER 全序 / Trust（3）/ Scope（5）/ InstructionMetadata | instruction-security-spec §6–§9 |
-| `ir.ts` | PromptRole / SegmentSource（13 变体）/ PromptSegment（含 §17 stabilityOverride 与 instruction 扩展位）/ PromptZone / PromptIR | compiler-spec §7–§11；instruction-security §9 |
+| `ir.ts` | PromptRole / SegmentSource（13 变体）/ PromptSegment（含 §17 stabilityOverride）/ PromptZone / PromptIR | compiler-spec §7–§11 |
 | `diagnostics.ts` | Diagnostic / P0 码表 7 码（开放联合，新码须先进 compiler-spec §71 注册表） | compiler-spec §70–§71；p0-plan R-P0-1/R-P0-3 |
-| `snapshot.ts` | CacheCheckpoint / CacheBreakReason（14 变体）/ CachePlan / SerializedPart / SerializedPrompt（含 §52 `tokenCountMode`）/ PromptHashes（八区）/ PromptSnapshot（含 instruction-security §19.1 `authorityFingerprint`） | compiler-spec §54–§59、§62–§68 |
-| `provider.ts` | ProviderErrorCode（14）/ ProviderError / ProviderMessage / ProviderUsage / ProviderStreamEvent（7 类）/ ProviderChatRequest / **ProviderCapabilities（§18.2 全形定稿 + instructionLayers 登记点，WP0.5）** / ProviderAdapter | provider-adapter-spec §6/§7/§8.1/§12/§15/§17.1 |
+| `snapshot.ts` | CacheCheckpoint / CacheBreakReason（14 变体）/ CachePlan / SerializedPart / SerializedPrompt（含 §52 `tokenCountMode`）/ PromptHashes（八区）/ PromptSnapshot | compiler-spec §54–§59、§62–§68 |
+| `provider.ts` | ProviderErrorCode（14）/ ProviderError / ProviderMessage / ProviderUsage / ProviderStreamEvent（7 类）/ ProviderChatRequest / **ProviderCapabilities（§18.2 全形定稿，WP0.5）** / ProviderAdapter | provider-adapter-spec §6/§7/§8.1/§12/§15/§17.1 |
 | `chat.ts` | MessageRole（6 值）/ Chat / Message / ChatBranch（含血缘位） | database-schema §17/§19/§21/§22；本规格 §3（C3 映射） |
-| `compiler.ts` | PromptContribution（§88 + instruction 扩展位）/ CompileMode（§72 全集注册）/ CompileTrace（§101） | compiler-spec §88/§72/§101；instruction-security §9 |
+| `compiler.ts` | PromptContribution（§88）/ CompileMode（§72 全集注册）/ CompileTrace（§101） | compiler-spec §88/§72/§101 |
 
 ## 2.2 Schema 同源机制（WP0.2 定案）
 
@@ -71,14 +70,13 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
 | `SerializedPart` | role/content 已知键 + catchall 未知键 | compiler-spec §63 实现（WP0.4） |
 | `CachePlan.providerStrategy` | `unknown?`（P0 CachePlan 恒空,R-P0-4） | WP2.4 缓存标记翻译 |
 | `PromptMetadata` | 开放记录；**确定性红线：禁 wall-clock/随机值进 IR**（参与哈希） | §102 编译结果示例落定（WP0.4+） |
-| `InstructionMetadata.registeredBy` | `z.custom<SegmentSource>` passthrough（Compiler 内部构造,非外部输入） | 类型单一来源保持,不单独 schema 化 |
 
 ## 2.4 C1–C4 自查（WP0.2）
 
 - **C1 事件命名**：contracts 不定义任何 §5.4 事件名。`CacheBreakReason` 的 SCREAMING type 值是 compiler-spec §58 的**诊断标签**（非事件名），按原文保留。
 - **C2 包结构**：api-types 已建壳并声明 `workspace:*` 反向依赖（投影约定写入其入口 TSDoc：type-only、禁止手写第二套形状）；contracts 自身零 IO、零工作区依赖（ESLint `no-restricted-imports` 锁定 node:* 与 @whispertavern/*）。
 - **C3 命名映射**：chat.ts 不引入 Session/Turn（P0 无此面）；`Conversation = chats` 别名以注释承记；`MessageRole.character ≠ assistant` 落 schema 并有测试锁定；messages 不设 is_active（活跃指针唯一来源 = chats.active_branch_id → chat_branches.leaf_message_id）。
-- **C4 去重**：Run/Attempt/StepRun 等执行形状未在 contracts 重造（P0 无消费面，引用规则见 §4）；authority/trust/scope 全项目仅 instruction.ts 一处。
+- **C4 去重**：Run/Attempt/StepRun 等执行形状未在 contracts 重造（P0 无消费面，引用规则见 §4）。
 
 ---
 
@@ -109,6 +107,16 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
   - `AttentionState{ focus: user|environment|self|other, focusTargetId?, strength }`；`BehaviorState{ posture?, location?, activity?, mode: passive|responsive|active }`；`CharacterGoal{ id, type: immediate|short_term|long_term, description, priority, status: active|paused|completed|abandoned }`。
 - **RelationshipState** = `relationship_states`（§29.4）契约：`{ conversationId, sourceCharacterId, targetId, targetType: user|character, trust, affection, familiarity, tension, intimacy, dependency, hostility, revision }`；**有向 A→B，禁 A↔B 作唯一存储**，User→Character 与 Character→User 分别（evaluation-engine §5）。
 - **WorldState**：`{ worldId, conversationId, revision, time?, location?, facts[], activeEvents[] }`；`WorldFact{ id, key, value, source: FactSource, confidence? }`。
+
+## 5.1 Chat ↔ Worldbook 绑定
+
+Chat 与 Worldbook 为多对多绑定（WP1.2 激活层接线前提）。契约类型 `ChatWorldbookBinding`
+（contracts `chat.ts`）：`{ chatId, worldbookId, order, scanDepthOverride, recursiveOverride, createdAt }`。
+
+- `order`：同 chat 内多书排序，影响 freshWB 拼接顺序与激活优先级。
+- `scanDepthOverride` / `recursiveOverride`：`NULL` = 跟随 `worldbooks` 表默认（`scan_depth` / `recursive`）。
+- 条目级运行时状态（sticky/cooldown/delay/cache lifecycle）**不在此**——归 `worldbook_runtime_entries`（database-schema §15）。
+- ID 契约主键 = `(chatId, worldbookId)`（database-schema §18 `chat_worldbooks`）。
 
 ---
 
@@ -162,7 +170,7 @@ ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/Memor
 
 - **单测 30 条全绿**（contracts 8 文件）：Zod round-trip（IR/Snapshot/Provider/chat 全量）、
   branded ID 不可裸 string 互换（@ts-expect-error 编译期锁定）、枚举穷尽性
-  （authority 12 档 / 错误码 14 / 流式事件 7 类 / CachePlacement 7 区 / MessageRole 6 值）。
+  （错误码 14 / 流式事件 7 类 / CachePlacement 7 区 / MessageRole 6 值）。
 - **依赖方向硬约束**：ESLint `no-restricted-imports` 使 contracts 引用 `node:*` 或
   任何 `@whispertavern/*` 直接 lint 红（§1 依赖方向的机械执行）。
 - **收编闭环**：provider-adapter §6/§7 草案自 packages/adapters 临时占位收编入

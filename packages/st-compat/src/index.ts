@@ -12,7 +12,6 @@ export type {
 } from './card/types'
 export { readCardFromCharx, type CharxContents } from './card/charx'
 export {
-  CARD_ROLE_ASSIGNMENTS,
   type CardImportResult,
   type ImportReport,
   type SourceFormat,
@@ -46,7 +45,6 @@ export {
 } from './worldbook/types'
 export {
   WORLDBOOK_FIELD_MAP,
-  WORLD_ROLE_ASSIGNMENTS,
   type EntryContainer,
   type WorldbookImportReport,
   type WorldbookImportResult,
@@ -61,3 +59,28 @@ export {
   toStEntry,
   type ImportWorldbookOptions,
 } from './worldbook/normalize'
+
+// ===== 预设映射(S12 / WP1.3;technical-plan §5.5 + compiler-spec §80–§81)=====
+export type {
+  DgPreset,
+  DgPresetSegment,
+  DgPresetSlot,
+  DgPresetPlacement,
+  StPresetRoot,
+  StPresetSegment,
+} from './preset/types'
+export { ST_MARKER_TO_SLOT } from './preset/types'
+export {
+  PRESET_FIELD_MAP,
+  type PresetImportReport,
+  type PresetImportResult,
+  type PresetSourceFormat,
+} from './preset/report'
+export {
+  PresetParseError,
+  importPreset,
+  importPresetFromJson,
+  isPresetParseError,
+  toStPreset,
+  type ImportPresetOptions,
+} from './preset/normalize'

@@ -31,6 +31,14 @@ export interface ChatStore {
   createProvider(body: Parameters<typeof api.createProvider>[0]): Promise<void>
   toggleSnapshot(): void
   switchVariant(messageId: string): Promise<void>
+  /** §20 swipe:建壳 + 触发生成填充变体(S13);流式进度走 streaming 气泡 */
+  swipe(messageId: string): Promise<void>
+  /** §19 编辑:新建变体,原消息内容永不动 */
+  editMessage(messageId: string, content: string): Promise<void>
+  /** 软删消息(活跃指针回退最近未删祖先) */
+  deleteMessage(messageId: string): Promise<void>
+  /** §21 从某消息 fork 新分支(不复制聊天) */
+  branchFrom(messageId: string): Promise<void>
   clearError(): void
   setSettingsOpen(open: boolean): void
 }
@@ -143,16 +151,76 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  swipe: async (messageId) => {
+    const chatId = get().currentChatId
+    if (chatId === null || get().streaming !== null) return
+    try {
+      const provider = get().providers[0]
+      const started = await api.swipe(messageId, { providerId: provider?.id, model: provider?.config.models[0] })
+      set({ streaming: { runId: started.runId, text: '' }, error: null })
+      openRunStream(started.runId, {
+        onEvent: (envelope) => {
+          if (envelope.type === 'generation.delta') {
+            const data = envelope.data as { text?: string }
+            const current = get().streaming
+            if (current !== null) set({ streaming: { ...current, text: current.text + (data.text ?? '') } })
+          }
+        },
+        onDone: () => {
+          void refreshAfterGeneration(chatId)
+        },
+        onError: (err) => {
+          set({ error: `SSE 断流:${String(err)}`, streaming: null })
+        },
+      })
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
+  editMessage: async (messageId, content) => {
+    const chatId = get().currentChatId
+    if (chatId === null) return
+    try {
+      await api.editMessage(messageId, content)
+      set({ messages: await api.listMessages(chatId) })
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
+  deleteMessage: async (messageId) => {
+    const chatId = get().currentChatId
+    if (chatId === null) return
+    try {
+      await api.deleteMessage(messageId)
+      set({ messages: await api.listMessages(chatId) })
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
+  branchFrom: async (messageId) => {
+    const chatId = get().currentChatId
+    if (chatId === null) return
+    try {
+      await api.createBranch(chatId, messageId)
+      set({ messages: await api.listMessages(chatId) })
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
   toggleSnapshot: () => set((state) => ({ snapshotOpen: !state.snapshotOpen })),
   clearError: () => set({ error: null }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 }))
 
-async function refreshAfterGeneration(chatId: string, snapshotId: string): Promise<void> {
+async function refreshAfterGeneration(chatId: string, snapshotId?: string): Promise<void> {
   try {
     const [messages, snapshot] = await Promise.all([
       api.listMessages(chatId),
-      api.getSnapshot(snapshotId).catch(() => null),
+      snapshotId === undefined ? Promise.resolve(null) : api.getSnapshot(snapshotId).catch(() => null),
     ])
     useChatStore.setState({ streaming: null, messages, snapshot })
   } catch (error) {

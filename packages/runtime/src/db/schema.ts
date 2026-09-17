@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
  * P0 表清单 —— database-schema P0 阶段清单的 Drizzle 投影(p0-plan S5 任务 2):
@@ -286,6 +286,48 @@ export const worldbookEntryVersions = sqliteTable('worldbook_entry_versions', {
   createdAt: text('created_at').notNull(),
 })
 
+/**
+ * 世界书条目运行时状态(database-schema §15,```worldbook_runtime_entries```)——
+ * sticky/cooldown/delay/cache lifecycle 属 Runtime State 而非 Prompt Segment(§27/§28)。
+ * Worldbook Asset ≠ Runtime State:本表按 (chat, entry) 存轮序上的定时状态与缓存档位。
+ * P2 前 cache_state/physical_order 仅占位(unseen),毕业/退休逻辑归 WP2.2。
+ */
+export const worldbookRuntimeEntries = sqliteTable('worldbook_runtime_entries', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  worldbookEntryId: text('worldbook_entry_id').notNull(),
+  cacheState: text('cache_state').notNull().default('unseen'),
+  physicalOrder: integer('physical_order'),
+  lastActivatedAt: text('last_activated_at'),
+  lastActivationSeq: integer('last_activation_seq'),
+  stickyUntilSeq: integer('sticky_until_seq'),
+  cooldownUntilSeq: integer('cooldown_until_seq'),
+  delayUntilSeq: integer('delay_until_seq'),
+  activationCount: integer('activation_count').notNull().default(0),
+  contentHash: text('content_hash'),
+  updatedAt: text('updated_at').notNull(),
+})
+// UNIQUE(chat_id, worldbook_entry_id) —— 一条目一 chat 一行,driver 扁平 DI 约束不同步 Drizzle,
+// 由 migration v5 的 UNIQUE 建表约束承载(core 不读运行库)。
+
+/**
+ * 世界书激活审计(database-schema §16,```worldbook_activations```)——每轮激活结果是可审计
+ * 记录,不覆盖 Runtime State;Inspector 靠它回答"这条目为什么这轮被激活"。
+ */
+export const worldbookActivations = sqliteTable('worldbook_activations', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  runId: text('run_id'),
+  worldbookEntryId: text('worldbook_entry_id').notNull(),
+  activated: integer('activated', { mode: 'boolean' }).notNull(),
+  reason: text('reason'),
+  matchedKeywords: text('matched_keywords').notNull().default('[]'),
+  sourceMessageIds: text('source_message_ids').notNull().default('[]'),
+  score: real('score'),
+  activationSeq: integer('activation_seq').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
 export const presetVersions = sqliteTable('preset_versions', {
   id: text('id').primaryKey(),
   presetId: text('preset_id').notNull(),
@@ -310,3 +352,23 @@ export const worldbooks = sqliteTable('worldbooks', {
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at'),
 })
+
+/**
+ * chat↔worldbook 绑定(database-schema §18 `chat_worldbooks`;WP1.2 激活层接线前提)。
+ * 主键 (chat_id, worldbook_id);scan_depth_override / recursive_override = NULL 时
+ * 跟随 worldbooks 表默认。条目级运行时状态不在此(归 worldbook_runtime_entries §15)。
+ */
+export const chatWorldbooks = sqliteTable(
+  'chat_worldbooks',
+  {
+    chatId: text('chat_id').notNull(),
+    worldbookId: text('worldbook_id').notNull(),
+    orderIndex: integer('order_index').notNull().default(0),
+    scanDepthOverride: integer('scan_depth_override'),
+    recursiveOverride: integer('recursive_override', { mode: 'boolean' }),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.chatId, table.worldbookId] }),
+  }),
+)

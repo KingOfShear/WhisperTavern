@@ -673,6 +673,34 @@ preset_version
 
 ---
 
+## chat_worldbooks
+
+Chat 与 Worldbook 为多对多绑定关系：一个 chat 使用哪些 worldbook 由本表决定（WP1.2 激活层
+接线前提；契约见 shared-contracts-spec §5 的 `ChatWorldbookBinding`）。worldbook 自身 scan 配置
+(`worldbooks.scan_depth` / `recursive`)在 worldbooks 表；本表只表达"绑了谁"与可选的**每 chat 覆盖**
+(`scan_depth_override` / `recursive_override` = NULL 时跟随 worldbook 默认)。条目级运行时状态不在此表，
+归 `worldbook_runtime_entries`(§15)。
+
+```sql
+CREATE TABLE chat_worldbooks (
+    chat_id                 UUID NOT NULL,
+    worldbook_id            UUID NOT NULL,
+
+    -- 同 chat 内多书排序(影响 freshWB 拼接与激活优先级)
+    order_index             INTEGER NOT NULL DEFAULT 0,
+
+    -- 每 chat 覆盖;NULL = 用 worldbooks 表默认
+    scan_depth_override     INTEGER,
+    recursive_override      BOOLEAN,
+
+    created_at              TIMESTAMPTZ NOT NULL,
+
+    PRIMARY KEY (chat_id, worldbook_id)
+);
+```
+
+---
+
 # 19. Message
 
 Message 必须支持 Branch。

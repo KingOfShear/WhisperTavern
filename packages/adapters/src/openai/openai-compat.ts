@@ -348,7 +348,6 @@ const FAMILY_DEFAULT: ProviderCapabilities = {
   structuredOutput: 'none',
   parallelToolCalls: false,
   toolChoice: false,
-  instructionLayers: 'flat',
 }
 
 function familyPreset(model: string): ProviderCapabilities {
