@@ -165,7 +165,9 @@ export const StWorldbookEntrySchema = z.looseObject({
   // 排序:现代 order,老格式 insertion_order(同义,§5.3 要点)
   order: z.number().optional(),
   insertion_order: z.number().optional(),
-  position: z.number().optional(),
+  // position:真实 ST 生态存在 number(现代导出)与 string(多数卡内嵌书/老书)两种方言,
+  // 如 "0".."7" 数字字符串;normalize 做字符串→数字归一再映射 slot(S15 金样抓出)
+  position: z.union([z.number(), z.string()]).optional(),
   ignoreBudget: z.boolean().optional(),
   // 递归控制
   excludeRecursion: z.boolean().optional(),
@@ -173,9 +175,10 @@ export const StWorldbookEntrySchema = z.looseObject({
   delayUntilRecursion: z.boolean().optional(),
   // 匹配与扫描
   scanDepth: z.number().nullable().optional(),
-  caseSensitive: z.boolean().optional(),
-  matchWholeWords: z.boolean().optional(),
-  useGroupScoring: z.boolean().optional(),
+  // 现代导出用 null 表示"未设置"(与缺省同义);normalize 按 null=跟随书级处理
+  caseSensitive: z.boolean().nullable().optional(),
+  matchWholeWords: z.boolean().nullable().optional(),
+  useGroupScoring: z.boolean().nullable().optional(),
   // 定时效应
   sticky: z.number().optional(),
   cooldown: z.number().optional(),
@@ -197,7 +200,8 @@ export const StWorldbookEntrySchema = z.looseObject({
   matchCreatorNotes: z.boolean().optional(),
   characterFilter: z.unknown().optional(),
   outletName: z.string().optional(),
-  role: z.string().optional(),
+  // ST role 魔数(0/1/2 → system/user/assistant)或直接字符串;normalize 归一
+  role: z.union([z.number(), z.string()]).optional(),
   depth: z.number().optional(),
 })
 export type StWorldbookEntry = z.infer<typeof StWorldbookEntrySchema>

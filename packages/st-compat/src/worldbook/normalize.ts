@@ -129,11 +129,22 @@ function toKeys(value: unknown): string[] {
 }
 
 function toRole(value: unknown): 'system' | 'user' | 'assistant' {
-  return value === 'user' || value === 'assistant' ? value : 'system'
+  // ST role 魔数:0=system,1=user,2=assistant(酒馆 semantics),亦兼容直接字符串
+  if (value === 'user' || value === 'assistant') return value
+  if (value === 1) return 'user'
+  if (value === 2) return 'assistant'
+  return 'system'
 }
 
 function toInt(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : fallback
+}
+
+/** ST position 方言归一:number 原样;string 纯数字串("0".."7")转 number;其余 undefined */
+function toPositionInt(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) return Number.parseInt(value, 10)
+  return undefined
 }
 
 function toBool(value: unknown, fallback: boolean): boolean {
@@ -153,12 +164,12 @@ function normalizeEntry(
   if (typeof entry.disable === 'boolean') enabled = !entry.disable
   else if (typeof entry.enabled === 'boolean') enabled = entry.enabled
 
-  // —— 放置:position 0-7 魔数 → slot 枚举 ——
-  const position = entry.position
-  const mappedSlot = typeof position === 'number' && Number.isInteger(position) ? ST_POSITION_TO_SLOT[position] : undefined
+  // —— 放置:position 0-7 魔数 → slot 枚举(ST 生态两种方言:number 现代导出 / string 数字串,归一后查表)——
+  const position = toPositionInt(entry.position)
+  const mappedSlot = position !== undefined && Number.isInteger(position) ? ST_POSITION_TO_SLOT[position] : undefined
   const slot: DgWorldbookEntry['placement']['slot'] = mappedSlot ?? 'before'
-  if (mappedSlot === undefined && position !== undefined) {
-    warnings.push(`${label}: position=${String(position)} 越界或非整数 → 回落 before`)
+  if (mappedSlot === undefined && entry.position !== undefined) {
+    warnings.push(`${label}: position=${String(entry.position)} 越界或非整数 → 回落 before`)
   }
 
   const triggers = (entry.triggers ?? []).filter((item): item is string => typeof item === 'string')

@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { makeE2eHarness, type E2eHarness } from './harness'
 
@@ -86,6 +88,33 @@ describe('POST /api/v2/characters/import(S9)', () => {
     expect(res.status).toBe(400)
     const body = (await res.json()) as { error: { code: string } }
     expect(body.error.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('charx Zip-Slip:资产 uri 越界(../)→ 400 且不落盘到卡目录之外', async () => {
+    fresh()
+    const { zipSync, strToU8 } = await import('fflate')
+    const escapeTarget = join(harness.root, 'slipped.txt')
+    const card = {
+      spec: 'chara_card_v3',
+      name: 'Slip卡',
+      data: {
+        name: 'Slip卡',
+        description: 'zip-slip',
+        assets: [{ type: 'background', uri: '../slipped.txt', name: '越界' }],
+      },
+    }
+    const charx = zipSync({
+      'card.json': strToU8(JSON.stringify(card)),
+      '../slipped.txt': strToU8('pwned'),
+    })
+    const res = await app.request('/api/v2/characters/import', {
+      method: 'POST',
+      body: JSON.stringify({ filename: 'slip.charx', base64: Buffer.from(charx).toString('base64') }),
+    })
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('VALIDATION_ERROR')
+    expect(existsSync(escapeTarget)).toBe(false)
   })
 
   it('harness 资产目录就位', () => {

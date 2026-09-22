@@ -1,6 +1,6 @@
 # WhisperTavern V2 API Specification
 
-> **Version:** 2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec）  
+> **Version:** 2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
 > **Status:** Implementation Specification  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **HTTP/SSE API 模块详细规格**  
 > **Protocol:** HTTP/1.1 + SSE  
@@ -1007,6 +1007,16 @@ Segment Hash Chain
 Compiler Version
 ```
 
+响应字段投影（S14 落地口径）：`id / chatId / runId? / messageId? / provider / model / compilerVersion / ir / cachePlan / serialized / hashes / diagnostics / createdAt`——`ir` 是段列表/分区/stability 的线格式面（`messageId` = swipe 轮的变体壳消息 id）；`hashes` 为八区（§37 修订）。
+
+会话快照列表（S14 新增，Inspector 相邻两轮 diff 的枚举面）：
+
+```http
+GET /api/v2/chats/{chatId}/prompt-snapshots?limit=20
+```
+
+返回按 `createdAt` **降序**的 `ChatSnapshotSummary`（`id / chatId / runId / provider / model / tokenCount / createdAt`），`limit` 默认 20、上限 50（§19.3 滚动保留上限内）。
+
 ---
 
 # 37. Prompt Snapshot 必须记录
@@ -1058,22 +1068,26 @@ GET /api/v2/prompt-snapshots/{snapshotA}/diff/{snapshotB}
 
 ```ts
 type PromptDiff = {
+  snapshotAId: string
+  snapshotBId: string
   segments: SegmentDiff[]
 
   firstDivergence?: {
     segmentId: string
-    byteOffset?: number
+    byteOffset?: number   // P0 省略(段内容内偏移属 P2 精确归因)
   }
 
   tokenDelta: {
-    input: number
-    cached: number
-    fresh: number
+    input: number         // B 总 token − A 总 token
+    cached: number        // 两轮逐段一致(id + contentHash)的 token
+    fresh: number         // added + changed.after 的 token(B 侧不能沿用上轮缓存)
   }
 
-  cacheBreak?: CacheBreakReason
+  cacheBreak?: CacheBreakReason   // P0 启发式标签(§58 精确归因属 Cache Planner P2)
 }
 ```
+
+【2026-09-17 修订(S14/WP1.5 落地)】对齐键 = **段 ID**(compiler-spec §9 稳定语义 ID);内容一致性 = 段框架哈希((id,role,content) netstring SHA-256,§57 口径)——role 变化同样算 changed,因为它改变序列化字节。`SegmentDiff.kind`:same / changed / added / removed(removed 记 `before`,added 记 `after`,changed 两侧都带);序 = 先 A 侧发送序(removed/changed/same 在原位),再 B 侧新增段,`firstDivergence` = 该序下第一个非 same 段(removed 也破坏字节前缀,算分歧)。`cacheBreak` 按**首分歧段来源族**启发式归类:message → MESSAGE_EDITED、worldbook → WORLD_BOOK_CONTENT_CHANGED、preset → PRESET_CHANGED、persona/character → *_CHANGED、其余 → MANUAL_INVALIDATION(Inspector 展示为"疑似")。原列于 §153 P2,随 S14 提前至 P1 落地。
 
 ---
 
@@ -2704,7 +2718,7 @@ GET /api/v2/runs/{runId}/inspector
 
 ```ts
 type InspectorData = {
-  snapshot: PromptSnapshot
+  snapshot: PromptSnapshot   // §37 完整快照(§36 修订投影,含 ir/serialized/hashes)
 
   cache: CachePlan
 
@@ -2713,13 +2727,17 @@ type InspectorData = {
     model: string
   }
 
-  usage?: Usage
+  usage?: Usage              // generations 表该 run 最新一条;无记录时缺省
 
-  warnings: PromptWarning[]
+  warnings: Diagnostic[]     // level !== 'info' 的编译诊断(§70)
 
-  events: RuntimeEvent[]
+  diagnostics: Diagnostic[]  // 全量诊断(Inspector 展示完整诊断面板)
+
+  events: RuntimeEvent[]     // durable/deferred-durable 持久事件,sequence 升序
 }
 ```
+
+【2026-09-17 修订(S14/WP1.5 落地)】`warnings` 收敛为编译诊断的 warning/error 子集(原 PromptWarning 未定义形状);`events` 来自事件持久化(§141),`live` 档不落库故天然缺 `generation.delta`——Inspector 需要流式细节时走 SSE。404 = `GENERATION_NOT_FOUND`(§8 映射)。
 
 ---
 
@@ -3892,6 +3910,8 @@ GET    /presets
 POST   /presets
 ```
 
+【2026-09-17 修订(S14/WP1.5)】P1 追加落地：`GET /runs/:id/inspector`（§107）、`GET /prompt-snapshots/:a/diff/:b`（§38，原列 §153 P2，提前）、`GET /chats/:id/prompt-snapshots`（§36 修订）、`POST /debug/export`（§160，还账 #15）。
+
 ---
 
 # 153. P2 Cache API
@@ -3905,7 +3925,7 @@ POST /cache/simulate
 
 GET  /runs/:id/cache-break
 
-GET  /prompt-snapshots/:a/diff/:b
+GET  /prompt-snapshots/:a/diff/:b   ← 已随 S14 提前至 P1(§38 修订;其余仍 P2)
 ```
 
 ---
@@ -4209,3 +4229,56 @@ Prompt Compiler、Cache Planner、Agent Runtime、Memory Runtime 都必须拥有
 ```
 
 **这才是 V2 与传统酒馆 API 最大的架构差异：不是“API 更多”，而是 API 背后已经存在一个真正的 AI Runtime。**
+
+---
+
+# 161. Sanitized Debug Export API
+
+> 还账 #15(S14/WP1.5 落地,2026-09-17)。总设计 §19 脱敏红线 / §32 Debug 与回放;密钥口径 = provider-adapter §17.2 PV5。
+
+```http
+POST /api/v2/debug/export
+```
+
+Request：
+
+```ts
+{
+  resourceType: 'snapshot'     // P0 仅 snapshot:快照是 §19.2 所见即所发的证据链
+  resourceId: string           // snapshotId
+
+  policy?: {                   // 缺省 = sanitized(默认脱敏,见下)
+    mode?: 'sanitized' | 'full'
+    stripUserContent?: boolean   // 仅 sanitized 模式可生效;默认 true
+    anonymizeIds?: boolean       // 仅 sanitized 模式可生效;默认 true
+  }
+}
+```
+
+Response = **可回放 DebugExportBundle**：
+
+```ts
+type DebugExportBundle = {
+  format: 'whispertavern-debug-bundle'
+  version: number
+  exportedAt: string
+  policy: { mode: 'sanitized' | 'full'; stripUserContent: boolean; anonymizeIds: boolean; redactSecrets: boolean }
+
+  snapshot: { id; chatId; runId?; provider; model; compilerVersion; hashes; tokenCount; createdAt }
+  segments: SegmentProjection[]            // 发送序;含 content(策略处理后)
+  messages: { role; content; segmentId? }[] // 回放脚本 = serialized.parts 的策略投影
+  idMap: Record<string, string>            // 恒空:映射不出模块,导出文件零原始 ID
+  diagnostics: Diagnostic[]
+}
+```
+
+## 161.1 RedactionPolicy 口径(还账 #15)
+
+- **默认 `sanitized`**:user/assistant 角色正文替换为 `[user-content removed]`(含深度注入的 user 段——聊天内容不出模块);资产/消息 ID 匿名化为稳定别名 `redact-1, redact-2 …`(同 ID 同别名,含段 ID 内嵌子串);bundle 结构(段数/角色/分区/token)完整保留,缓存调试价值不受损。
+- **`full` 必须显式声明**:正文与 ID 原样保留——用户内容原样出模块是显式审计行为,不是默认。
+- **`redactSecrets` 不可协商(PV5)**:两种模式下,已知密钥表(providers 表 secretRef → SecretStore 取值)与 `Bearer`/`sk-` 通用形态一律替换为 `[redacted]`。
+- **匿名化收口**:ID 替换遍历 bundle 全部字符串值(键不动),遍历序 = 首次出现序——同输入同输出;`idMap` 恒空,原始 ID 在导出文件零出现。
+
+## 161.2 可回放验收
+
+`bundle.messages` 按 buildGenerationRequest 同一投影规则(`tool` 跳过,其余 role/content 原样)即 ProviderChatRequest 的 messages;对任意 FakeProviderAdapter 注入目标轮次脚本可直接重放——S14 验收即"导出 sanitized bundle 可回放"(server 契约测试覆盖)。

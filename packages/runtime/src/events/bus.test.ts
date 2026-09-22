@@ -73,4 +73,16 @@ describe('Event Bus(总设计 §5.4)', () => {
     expect(bus.durableEvents('r1')).toHaveLength(1)
     expect(bus.durableEvents()).toHaveLength(2)
   })
+
+  it('durableLog 环形上限:超限截最旧,sink 不受影响(权威存储在 events 表)', () => {
+    const { sink, events } = memorySink()
+    const bus = new EventBus(sink)
+    for (let i = 0; i < 1005; i++) {
+      bus.publish({ type: 'message.created', runId: `r-${i}`, payload: { i }, timestamp: NOW })
+    }
+    expect(bus.durableEvents()).toHaveLength(1000) // 截断生效
+    expect(bus.durableEvents('r-0')).toHaveLength(0) // 最旧已淘汰
+    expect(bus.durableEvents('r-1004')).toHaveLength(1) // 最新在册
+    expect(events).toHaveLength(1005) // sink 落库完整,不受内存截断影响
+  })
 })

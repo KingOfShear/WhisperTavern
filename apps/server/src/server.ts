@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve as resolvePath, sep as pathSep, dirname } from 'node:path'
 import { Hono } from 'hono'
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
@@ -521,18 +521,21 @@ export function createApp(deps: ServerDeps): CreatedApp {
     const stream = new ReadableStream<Uint8Array>({
       start: (controller) => {
         let closed = false
+        let unsubscribe: (() => void) | undefined
         const write = (event: RuntimeEvent): void => {
           if (closed) return
           controller.enqueue(encoder.encode(sseFrame(event)))
           if (TERMINAL_EVENTS.has(event.type)) {
             closed = true
             controller.close() // D4:终态即静默
+            unsubscribe?.() // 终态已送达,订阅即刻失去价值(注册表懒淘汰入口)
           }
         }
         if (tracked) {
-          const { replay, unsubscribe } = registry.subscribe(runId, write, lastEventId)
-          c.req.raw.signal.addEventListener('abort', unsubscribe, { once: true })
-          for (const event of replay) write(event)
+          const sub = registry.subscribe(runId, write, lastEventId)
+          unsubscribe = sub.unsubscribe
+          c.req.raw.signal.addEventListener('abort', sub.unsubscribe, { once: true })
+          for (const event of sub.replay) write(event)
         } else {
           // 已结束的 run:重放 durable 行(live 不落库,§141)后关闭
           for (const event of replayFromDb()) write(event)
@@ -700,6 +703,31 @@ export function createApp(deps: ServerDeps): CreatedApp {
     })
   })
 
+  // §36 修订:会话快照列表(Inspector 相邻两轮 diff 的枚举面;createdAt 降序;§19.3 滚动保留上限内)
+  app.get('/api/v2/chats/:id/prompt-snapshots', (c) => {
+    const requestId = requestIdOf(c)
+    const chat = loadChat(deps.store, c.req.param('id') as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const parsed = Number.parseInt(c.req.query('limit') ?? '20', 10)
+    const limit = Number.isFinite(parsed) && parsed > 0 && parsed <= 50 ? parsed : 20
+    const rows = deps.store.db
+      .select()
+      .from(promptSnapshots)
+      .where(eq(promptSnapshots.chatId, chat.value.id))
+      .orderBy(desc(promptSnapshots.createdAt))
+      .limit(limit)
+      .all()
+    return ok(c, requestId, rows.map((row) => ({
+      id: row.id,
+      chatId: row.chatId,
+      runId: row.runId,
+      provider: row.provider,
+      model: row.model,
+      tokenCount: (JSON.parse(row.serialized) as { tokenCount?: number }).tokenCount ?? 0,
+      createdAt: row.createdAt,
+    })))
+  })
+
   // 还账 #15:Sanitized Debug Export(默认 sanitized;密钥经 PV5 redact;bundle 可回放)
   app.post('/api/v2/debug/export', async (c) => {
     const requestId = requestIdOf(c)
@@ -834,9 +862,14 @@ export function createApp(deps: ServerDeps): CreatedApp {
     // .dgcard 文件(事实源,决策 11)+ 附带资产
     const cardFileName = 'card.dgcard.json'
     writeFileSync(join(cardDir, cardFileName), JSON.stringify(result.card, null, 2))
+    const cardRoot = resolvePath(cardDir)
     for (const [uri, bytes] of result.assetFiles) {
-      const target = join(cardDir, uri)
-      mkdirSync(join(target, '..'), { recursive: true })
+      // Zip-Slip 防护:uri 来自外部卡文件(zip 条目/清单),解析后必须仍落在卡目录内
+      const target = resolvePath(cardDir, uri)
+      if (!target.startsWith(cardRoot + pathSep)) {
+        return fail(c, requestId, 'VALIDATION_ERROR', `资产 uri 越界,拒绝写入卡目录之外: ${uri}`)
+      }
+      mkdirSync(dirname(target), { recursive: true })
       writeFileSync(target, bytes)
     }
     // 内嵌书抽取:S10 起走完整归一(老/现代字段集 → 原生 .dgworld),不再 passthrough

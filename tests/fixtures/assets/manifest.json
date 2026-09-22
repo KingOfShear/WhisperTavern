@@ -1,0 +1,336 @@
+[
+  {
+    "source": "01-76afa36c5f166c2d.png",
+    "output": "card/01-76afa36c5f166c2d.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 28
+  },
+  {
+    "source": "01-76afa36c5f166c2d.png",
+    "output": "card/01-76afa36c5f166c2d-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 28
+  },
+  {
+    "source": "01-76afa36c5f166c2d.png",
+    "output": "card/01-76afa36c5f166c2d-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 28
+  },
+  {
+    "source": "01-76afa36c5f166c2d.png",
+    "output": "card/01-76afa36c5f166c2d.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 56
+  },
+  {
+    "source": "01-V1.21.png",
+    "output": "card/01-V121.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 59
+  },
+  {
+    "source": "01-V1.21.png",
+    "output": "card/01-V121-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 59
+  },
+  {
+    "source": "01-V1.21.png",
+    "output": "card/01-V121-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 59
+  },
+  {
+    "source": "01-V1.21.png",
+    "output": "card/01-V121.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 118
+  },
+  {
+    "source": "48cef27a326cc1b6.png",
+    "output": "card/48cef27a326cc1b6.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 2
+  },
+  {
+    "source": "48cef27a326cc1b6.png",
+    "output": "card/48cef27a326cc1b6-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 2
+  },
+  {
+    "source": "48cef27a326cc1b6.png",
+    "output": "card/48cef27a326cc1b6-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 2
+  },
+  {
+    "source": "48cef27a326cc1b6.png",
+    "output": "card/48cef27a326cc1b6.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 4
+  },
+  {
+    "source": "6.11.png",
+    "output": "card/611.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 57
+  },
+  {
+    "source": "6.11.png",
+    "output": "card/611-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 57
+  },
+  {
+    "source": "6.11.png",
+    "output": "card/611-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 57
+  },
+  {
+    "source": "6.11.png",
+    "output": "card/611.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 114
+  },
+  {
+    "source": "gayshin.png",
+    "output": "card/gayshin.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 4
+  },
+  {
+    "source": "gayshin.png",
+    "output": "card/gayshin-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 4
+  },
+  {
+    "source": "gayshin.png",
+    "output": "card/gayshin-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 4
+  },
+  {
+    "source": "gayshin.png",
+    "output": "card/gayshin.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 8
+  },
+  {
+    "source": "Kemini Aether 0807.json",
+    "output": "preset/Kemini_Aether_0807.json",
+    "type": "preset",
+    "sanitizedFields": 39
+  },
+  {
+    "source": "LSR的记忆增强表格预设_v2.0.10.json",
+    "output": "table/LSR的记忆增强表格预设_v2010.json",
+    "type": "table",
+    "sanitizedFields": 1
+  },
+  {
+    "source": "Ryan.png",
+    "output": "card/Ryan.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 18
+  },
+  {
+    "source": "Ryan.png",
+    "output": "card/Ryan-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 18
+  },
+  {
+    "source": "Ryan.png",
+    "output": "card/Ryan-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 18
+  },
+  {
+    "source": "Ryan.png",
+    "output": "card/Ryan.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 36
+  },
+  {
+    "source": "V1.0.7.png",
+    "output": "card/V107.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 177
+  },
+  {
+    "source": "V1.0.7.png",
+    "output": "card/V107-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 177
+  },
+  {
+    "source": "V1.0.7.png",
+    "output": "card/V107-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 177
+  },
+  {
+    "source": "V1.0.7.png",
+    "output": "card/V107.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 354
+  },
+  {
+    "source": "v1.png",
+    "output": "card/v1.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 34
+  },
+  {
+    "source": "v1.png",
+    "output": "card/v1-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 34
+  },
+  {
+    "source": "v1.png",
+    "output": "card/v1-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 34
+  },
+  {
+    "source": "v1.png",
+    "output": "card/v1.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 68
+  },
+  {
+    "source": "[Agent] V18.2 狐神抚 · 毓忻.json",
+    "output": "preset/Agent_V182_狐神抚_毓忻.json",
+    "type": "preset",
+    "sanitizedFields": 195
+  },
+  {
+    "source": "[主预设] V18.2 狐神抚 · 毓忻.json",
+    "output": "preset/主预设_V182_狐神抚_毓忻.json",
+    "type": "preset",
+    "sanitizedFields": 184
+  },
+  {
+    "source": "[轻量] 狐狐~ 🦊.json",
+    "output": "preset/轻量_狐狐_🦊.json",
+    "type": "preset",
+    "sanitizedFields": 173
+  },
+  {
+    "source": "【DarkSide-小猫之神】v1.1.json",
+    "output": "preset/DarkSide-小猫之神v11.json",
+    "type": "preset",
+    "sanitizedFields": 42
+  },
+  {
+    "source": "催眠性指导.png",
+    "output": "card/催眠性指导.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 115
+  },
+  {
+    "source": "催眠性指导.png",
+    "output": "card/催眠性指导-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 115
+  },
+  {
+    "source": "催眠性指导.png",
+    "output": "card/催眠性指导-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 115
+  },
+  {
+    "source": "催眠性指导.png",
+    "output": "card/催眠性指导.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 230
+  },
+  {
+    "source": "地点.json",
+    "output": "worldbook/地点.json",
+    "type": "worldbook",
+    "sanitizedFields": 12
+  },
+  {
+    "source": "性欲处理医院.png",
+    "output": "card/性欲处理医院.charx",
+    "type": "card",
+    "carrier": "charx",
+    "sanitizedFields": 101
+  },
+  {
+    "source": "性欲处理医院.png",
+    "output": "card/性欲处理医院-v2.json",
+    "type": "card",
+    "carrier": "json-v2",
+    "sanitizedFields": 101
+  },
+  {
+    "source": "性欲处理医院.png",
+    "output": "card/性欲处理医院-v3.json",
+    "type": "card",
+    "carrier": "json-v3",
+    "sanitizedFields": 101
+  },
+  {
+    "source": "性欲处理医院.png",
+    "output": "card/性欲处理医院.png",
+    "type": "card",
+    "carrier": "png",
+    "sanitizedFields": 202
+  },
+  {
+    "source": "简单预设_V2.0.json",
+    "output": "preset/简单预设_V20.json",
+    "type": "preset",
+    "sanitizedFields": 34
+  },
+  {
+    "source": "！！Table_v2.0.11.json",
+    "output": "worldbook/Table_v2011.json",
+    "type": "worldbook",
+    "sanitizedFields": 5
+  }
+]

@@ -143,14 +143,14 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 验收清单（全绿 = P1 完成,对应 p1-plan S15）：
 
 ```text
-☑(待执行) 目录内真实资产(ST 卡 V2/V3/PNG/charx、世界书两代格式、预设)导入跑通,产原生 .dg 格式
-☑(待执行) 世界书激活层全集语义单测 + 真实书金样(compiler-spec §23–§29)
-☑(待执行) 预设映射(ST Prompt Order §80–§81)→ contributions 顺序
-☑(待执行) 消息树完整交互(编辑变体/swipe 生成填充/分支激活,§16–§23 契约测试)
-☑(待执行) Prompt Inspector v1（段/哈希/diff 视图）
-☑(待执行) Import Compatibility Report（字段映射/compat 清单）
-☑(待执行) 金样测试体系(真实资产脱敏 → 导入→编译→序列化,technical-plan §8.2)
-☑(待执行) lint + tsc strict + 全量测试 CI 绿
+✅ 目录内真实资产(ST 卡 V2/V3/PNG/charx、世界书两代格式、预设)导入跑通,产原生 .dg 格式 —— S9/S10/S12 + S15 金样锁定
+✅ 世界书激活层全集语义单测 + 真实书金样(compiler-spec §23–§29) —— S11 + S15 字节金样(Table 激活进 prompt)
+✅ 预设映射(ST Prompt Order §80–§81)→ contributions 顺序 —— S12 + S15 金样(主预设 217→212 段编译稳定)
+✅ 消息树完整交互(编辑变体/swipe 生成填充/分支激活,§16–§23 契约测试) —— S13
+✅ Prompt Inspector v1（段/哈希/diff 视图） —— S14
+✅ Import Compatibility Report（字段映射/compat 清单） —— S9/S10/S12 + S15 导入层断言
+✅ 金样测试体系(真实资产脱敏 → 导入→编译→序列化,technical-plan §8.2) —— S15
+✅ lint + tsc strict + 全量测试 CI 绿 —— 293 绿(36 文件) 2026-09-22
 ```
 
 **P1 明确不做**（P2 起接管）：
@@ -220,7 +220,7 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | 12 | 工程性能预算三档（target / warning / hard-limit；compile 侧已有 compiler-spec §126，补 worldbook 匹配 / SQLite / UI / 检索） | WP2 细化 | compiler-spec §126 |
 | 13 | 升级/备份/回滚流程（backup → migration → validate → rollback） | WP5 | 总设计 §36 P5 |
 | 14 | **开源发布套件**：LICENSE 落盘（§38 决策 32）、SECURITY.md / CONTRIBUTING.md（引用 AGENTS 决策协议与纪律 5，不复写）/ CODE_OF_CONDUCT.md / Issue·PR 模板（architecture_proposal 对齐 §37 四问）/ 产品化 README；依赖许可证兼容性纪律（运行时依赖禁引入 GPL/AGPL） | 开源/推送公开仓库**前**（用户触发，不绑阶段 WP） | 2026-09-05 开源评审择优 |
-| 15 | **Sanitized Debug Export / Reproduction Bundle**：RedactionPolicy（去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full；密钥沿用 PV5 redact），导出可 Replay | WP1.5（Inspector v1）细化会话 | 总设计 §19/§32；provider-adapter §17.2 |
+| 15 | ~~**Sanitized Debug Export / Reproduction Bundle**：RedactionPolicy（去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full；密钥沿用 PV5 redact），导出可 Replay~~ **✅ 2026-09-17 S14 勾销**:api-spec §161 + `POST /api/v2/debug/export`(默认 sanitized:user/assistant 正文占位、ID 匿名化 redact-N、idMap 恒空;full 显式;PV5 密钥两模式必 redact);验收=sanitized bundle 喂 FakeProviderAdapter 可回放(server 契约测试) | ~~WP1.5(Inspector v1)细化会话~~ | 总设计 §19/§32；provider-adapter §17.2 |
 | 16 | Plugin 信任分档（built-in / trusted / community / untrusted）补入 §29 权限模型——P0–P4 只按 §21.5 Capability 执行 | WP5 细化会话 | 总设计 §29/§21.5 |
 | 17 | **Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落 | P3 | §38 决策 36 增量①；agent-runtime-spec §39/§93 |
 | 18 | **World State 全局态（规则版）**：地点/时间/物品/任务/派系/知识补表 + 规则化推演；**禁止额外 LLM 调用**（R1/C1）；按纪律 3 先落 roleplay-runtime-spec 扩展章节 + database-schema 补表 | P4 | §38 决策 36 增量③；roleplay-runtime-spec；database-schema |
@@ -257,6 +257,9 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | WP1.2 世界书激活层 | ✅ | 2026-09-12 S11 完成（core 激活管线 §23–§29 + ChatWorldbookBinding 契约 + chat_worldbooks v6 + 绑定路由 + startRun 接线；全量 233 绿；**P2 解锁（B1）达成**；详见 p1-plan §11） |
 | WP1.3 预设映射 + Persona | ✅ | 2026-09-15 S12 完成（st-compat 预设模块 + buildPreset/PersonaContributions 接线 + 导入/绑定路由；详见 p1-plan §11） |
 | WP1.4 消息树完整交互 | ✅ | 2026-09-15 S13 完成（§16–§23 全路由：swipe 生成填充/编辑变体/软删/分支/激活/chats DELETE/messages 分页 + web 交互面；全量 262 绿；详见 p1-plan §11） |
+| WP1.5 Inspector v1 + 导出 | ✅ | 2026-09-17 S14 完成（core diffSnapshots + §107 inspector/§38 diff/§36 快照列表/§161 debug export 四路由 + 还账 #15 勾销 + web PromptInspector 面板；全量 278 绿；详见 p1-plan §11） |
+| WP1.6 金样测试体系 | ✅ | 2026-09-22 S15 完成（金样套件：导入层 ImportReport 断言 + 字节 parts 基线 preset/Table + 卡四载体完整性/脱敏；**金样抓出并修复 3 处 st-compat 生态缺口**：position string 方言 / null 与 role 魔数 / prompt_order 分组形态；删除 4 个 X3 违例 probe；全量 293 绿 36 文件；**P1 出场完成**，归档 §38 决策 38；详见 p1-plan §11） |
+| **P1 完成** | ✅ | 2026-09-22 出场（§36）：DoD 八条全勾销（§4.11）+ 293 测试绿 + 报告产出。下一阶段 = P2（缓存层，最大差异化，B1 已解锁） |
 
 （P1–P5 WP 在各阶段开工细化时进看板。）
 

@@ -23,9 +23,16 @@ import { uuidv7 } from '../util/id'
 /** P0 内存快照注册表(S6 起接 prompt_snapshots 表持久化) */
 export class SnapshotRegistry {
   private readonly snapshots = new Map<string, DeepReadonly<PromptSnapshot>>()
+  /** 插入序上限:当前 run 在 register 后立即 dispatch,只需近期条目在册(持久真相源 = prompt_snapshots 表) */
+  private static readonly CAP = 32
 
   register(snapshot: DeepReadonly<PromptSnapshot>): void {
     this.snapshots.set(snapshot.id, snapshot)
+    while (this.snapshots.size > SnapshotRegistry.CAP) {
+      const oldest = this.snapshots.keys().next().value
+      if (oldest === undefined) break
+      this.snapshots.delete(oldest)
+    }
   }
 
   get(snapshotId: string): DeepReadonly<PromptSnapshot> | undefined {

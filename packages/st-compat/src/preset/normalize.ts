@@ -66,6 +66,32 @@ function orderEntryIdentifier(entry: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * 展开 ST prompt_order 为扁平 identifier 序(§81:数组序即段语义序)。
+ * 真实生态两种形态:扁平 [{identifier}|string, ...](现代导出)与
+ * 分组 [{character_id, order:[{identifier,enabled},...]}, ...](酒馆落盘形态,S15 金样抓出)。
+ * 多分组按出现序合并(同 character_id 的编排顺序,不同 character_id 组按文件序)。
+ */
+function flattenOrderIdentifiers(orderList: unknown[]): string[] {
+  const flat: string[] = []
+  for (const entry of orderList) {
+    if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+      const obj = entry as Record<string, unknown>
+      if (Array.isArray(obj.order)) {
+        // 分组形态:order 内可能还是 [{identifier,enabled}] 或 string
+        for (const item of obj.order) {
+          const id = orderEntryIdentifier(item)
+          if (id !== undefined) flat.push(id)
+        }
+        continue
+      }
+    }
+    const id = orderEntryIdentifier(entry)
+    if (id !== undefined) flat.push(id)
+  }
+  return flat
+}
+
 export interface ImportPresetOptions {
   name?: string
 }
@@ -86,18 +112,13 @@ export function importPresetFromJson(json: unknown, options: ImportPresetOptions
     if (id !== undefined) byIdentifier.set(id, seg)
   }
 
-  const orderList = (root.prompt_order ?? []) as unknown[]
+  const orderList = flattenOrderIdentifiers((root.prompt_order ?? []) as unknown[])
   const warnings: string[] = []
   const compatFields = new Set<string>()
   const segments: DgPresetSegment[] = []
   const seenIdentifiers = new Set<string>()
 
-  orderList.forEach((entry, index) => {
-    const id = orderEntryIdentifier(entry)
-    if (id === undefined) {
-      warnings.push(`prompt_order[${index}] 无法解析 identifier,跳过`)
-      return
-    }
+  orderList.forEach((id, index) => {
     const seg = byIdentifier.get(id)
     if (seg === undefined) {
       warnings.push(`prompt_order 引用了 prompts 中不存在的段:${id},跳过`)

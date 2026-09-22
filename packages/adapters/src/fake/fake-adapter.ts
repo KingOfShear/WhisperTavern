@@ -38,14 +38,16 @@ export class FakeProviderAdapter implements ProviderAdapter {
   readonly providerId = 'fake'
 
   private readonly turns: readonly FakeTurn[]
+  private readonly overrides?: Partial<ProviderCapabilities>
   private cursor = 0
 
-  constructor(turns: readonly FakeTurn[]) {
+  constructor(turns: readonly FakeTurn[], overrides?: Partial<ProviderCapabilities>) {
     this.turns = [...turns]
+    this.overrides = overrides
   }
 
   capabilities(_model: string): ProviderCapabilities {
-    // 保守默认(§15:探测失败用保守默认)——测试依赖,无真实能力
+    // 保守默认(§15:探测失败用保守默认)——测试依赖,无真实能力;overrides 覆盖大上下文等场景
     return {
       systemRole: true,
       tools: false,
@@ -59,6 +61,7 @@ export class FakeProviderAdapter implements ProviderAdapter {
       structuredOutput: 'none',
       parallelToolCalls: false,
       toolChoice: false,
+      ...this.overrides,
     }
   }
 

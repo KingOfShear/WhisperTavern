@@ -79,6 +79,9 @@ export class EventBus {
     if (event.durability === 'durable') {
       this.sink.insert([event])
       this.durableLog.push(event)
+      if (this.durableLog.length > EventBus.DURABLE_LOG_CAP) {
+        this.durableLog.splice(0, this.durableLog.length - EventBus.DURABLE_LOG_CAP)
+      }
     } else if (event.durability === 'deferred-durable') {
       this.deferredBuffer.push(event)
     }
@@ -102,9 +105,11 @@ export class EventBus {
 
   /**
    * durable 事件日志(P0 单进程内存尾;权威存储在 events 表,经 sink 落库)。
-   * §5.5 不变量"waiting 必有 durable 事件"的查询面。
+   * §5.5 不变量"waiting 必有 durable 事件"的查询面。环形上限:只查当前 run
+   * 的近期事件,截断历史不损语义,只进不出会让长跑进程线性涨内存。
    */
   private readonly durableLog: RuntimeEvent[] = []
+  private static readonly DURABLE_LOG_CAP = 1000
 
   durableEvents(runId?: string): readonly RuntimeEvent[] {
     return this.durableLog.filter((e) => runId === undefined || e.runId === runId)

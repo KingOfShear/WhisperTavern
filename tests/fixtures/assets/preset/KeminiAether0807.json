@@ -1,0 +1,1033 @@
+{
+  "genamt": 350,
+  "max_length": 8192,
+  "chat_completion_source": "makersuite",
+  "openai_model": "",
+  "claude_model": "claude-3-opus-20240229",
+  "windowai_model": "",
+  "openrouter_model": "qwen/qwen3-235b-a22b-2507",
+  "openrouter_use_fallback": true,
+  "openrouter_group_models": false,
+  "openrouter_sort_models": "alphabetically",
+  "openrouter_providers": [
+    "Chutes"
+  ],
+  "openrouter_allow_fallbacks": false,
+  "openrouter_middleout": "on",
+  "ai21_model": "jamba-1.5-large",
+  "mistralai_model": "mistral-medium",
+  "cohere_model": "command-r-plus",
+  "perplexity_model": "llama-3-70b-instruct",
+  "groq_model": "llama3-70b-8192",
+  "zerooneai_model": "yi-large",
+  "custom_model": "gemini-2.5-pro",
+  "custom_prompt_post_processing": "strict",
+  "google_model": "gemini-2.5-pro",
+  "temperature": 1.15,
+  "frequency_penalty": 0,
+  "presence_penalty": 0,
+  "top_p": 0.98,
+  "top_k": 64,
+  "top_a": 0,
+  "min_p": 0,
+  "repetition_penalty": 1,
+  "openai_max_context": 2000000,
+  "openai_max_tokens": 65535,
+  "wrap_in_quotes": false,
+  "names_behavior": 0,
+  "send_if_empty": "",
+  "impersonation_prompt": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,",
+  "new_chat_prompt": "",
+  "new_group_chat_prompt": "",
+  "new_example_chat_prompt": "",
+  "continue_nudge_prompt": "她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉",
+  "bias_preset_selected": "Default (none)",
+  "max_context_unlocked": true,
+  "wi_format": "{0}",
+  "scenario_format": "[Circumstances and context of the dialogue: {{scenario}}]",
+  "personality_format": "[{{char}}'s personality: {{personality}}]",
+  "group_nudge_prompt": "",
+  "stream_openai": false,
+  "prompts": [
+    {
+      "name": "不要动",
+      "system_prompt": true,
+      "role": "system",
+      "content": "",
+      "identifier": "main",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "forbid_overrides": true,
+      "injection_order": 100
+    },
+    {
+      "name": "不要动",
+      "system_prompt": true,
+      "role": "system",
+      "content": "",
+      "identifier": "nsfw",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "dialogueExamples",
+      "name": "Chat Examples",
+      "system_prompt": true,
+      "marker": true
+    },
+    {
+      "name": "不要动",
+      "system_prompt": true,
+      "role": "system",
+      "content": "",
+      "identifier": "jailbreak",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "chatHistory",
+      "name": "Chat History",
+      "system_prompt": true,
+      "marker": true
+    },
+    {
+      "identifier": "worldInfoAfter",
+      "name": "➡️World Info (after)",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "worldInfoBefore",
+      "name": "➡️World Info (before)",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "enhanceDefinitions",
+      "role": "system",
+      "name": "不要动",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊",
+      "system_prompt": true,
+      "marker": false,
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "charDescription",
+      "name": "➡️Char Description",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "charPersonality",
+      "name": "➡️Char Personality",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "scenario",
+      "name": "➡️Scenario",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "personaDescription",
+      "name": "⚓️Persona Description",
+      "system_prompt": true,
+      "marker": true,
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "81a524d8-8165-401b-9b66-e00efb22efa7",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🧭系统设定",
+      "role": "system",
+      "content": "她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "345d4bb8-7b53-424a-a900-aad1faf90715",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🧭主提示（简练描写）",
+      "role": "user",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘\n细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一\n\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻\n细雨落在青石板上,远处传来模糊的脚步声。 \n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 她垂\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,\n\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的\n\n细雨落在青石板上,远处传来模糊的脚步声。 风\n\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回\n\n他翻开泛黄的笔记本,墨迹\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "e7a0c3c7-9e4a-43e6-9eb2-423c122395f5",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚓️读者角色",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里浮\n风穿过空荡的走廊,吹动半掩",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "f1d0f76c-356b-4239-a923-35b200753641",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚓️读者角色2",
+      "role": "system",
+      "content": "[/Setting of reader]",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "133b8d3a-d1a9-4a86-9602-c47631a08c23",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "➡️故事设定",
+      "role": "system",
+      "content": "[Setting of fiction]",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "f2ee1d5f-94cf-448f-9e47-dae5ab0231b7",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "➡️故事设定2",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,字迹难以\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "a50b6da9-e7c1-45f1-abf9-3f4580fe815b",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚙️自定义设置",
+      "role": "system",
+      "content": "她垂下眼帘,指尖轻轻划过杯沿,没有立\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动\n窗外的光线斜斜地洒\n风穿过空荡的走廊,吹动半掩的\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "5c2f90c2-a712-4c71-a18d-f977d69f9f36",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🌐思维链",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里\n他翻开泛黄的笔记本,墨迹已经晕开,\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动\n她垂下眼帘\n窗外的光线斜斜\n窗外的光线斜斜地洒进来\n他翻开\n她垂下\n风穿过空荡\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊\n\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上\n她垂下眼帘,指尖\n细雨落在青石板上,远处传来模糊的脚步声",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "73e632f2-e3c3-485c-89ae-87a281d63725",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚡️卡思维链",
+      "role": "assistant",
+      "content": "细雨落在青石板上,远处传来模糊的脚步声。\n他翻开泛黄的笔",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "05de2e17-1b4b-4f06-a607-9807bd0ae7b8",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎁去八股",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚步\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以\n\n细雨落在青石板上,远处传来模糊\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回\n窗外的光线斜斜地洒进来,尘埃在光柱里\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘\n细雨落在青石板上,远处传来模糊的脚步声。 他\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 她垂\n\n细雨落在青石板上,远\n窗外的光线斜斜地洒进来,尘埃在光柱里浮\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。\n\n她垂下眼帘,指尖轻轻划过杯沿,没\n他翻开泛黄的笔记本,墨迹已经晕开,\n他翻开泛黄的笔记本,墨迹已经晕开,字迹",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "cb54b136-664b-4bfd-b83f-f6ab6998fde9",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🛟防截断",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经\n窗外的光线斜斜地洒进来,\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线\n她垂下眼帘,指尖轻轻划过杯",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "b85f2ed4-6cff-4070-9177-4da4134140ce",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚙️自定义输出格式",
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "18c62e1b-1ee8-45bf-8677-62672f2e6484",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🔥nsfw风格（用再开）",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 风\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨\n她垂下眼帘,指尖轻轻划过杯\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻\n细雨落在青石板上,远处传来",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "2a73c9d9-1422-435c-a81d-d866bc0b0ece",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎁情绪优化",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的\n\n细雨落在青石板上,远处传来模糊的脚步\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在\n风穿过空荡的走廊,吹动半掩的帘子,\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜\n他翻开泛黄的笔记本,墨迹已经晕开,字迹",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "44308afb-4098-4b3b-827c-2d5448ceb273",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚓️无特质化user（防支配）",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "4c23f251-9144-4fdf-87a4-743719e88cb0",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "❄️文风：轻小说（原默认文风）",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 \n\n细雨落在青石板上,远处传来模糊\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉\n\n风穿过空荡的走廊,吹动半掩的帘子,带\n\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线\n她垂下眼帘,指尖轻轻划过杯沿,没",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "904e6920-2b9b-43b6-985c-c3804bf8b170",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎁对白生动化",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚步声\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。\n风穿过空荡的走廊,吹动半掩的帘子\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,\n她垂下眼帘,指尖轻轻划过杯沿,没有立\n窗外的光线斜斜地\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青\n窗外的光线斜\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "b95c5776-e921-45bf-87e0-185a4a6ad21c",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "✅️我是主角！",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "c577bfb6-279a-4296-b514-3e034e5edc3d",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "✅️我不是主角。（不讨好）",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 窗",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "f4c796e3-0009-494e-926a-8eaa9ac3ed45",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🤖防机器人增强（配合对白生动化）",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "a04e4fcf-bf3d-4757-86d7-153aad9958d3",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚡️推进剧情",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚步\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "34763f55-e491-48b7-85e4-e1038942ca7e",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "➡️上文",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵",
+      "injection_position": 1,
+      "injection_depth": 1,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "21454d01-daae-45dd-bde7-407b5d303eb9",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎧需知",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,\n窗外的光线斜斜地洒进来,\n窗外的光线斜斜地洒进来,",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "b9de3666-9b82-41be-9356-22aabf0120ee",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🌠防掉格式（非必要不开）",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "66da9636-4f39-4f32-ab72-4547e42c8d8c",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎺总结前文（用完关）",
+      "role": "system",
+      "content": "她垂下眼帘,指尖轻轻划过杯沿\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖轻轻划过杯沿,没\n她垂下眼帘,\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛\n\n他翻开泛黄的笔记本,墨迹已经晕\n他翻开泛黄的笔记本,墨\n窗外的光线斜斜地洒进来,尘埃在光\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动\n细雨落在青石板上,远处传来模糊\n他翻开泛黄的笔记本,墨迹已经晕开,字\n她垂下眼帘,指尖轻轻划过杯沿,没\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨\n\n他翻开泛黄的笔记本,墨\n\n窗外的光线斜\n细雨落在青石板上,远处传来模糊\n风穿过空荡的走廊,吹动半掩的帘\n细雨落在青石板上,远处传来模糊\n他翻开\n\n细雨落在青石板上,远处传来模糊的脚",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "b3b1b105-128a-41bd-bacb-0f7986d6eab2",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚙️自定义提示词（缝合处）",
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "cb63fb5b-5795-479c-b56f-c898701b0515",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "❄️文风：网络文学",
+      "role": "system",
+      "content": "她垂下眼帘,指尖轻轻划过杯沿,\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 \n\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 \n\n她垂下眼帘,指尖轻轻划过杯沿,没有立\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风\n风穿过空荡的走廊,吹动半掩的帘子",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "efc4201d-1f33-44c1-91fb-b6457bf9e8b4",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "➡️防支配",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚\n细雨落在青石板上,远处传来模糊的脚\n窗外的光线斜斜地洒进来,尘埃在光\n细雨落在青石板上,远处传来模糊的脚步声\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石\n风穿过空荡的走廊,吹动半掩的帘子,带",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "fe674292-f640-4a41-9ed3-69adfae7be53",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "📑摘要",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过\n他翻开泛\n他翻开泛黄的笔记本,墨迹已经晕开\n细雨落在青石板上,远处传来模糊的\n细雨落在青石板\n\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻\n窗外的光\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 \n\n她垂下眼帘,指尖轻轻划过杯沿\n窗外的光线斜斜地洒进\n风穿过空荡的走廊,吹动半掩的帘子,",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "322de866-5ac8-4676-9b92-2f675640a63b",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "❄️文风：嬷嬷",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 窗\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线\n\n细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指\n\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 \n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线\n\n她垂下眼帘,指尖轻\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立\n窗外的光线斜斜地洒进来,尘埃在光",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "02a0c19e-7ade-43ec-9ebb-b044e249952e",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🛟防截断加强版",
+      "role": "system",
+      "content": "她垂下眼帘,指尖轻轻划过\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻\n\n窗外的光线斜斜地洒进来,\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。\n\n风穿过空荡的走廊,吹动半掩的帘子\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外\n细雨落在青石板上,远处传来模糊的脚\n\n她垂下眼帘,指尖轻轻划过杯沿,没有\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动\n他翻开泛黄的笔记本,墨迹已经晕开,字\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 窗外\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻\n\n她垂下眼帘,指尖轻轻划过杯沿,没有\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯\n她垂下眼帘,指尖轻轻划过杯沿,没有立\n\n他翻开泛黄的笔记本,墨迹已经晕开\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 \n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,\n风穿过空荡的走廊,吹动半掩的帘子,\n\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风\n\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落\n\n细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过\n风穿过空荡的走廊,吹动半掩\n\n细雨落在青石板上,远处传来模糊的脚步声。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。\n他翻开泛黄的笔记本,墨迹已",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "5683137c-50a8-42a2-81f5-d0f722e0b44c",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🌠防转折",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,字迹难\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "8210b699-a08e-4b4e-8c37-d42a88da1630",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🌠防标记（aistudio接口下放至系统提示之下）",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨落在青石板上,远处传来模糊的脚步声。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远\n\n风穿过空荡的走",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "5ce13cc4-0e39-460f-9b2e-14f1ff163789",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🧭主提示（较细致描写）",
+      "role": "user",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨落在青石板上,远处\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿过空荡的走廊\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 风穿\n\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指尖\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖轻轻划过杯沿\n\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄\n\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "0a174d0a-7f6b-4707-958b-1b15f2539682",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🧭主提示（零度写作）",
+      "role": "user",
+      "content": "她垂下眼帘,指尖轻轻划过杯沿,没有\n\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 她垂下眼帘,指尖\n细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔记本,墨迹已经\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚步声。\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处传来模糊的脚\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 他翻开泛黄的笔\n风穿过空荡的走廊,吹动半掩的帘子\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 \n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 \n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落\n细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 风穿过空荡的走廊,吹动半掩的帘\n细雨落在青石板上,\n窗外的光线斜斜地洒进\n他翻开泛黄的笔记本,墨\n细雨落在青石板上,远\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 \n他翻开泛黄的笔记本,墨迹已\n细雨落在青石板上,\n窗外的光线斜斜地洒\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "41778c71-36a5-471e-831f-521d5f1f2c30",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🎁对白风格（自己改）配合对白生动化",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 细雨落在青石板上,远处传来模糊的脚步声。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "20b78d41-c2a1-4558-b529-826d12c54a0c",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "❄️文风：轻小说",
+      "role": "system",
+      "content": "他翻开泛黄的笔记本,墨迹已经晕\n细雨落在青石板上,远处传来模糊的\n细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进\n风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 \n窗外的光线斜斜地洒进来,尘埃在光柱里\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 细雨落在青\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 细雨落在青石板上,远处\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 窗外的光线斜斜地洒进来,尘埃在\n她垂下眼帘,指尖轻轻划过杯沿,没",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "917f2343-5a05-4ce4-9cd9-bb5aa18bb10a",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "⚡️不重复、不转述",
+      "role": "system",
+      "content": "细雨落在青石板上,远处传来模糊的脚步声。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 他翻开泛黄的笔记本,墨迹已经晕开,字迹难以",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "68645374-4b6e-4750-83d3-b5a347b7fa93",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🔇实验性禁词表（自改）",
+      "role": "system",
+      "content": "窗外的光线斜斜地洒进来,尘埃在光柱里\n细雨落在青石板上,远处传\n风穿过空荡的走廊\n细雨落在青石板上\n风穿过空荡的走廊,吹动半掩的帘子,带\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来模糊的脚步声。 风穿过\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "e73a0f0e-eb53-466e-b8ea-3ec864011eab",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "对话量",
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "0a2b95d7-9b8f-4547-84c3-0dc3740a366d",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🛑前置设置开始",
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "6c2f7d42-ffa5-4b8e-8986-6b5fc2d186f5",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "🛑前置设置结束",
+      "role": "system",
+      "content": "",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    },
+    {
+      "identifier": "8918a00b-ca30-44c4-bd59-0d19a33f923d",
+      "system_prompt": false,
+      "enabled": false,
+      "marker": false,
+      "name": "📛防回避",
+      "role": "system",
+      "content": "风穿过空荡的走廊,吹动半掩的帘子,带来一阵凉意。 窗外的光线斜\n\n窗外的光线斜斜地洒进来,尘埃在光柱里浮动。 她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。\n他翻开泛黄的笔记本,墨迹已经晕开,字迹\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,远处传来\n\n细雨落在青石板上,远处传来模糊的脚步声。 窗外\n\n细雨落在青石板上,远处传来模糊的脚步声。 他翻\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答\n\n她垂下眼帘,指尖轻轻划过杯沿,没有立刻回答。 细雨落在青石板上,\n\n他翻开泛黄的笔记本,墨迹已经晕开,字迹难以辨认。 她垂下眼帘,指\n风穿过空荡的走廊,吹动半掩的帘子,带来一",
+      "injection_position": 0,
+      "injection_depth": 4,
+      "injection_order": 100,
+      "forbid_overrides": false
+    }
+  ],
+  "prompt_order": [
+    {
+      "character_id": 100000,
+      "order": [
+        {
+          "identifier": "main",
+          "enabled": true
+        },
+        {
+          "identifier": "worldInfoBefore",
+          "enabled": true
+        },
+        {
+          "identifier": "charDescription",
+          "enabled": true
+        },
+        {
+          "identifier": "charPersonality",
+          "enabled": true
+        },
+        {
+          "identifier": "scenario",
+          "enabled": true
+        },
+        {
+          "identifier": "enhanceDefinitions",
+          "enabled": false
+        },
+        {
+          "identifier": "nsfw",
+          "enabled": true
+        },
+        {
+          "identifier": "worldInfoAfter",
+          "enabled": true
+        },
+        {
+          "identifier": "dialogueExamples",
+          "enabled": true
+        },
+        {
+          "identifier": "chatHistory",
+          "enabled": true
+        },
+        {
+          "identifier": "jailbreak",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "character_id": 100001,
+      "order": [
+        {
+          "identifier": "21454d01-daae-45dd-bde7-407b5d303eb9",
+          "enabled": true
+        },
+        {
+          "identifier": "0a2b95d7-9b8f-4547-84c3-0dc3740a366d",
+          "enabled": true
+        },
+        {
+          "identifier": "b95c5776-e921-45bf-87e0-185a4a6ad21c",
+          "enabled": true
+        },
+        {
+          "identifier": "c577bfb6-279a-4296-b514-3e034e5edc3d",
+          "enabled": false
+        },
+        {
+          "identifier": "41778c71-36a5-471e-831f-521d5f1f2c30",
+          "enabled": true
+        },
+        {
+          "identifier": "f4c796e3-0009-494e-926a-8eaa9ac3ed45",
+          "enabled": false
+        },
+        {
+          "identifier": "a04e4fcf-bf3d-4757-86d7-153aad9958d3",
+          "enabled": false
+        },
+        {
+          "identifier": "5683137c-50a8-42a2-81f5-d0f722e0b44c",
+          "enabled": false
+        },
+        {
+          "identifier": "b9de3666-9b82-41be-9356-22aabf0120ee",
+          "enabled": false
+        },
+        {
+          "identifier": "6c2f7d42-ffa5-4b8e-8986-6b5fc2d186f5",
+          "enabled": true
+        },
+        {
+          "identifier": "8210b699-a08e-4b4e-8c37-d42a88da1630",
+          "enabled": false
+        },
+        {
+          "identifier": "81a524d8-8165-401b-9b66-e00efb22efa7",
+          "enabled": true
+        },
+        {
+          "identifier": "345d4bb8-7b53-424a-a900-aad1faf90715",
+          "enabled": true
+        },
+        {
+          "identifier": "0a174d0a-7f6b-4707-958b-1b15f2539682",
+          "enabled": false
+        },
+        {
+          "identifier": "5ce13cc4-0e39-460f-9b2e-14f1ff163789",
+          "enabled": false
+        },
+        {
+          "identifier": "20b78d41-c2a1-4558-b529-826d12c54a0c",
+          "enabled": true
+        },
+        {
+          "identifier": "4c23f251-9144-4fdf-87a4-743719e88cb0",
+          "enabled": false
+        },
+        {
+          "identifier": "cb63fb5b-5795-479c-b56f-c898701b0515",
+          "enabled": false
+        },
+        {
+          "identifier": "322de866-5ac8-4676-9b92-2f675640a63b",
+          "enabled": false
+        },
+        {
+          "identifier": "18c62e1b-1ee8-45bf-8677-62672f2e6484",
+          "enabled": false
+        },
+        {
+          "identifier": "8918a00b-ca30-44c4-bd59-0d19a33f923d",
+          "enabled": false
+        },
+        {
+          "identifier": "b3b1b105-128a-41bd-bacb-0f7986d6eab2",
+          "enabled": false
+        },
+        {
+          "identifier": "68645374-4b6e-4750-83d3-b5a347b7fa93",
+          "enabled": true
+        },
+        {
+          "identifier": "e7a0c3c7-9e4a-43e6-9eb2-423c122395f5",
+          "enabled": true
+        },
+        {
+          "identifier": "44308afb-4098-4b3b-827c-2d5448ceb273",
+          "enabled": false
+        },
+        {
+          "identifier": "personaDescription",
+          "enabled": true
+        },
+        {
+          "identifier": "f1d0f76c-356b-4239-a923-35b200753641",
+          "enabled": true
+        },
+        {
+          "identifier": "133b8d3a-d1a9-4a86-9602-c47631a08c23",
+          "enabled": true
+        },
+        {
+          "identifier": "worldInfoBefore",
+          "enabled": true
+        },
+        {
+          "identifier": "efc4201d-1f33-44c1-91fb-b6457bf9e8b4",
+          "enabled": false
+        },
+        {
+          "identifier": "charDescription",
+          "enabled": true
+        },
+        {
+          "identifier": "charPersonality",
+          "enabled": true
+        },
+        {
+          "identifier": "scenario",
+          "enabled": true
+        },
+        {
+          "identifier": "worldInfoAfter",
+          "enabled": true
+        },
+        {
+          "identifier": "dialogueExamples",
+          "enabled": true
+        },
+        {
+          "identifier": "f2ee1d5f-94cf-448f-9e47-dae5ab0231b7",
+          "enabled": true
+        },
+        {
+          "identifier": "chatHistory",
+          "enabled": true
+        },
+        {
+          "identifier": "5c2f90c2-a712-4c71-a18d-f977d69f9f36",
+          "enabled": true
+        },
+        {
+          "identifier": "a50b6da9-e7c1-45f1-abf9-3f4580fe815b",
+          "enabled": true
+        },
+        {
+          "identifier": "fe674292-f640-4a41-9ed3-69adfae7be53",
+          "enabled": false
+        },
+        {
+          "identifier": "cb54b136-664b-4bfd-b83f-f6ab6998fde9",
+          "enabled": false
+        },
+        {
+          "identifier": "02a0c19e-7ade-43ec-9ebb-b044e249952e",
+          "enabled": false
+        },
+        {
+          "identifier": "2a73c9d9-1422-435c-a81d-d866bc0b0ece",
+          "enabled": false
+        },
+        {
+          "identifier": "904e6920-2b9b-43b6-985c-c3804bf8b170",
+          "enabled": true
+        },
+        {
+          "identifier": "05de2e17-1b4b-4f06-a607-9807bd0ae7b8",
+          "enabled": false
+        },
+        {
+          "identifier": "b85f2ed4-6cff-4070-9177-4da4134140ce",
+          "enabled": false
+        },
+        {
+          "identifier": "66da9636-4f39-4f32-ab72-4547e42c8d8c",
+          "enabled": false
+        },
+        {
+          "identifier": "917f2343-5a05-4ce4-9cd9-bb5aa18bb10a",
+          "enabled": false
+        },
+        {
+          "identifier": "73e632f2-e3c3-485c-89ae-87a281d63725",
+          "enabled": true
+        },
+        {
+          "identifier": "34763f55-e491-48b7-85e4-e1038942ca7e",
+          "enabled": true
+        },
+        {
+          "identifier": "nsfw",
+          "enabled": false
+        },
+        {
+          "identifier": "jailbreak",
+          "enabled": false
+        },
+        {
+          "identifier": "enhanceDefinitions",
+          "enabled": false
+        },
+        {
+          "identifier": "main",
+          "enabled": false
+        }
+      ]
+    }
+  ],
+  "api_url_scale": "",
+  "show_external_models": true,
+  "assistant_prefill": "",
+  "assistant_impersonation": "",
+  "claude_use_sysprompt": false,
+  "use_makersuite_sysprompt": true,
+  "use_alt_scale": false,
+  "squash_system_messages": false,
+  "image_inlining": false,
+  "inline_image_quality": "low",
+  "bypass_status_check": false,
+  "continue_prefill": true,
+  "continue_postfix": " ",
+  "function_calling": false,
+  "show_thoughts": false,
+  "reasoning_effort": "auto",
+  "enable_web_search": false,
+  "request_images": false,
+  "seed": -1,
+  "n": 1
+}

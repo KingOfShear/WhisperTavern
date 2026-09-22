@@ -1071,6 +1071,8 @@ SecretStore 接口 + 双实现——①**DpapiSecretStore**(Windows 优先,@prim
 
 37. **撤下指令安全特性（2026-09-08，Breaking: Y）**：删除指令安全模块——其 spec 文件已删、原相关决策已移除并按序重排编号（31→30…37→36）。本次**连代码 / 契约 / 诊断码 / 能力 / 测试 / 架构守卫同步撤下**：authority/trust/scope 类型（contracts 的 `instruction.ts` 删除）、快照 authority 指纹字段、ProviderCapabilities 的指令分层能力字段、override 槽位 / I3 缓存安全规则、越权与不可信相关诊断码（P0_DIAGNOSTIC_CODES 现存 5 码：MACRO_UNEXPANDED_P0 / PROMPT_CONTEXT_TOO_LARGE / EMPTY_SEGMENT / DUPLICATE_SEGMENT_ID / STABILITY_OVERRIDE）、st-compat 档位报告与金样 G2/G4。**迁移说明**：`prompt_snapshots` 表保留 authority 指纹列（向后兼容，新快照不再写入，快照已存旧值可容忍）；Compiler 不再区分可信/不可信内容。文档侧同步改写/删除 compiler / shared-contracts / provider-adapter / api / ui-design / implementation-plan / p1-plan / p0-plan 相关表述；AGENTS §9 增九版记录（决策计数 36→37）。
 
+38. **P1 完成记录（2026-09-22，S15/WP1.6 收官）**：DoD 八条逐项核验（implementation-plan §4.11）——①真实资产（卡 V2/V3/PNG/charx、书两代、预设）导入跑通产原生 .dg 格式（S9/S10/S12 + S15 金样锁定）；②世界书激活层全集语义单测 + 真实书金样（S11 + S15 字节金样 Table 激活进 prompt）；③预设映射 → contributions 顺序（S12 + S15 主预设编译稳定）；④消息树完整交互（S13）；⑤Prompt Inspector v1（S14）；⑥Import Compatibility Report（S9/S10/S12 + S15 导入层断言）；⑦金样测试体系（S15：导入→编译→序列化→字节 parts 基线，technical-plan §8.2）；⑧lint + tsc strict + 全量 293 测试 CI 绿（36 文件）。**金样机制首战即抓出并修复 3 处 st-compat 真实生态缺口**（position string 方言 / null 与 role 魔数 / prompt_order 分组形态——真实资产形态与 schema 假设不符，属金样设计的核心价值验证）。**金样基线口径沉淀**：跨进程比对只锁 serialized.parts（role/content），不比对完整 serialized——hash/id 含每次导入新建的 UUID（presetId/worldbookId），属运行标识非语义。**P1 出场**：B1（P2 并行）已解锁，下一阶段 = P2（缓存层，最大差异化）。
+
 ## 38. 风险与对策
 
 完整风险清单（语义长尾、provider 缓存策略变动、usage 不回传降级、最小前缀阈值、群聊 TTL、摘要链质量、Agent 延迟）见 [technical-plan.md](./technical-plan.md) §10。

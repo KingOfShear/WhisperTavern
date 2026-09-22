@@ -156,16 +156,18 @@ export function buildWorldbookContributions(input: BuildWorldbookInput): BuildWo
     })
   }
 
-  // 以"最宽绑定"作为全局扫描语境(scanDepth 取绑定中最小值,递归任一为真即递归)
+  // 全局扫描窗口必须是所有绑定的超集,否则 depth 大的书会漏掉旧消息里的关键词——
+  // 故取绑定中的最大值(scanDepth 越大扫得越宽)。递归任一为真即递归。
   const globalScan: ScanParameters = {
-    scanDepth: minDefined([...scanByBook.values()].map((s) => s.scanDepth)),
+    scanDepth: maxDefined([...scanByBook.values()].map((s) => s.scanDepth)),
     caseSensitive: null,
     wholeWord: null,
     recursive: [...scanByBook.values()].some((s) => s.recursive),
   }
   const scanDepth = globalScan.scanDepth
+  // scanDepth===0 在 ST 语义下表示"不限制/扫全部"(与 null 同义);仅正整数才按窗口切片。
   const scanMessages =
-    scanDepth !== null && scanDepth >= 0 ? messages.slice(Math.max(0, messages.length - scanDepth)) : messages
+    scanDepth !== null && scanDepth > 0 ? messages.slice(Math.max(0, messages.length - scanDepth)) : messages
 
   const runtimeState: Record<string, ActivationRuntimeState> = {}
   for (const r of runtimeRows) {
@@ -302,7 +304,7 @@ function safeParse(value: string | null): unknown {
   }
 }
 
-function minDefined(values: (number | null)[]): number | null {
+function maxDefined(values: (number | null)[]): number | null {
   const defined = values.filter((v): v is number => v !== null && v !== undefined)
-  return defined.length === 0 ? null : Math.min(...defined)
+  return defined.length === 0 ? null : Math.max(...defined)
 }

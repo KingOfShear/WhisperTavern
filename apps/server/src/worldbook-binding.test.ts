@@ -171,4 +171,39 @@ describe('S11 激活层接线(startRun → freshWB 贡献 + 审计 + 运行时�
       .get() as { serialized: string }
     expect(snap.serialized).not.toContain('镇上唯一的酒馆')
   })
+
+  it('多书不同 scanDepth:全局窗口取最大值(超集),depth 大的书不被漏掉', async () => {
+    ctx = openHarness()
+    const { app, store } = ctx
+    // 书 A 关键词"酒馆"在最新消息;书 B 关键词"龙"只出现在最早消息
+    const bookA = {
+      '0': { uid: 0, key: ['酒馆'], keysecondary: [], comment: '酒馆', content: '镇上唯一的酒馆。', constant: false, selective: true, insertion_order: 10, position: 0, disable: false },
+    }
+    const bookB = {
+      '0': { uid: 0, key: ['龙'], keysecondary: [], comment: '龙', content: '古老的龙盘踞山中。', constant: false, selective: true, insertion_order: 10, position: 0, disable: false },
+    }
+    const aId = await importWorldbook(app, bookA)
+    const bId = await importWorldbook(app, bookB)
+
+    const chat = (await (await app.request('/api/v2/chats', { method: 'POST', body: JSON.stringify({ title: 'S11-scan', systemPrompt: '测试' }) })).json()) as { data: { id: string } }
+    const chatId = chat.data.id
+    // 最早消息含"龙"(书 B 关键词);最新消息含"酒馆"(书 A 关键词)
+    await app.request(`/api/v2/chats/${chatId}/messages`, { method: 'POST', body: JSON.stringify({ role: 'user', content: '山中有一条古老的龙沉睡' }) })
+    await app.request(`/api/v2/chats/${chatId}/messages`, { method: 'POST', body: JSON.stringify({ role: 'user', content: '今晚我们去酒馆吧' }) })
+
+    // 全局窗口必须取 max(A=1,B=5)=5,否则 B 在最早消息的"龙"会被漏掉(回归:Bug A min→max)
+    await app.request(`/api/v2/chats/${chatId}/worldbooks`, { method: 'POST', body: JSON.stringify({ worldbookId: aId, scanDepthOverride: 1 }) })
+    await app.request(`/api/v2/chats/${chatId}/worldbooks`, { method: 'POST', body: JSON.stringify({ worldbookId: bId, scanDepthOverride: 5 }) })
+
+    await startGeneration(app, chatId, [{ text: '好,在酒馆见,当心山里的龙。' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+
+    const bEntryId = store.sqlite
+      .prepare('SELECT id FROM worldbook_entries WHERE worldbook_id = ? AND entry_key = ?')
+      .get(bId, '0') as { id: string }
+    const bAudit = store.sqlite
+      .prepare('SELECT activated FROM worldbook_activations WHERE worldbook_entry_id = ? AND chat_id = ?')
+      .get(bEntryId.id, chatId) as { activated: number }
+    expect(bAudit.activated).toBe(1)
+  })
 })

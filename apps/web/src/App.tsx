@@ -2,13 +2,13 @@ import { useEffect, type ReactElement } from 'react'
 import { ChatSidebar } from './components/ChatSidebar'
 import { MessageInput } from './components/MessageInput'
 import { MessageList } from './components/MessageList'
+import { PromptInspector } from './components/PromptInspector'
 import { ProviderSettings } from './components/ProviderSettings'
-import { SnapshotPanel } from './components/SnapshotPanel'
 import { useChatStore } from './stores/chat'
 
 /**
  * 聊天工作台精简版(ui-design §4.1):会话列表 / 消息流 / 输入框 / 流式渲染 /
- * 停止生成 / swipe 切换(变体激活)/ 设置页(provider/密钥)/ 快照最简查看。
+ * 停止生成 / swipe 切换(变体激活)/ 设置页(provider/密钥)/ Prompt Inspector。
  */
 export function App(): ReactElement {
   const loadChats = useChatStore((s) => s.loadChats)
@@ -49,7 +49,7 @@ export function App(): ReactElement {
         <MessageInput />
       </main>
       {settingsOpen && <ProviderSettings />}
-      <SnapshotPanel />
+      <PromptInspector />
     </div>
   )
 }

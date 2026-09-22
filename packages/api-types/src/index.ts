@@ -1,11 +1,15 @@
 import type {
   Chat,
+  DebugExportBundle,
   Diagnostic,
   Message,
   MessageRole,
+  PromptDiff,
   PromptHashes,
+  PromptIR,
   ProviderCapabilities,
   ProviderUsage,
+  RedactionPolicy,
   SerializedPrompt,
 } from '@whispertavern/contracts'
 
@@ -117,15 +121,67 @@ export type CompilePreviewDto = {
   diagnostics: Diagnostic[]
 }
 
-export type PromptSnapshotDto = CompilePreviewDto & {
+/** §36/§37 投影:完整 Prompt Snapshot 线格式(字段逐键对齐 GET /prompt-snapshots/:id 响应) */
+export type PromptSnapshotDto = {
+  id: string
   chatId: string
   runId?: string
+  /** §107 Inspector:段级视图的证据源(swipe 轮 = 变体壳 message id) */
+  messageId?: string
   provider: string
   model: string
   compilerVersion: string
+  /** §36「完整 Prompt Snapshot」:段列表/分区/stability 的线格式面 */
+  ir: PromptIR
   cachePlan: unknown
+  serialized: SerializedPrompt
+  hashes: PromptHashes
+  diagnostics: Diagnostic[]
   createdAt: string
 }
+
+// ===== Inspector / Diff / Debug Export(§107/§38/§60 debug;S14/WP1.5)=====
+
+/** §36 修订:会话快照列表项(相邻两轮 diff 的枚举面;新建时间降序) */
+export type ChatSnapshotSummaryDto = {
+  id: string
+  chatId: string
+  runId: string | null
+  provider: string
+  model: string
+  tokenCount: number
+  createdAt: string
+}
+
+export type PromptDiffDto = PromptDiff
+export type SegmentDiffDto = PromptDiff['segments'][number]
+
+export type InspectorUsageDto = ProviderUsage
+
+/** §107 events 投影(events 表行;live 不落库故天然缺 generation.delta) */
+export type InspectorEventDto = {
+  id: string
+  type: string
+  durability: 'durable' | 'deferred-durable' | 'live'
+  runId?: string
+  sequence: number
+  timestamp: string
+  payload: Record<string, unknown>
+}
+
+/** §107 InspectorData P1 投影:warning 级诊断 + 全量 diagnostics + usage + durable 事件 */
+export type InspectorDataDto = {
+  snapshot: PromptSnapshotDto
+  cache: unknown
+  provider: { id: string; model: string }
+  usage?: InspectorUsageDto
+  warnings: Diagnostic[]
+  diagnostics: Diagnostic[]
+  events: InspectorEventDto[]
+}
+
+export type DebugExportPolicyDto = Partial<RedactionPolicy>
+export type DebugExportBundleDto = DebugExportBundle
 
 // ===== providers(§37 投影;密钥零回显)=====
 

@@ -40,7 +40,7 @@ export interface BuildDebugBundleInput {
   exportedAt: string
 }
 
-/** 默认政策(还账 #15:默认 sanitized 非 full) */
+/** 默认政策(还账 #15:默认 sanitized 非 full);resolvePolicy 逐字段兜底到本表 */
 export const DEFAULT_REDACTION_POLICY: RedactionPolicy = {
   mode: 'sanitized',
   stripUserContent: true,
@@ -49,15 +49,14 @@ export const DEFAULT_REDACTION_POLICY: RedactionPolicy = {
 }
 
 export function resolvePolicy(requested?: Partial<RedactionPolicy>): RedactionPolicy {
-  const merged = { ...DEFAULT_REDACTION_POLICY, ...requested }
-  if (merged.mode === 'full') {
+  if (requested?.mode === 'full') {
     // full = 保留原文:内容/ID 不脱敏,但密钥 redact 永不关闭(PV5 不可协商)
     return { mode: 'full', stripUserContent: false, anonymizeIds: false, redactSecrets: true }
   }
   return {
     mode: 'sanitized',
-    stripUserContent: merged.stripUserContent,
-    anonymizeIds: merged.anonymizeIds,
+    stripUserContent: requested?.stripUserContent ?? true,
+    anonymizeIds: requested?.anonymizeIds ?? true,
     redactSecrets: true,
   }
 }
@@ -72,8 +71,9 @@ export class IdAnonymizer {
     this.map.set(id, alias)
     return alias
   }
-  snapshot(): Record<string, string> {
-    return Object.fromEntries(this.map)
+  /** 注册序 = 别名分配序;deep-walk 依此序做子串替换(确定性) */
+  entries(): ReadonlyMap<string, string> {
+    return this.map
   }
 }
 
@@ -105,7 +105,7 @@ export function buildDebugBundle(input: BuildDebugBundleInput): DebugExportBundl
     })
   }
 
-  return {
+  const built: DebugExportBundle = {
     format: BUNDLE_FORMAT,
     version: BUNDLE_VERSION,
     exportedAt: input.exportedAt,
@@ -113,7 +113,12 @@ export function buildDebugBundle(input: BuildDebugBundleInput): DebugExportBundl
     snapshot: {
       id: input.snapshot.id,
       chatId: policy.anonymizeIds ? ids.anonymize(input.snapshot.chatId) : input.snapshot.chatId,
-      runId: input.snapshot.runId === undefined ? undefined : policy.anonymizeIds ? ids.anonymize(input.snapshot.runId) : input.snapshot.runId,
+      runId:
+        input.snapshot.runId === undefined
+          ? undefined
+          : policy.anonymizeIds
+            ? ids.anonymize(input.snapshot.runId)
+            : input.snapshot.runId,
       provider: input.snapshot.provider,
       model: input.snapshot.model,
       compilerVersion: input.snapshot.compilerVersion,
@@ -123,9 +128,30 @@ export function buildDebugBundle(input: BuildDebugBundleInput): DebugExportBundl
     },
     segments,
     messages,
-    idMap: policy.anonymizeIds ? ids.snapshot() : {},
+    idMap: {},
     diagnostics: [...(input.diagnostics ?? input.snapshot.diagnostics)],
   }
+
+  // 匿名化收口:段 ID(如 chat:<chatId>:message:1)内嵌原始 ID,须逐字符串替换;
+  // 替换只动值不动键,遍历序 = 注册序(同输入同输出,§5 确定性)
+  return policy.anonymizeIds
+    ? (deepReplaceIds(built, ids.entries()) as DebugExportBundle)
+    : built
+}
+
+function deepReplaceIds(value: unknown, map: ReadonlyMap<string, string>): unknown {
+  if (typeof value === 'string') {
+    let out = value
+    for (const [original, alias] of map) out = out.split(original).join(alias)
+    return out
+  }
+  if (Array.isArray(value)) return value.map((v) => deepReplaceIds(v, map))
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) out[key] = deepReplaceIds(item, map)
+    return out
+  }
+  return value
 }
 
 /** user/assistant 是"人话"层,tool 是机械层,system 是配置层——只脱前两类(§19) */

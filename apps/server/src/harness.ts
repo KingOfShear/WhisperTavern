@@ -41,6 +41,11 @@ export function makeE2eHarness(): E2eHarness {
       secretStore: createSecretStore(join(root, 'secrets')),
       secretsDir: join(root, 'secrets'),
       assetsDir: root,
+      // 测试可见性:500 由 onError 吞成 PROVIDER_UNAVAILABLE,logger 兜底把真实堆栈打出来
+      logger: (level, message, meta) => {
+        if (level === 'error') console.error(`[server:${level}] ${message}\n${typeof meta === 'string' ? meta : JSON.stringify(meta, null, 2)}`)
+        else console.log(`[server:${level}] ${message}`)
+      },
     })
     return { ...created, store }
   }

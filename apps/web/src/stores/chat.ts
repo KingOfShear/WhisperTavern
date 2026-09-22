@@ -1,7 +1,14 @@
 import { ApiClientError, api } from '../api/client'
 import { openRunStream, validateSequence } from '../api/sse'
 import { create } from 'zustand'
-import type { ChatSummaryDto, PromptSnapshotDto, ProviderDto } from '@whispertavern/api-types'
+import type {
+  ChatSnapshotSummaryDto,
+  ChatSummaryDto,
+  DebugExportPolicyDto,
+  PromptDiffDto,
+  PromptSnapshotDto,
+  ProviderDto,
+} from '@whispertavern/api-types'
 import type { MessageDtoLite } from '../api/client'
 
 /**
@@ -20,6 +27,10 @@ export interface ChatStore {
   providers: ProviderDto[]
   snapshot: PromptSnapshotDto | null
   snapshotOpen: boolean
+  /** §36 快照列表(createdAt 降序)——Inspector 相邻 diff 的枚举面 */
+  snapshotList: ChatSnapshotSummaryDto[]
+  /** §38 相邻两轮 diff(prev → current;无上一轮时为 null) */
+  diff: PromptDiffDto | null
   settingsOpen: boolean
 
   loadChats(): Promise<void>
@@ -30,6 +41,8 @@ export interface ChatStore {
   loadProviders(): Promise<void>
   createProvider(body: Parameters<typeof api.createProvider>[0]): Promise<void>
   toggleSnapshot(): void
+  /** §60 debug 导出下载(默认 sanitized;full 需显式传 mode) */
+  exportBundle(policy?: DebugExportPolicyDto): Promise<void>
   switchVariant(messageId: string): Promise<void>
   /** §20 swipe:建壳 + 触发生成填充变体(S13);流式进度走 streaming 气泡 */
   swipe(messageId: string): Promise<void>
@@ -52,6 +65,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   providers: [],
   snapshot: null,
   snapshotOpen: false,
+  snapshotList: [],
+  diff: null,
   settingsOpen: false,
 
   loadChats: async () => {
@@ -73,7 +88,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   openChat: async (id) => {
-    set({ currentChatId: id, messages: [], streaming: null, snapshot: null, snapshotOpen: false })
+    set({ currentChatId: id, messages: [], streaming: null, snapshot: null, snapshotOpen: false, snapshotList: [], diff: null })
     try {
       set({ messages: await api.listMessages(id) })
     } catch (error) {
@@ -212,17 +227,45 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   toggleSnapshot: () => set((state) => ({ snapshotOpen: !state.snapshotOpen })),
+
+  exportBundle: async (policy) => {
+    const snapshot = get().snapshot
+    if (snapshot === null) return
+    try {
+      const bundle = await api.exportDebugBundle({ resourceType: 'snapshot', resourceId: snapshot.id, policy })
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `wt-debug-${bundle.policy.mode}-${snapshot.id.slice(0, 12)}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
   clearError: () => set({ error: null }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 }))
 
 async function refreshAfterGeneration(chatId: string, snapshotId?: string): Promise<void> {
   try {
-    const [messages, snapshot] = await Promise.all([
+    const [messages, snapshotList] = await Promise.all([
       api.listMessages(chatId),
-      snapshotId === undefined ? Promise.resolve(null) : api.getSnapshot(snapshotId).catch(() => null),
+      api.listChatSnapshots(chatId).catch(() => [] as ChatSnapshotSummaryDto[]),
     ])
-    useChatStore.setState({ streaming: null, messages, snapshot })
+    // 当前快照:显式传入优先(sendMessage);swipe 路径客户端不返回 snapshotId,
+    // 退而取列表降序首条 = 当前轮(§36),避免 Inspector 面板快照陈旧却显示 diff
+    const currentSnapshotId = snapshotId ?? snapshotList[0]?.id
+    const snapshot = currentSnapshotId === undefined ? null : await api.getSnapshot(currentSnapshotId).catch(() => null)
+    useChatStore.setState({ streaming: null, messages, snapshot, snapshotList })
+    // 相邻两轮 diff(§38):list[1] = 上一轮,list[0] = 当前轮(降序)
+    const diff =
+      snapshotList.length >= 2
+        ? await api.getDiff(snapshotList[1]!.id, snapshotList[0]!.id).catch(() => null)
+        : null
+    useChatStore.setState({ diff })
   } catch (error) {
     useChatStore.setState({ streaming: null, error: describe(error) })
   }

@@ -6,6 +6,8 @@ import { SSE_EVENT_TYPES, type SseEnvelope } from '@whispertavern/api-types'
  *   浏览器自动回传 Last-Event-ID(§142 续传)。
  * - §27 sequence 校验:重复/回退丢弃(重连重放语义),缺口告警但不中断。
  * - 终态事件(generation.completed/failed)到达即关流(D4)。
+ * - onerror 按 readyState 分流:CONNECTING(瞬断重连中)静默;CLOSED(致命)才上报——
+ *   瞬断期间 EventSource 自动续传,报错会误杀流式气泡并让增量无处落。
  */
 
 const TERMINAL_TYPES = new Set(['generation.completed', 'generation.failed'])
@@ -58,8 +60,11 @@ export function openRunStream(runId: string, handlers: RunStreamHandlers): RunSt
   for (const type of SSE_EVENT_TYPES) {
     source.addEventListener(type, handle as EventListener)
   }
-  source.onerror = (error) => {
-    if (!done) handlers.onError?.(error) // EventSource 将自动重连并回传 Last-Event-ID
+  source.onerror = () => {
+    // EventSource 的 onerror 两种含义按 readyState 分流:CONNECTING = 瞬断重连中
+    // (Last-Event-ID 续传在途,静默保留流式状态);CLOSED = 放弃重连的致命错误才上报
+    if (done) return
+    if (source.readyState === EventSource.CLOSED) handlers.onError?.(new Error('SSE 连接已关闭且不再重连'))
   }
   return {
     close: () => {

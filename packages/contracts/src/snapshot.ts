@@ -227,7 +227,7 @@ export const DebugExportBundleSchema = z.object({
       segmentId: z.string().optional(),
     }),
   ),
-  /** ID 匿名化映射(仅 anonymizeIds=true 时非空;原始 ID 不出现) */
+  /** ID 匿名化映射不出模块(P0 恒空):bundle 内引用一律用别名,导出文件零原始 ID */
   idMap: z.record(z.string(), z.string()),
   diagnostics: z.array(DiagnosticSchema),
 })

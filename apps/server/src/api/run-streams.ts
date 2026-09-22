@@ -6,7 +6,10 @@ import type { EventBus } from '@whispertavern/runtime'
  * - 每个活跃 run 一条流(buffer 含 live 事件,sequence 由 EventBus 按 run 分配);
  * - 断线重连:Last-Event-ID 之后从 buffer 续发(活跃)或从 events 表重放 durable
  *   行(已结束;live 不落库 = 重连丢中间 delta,客户端以消息正文为完整恢复面,§141);
- * - 终止事件(generation.completed/failed)到达即关闭流(D4:到达静默态)。
+ * - 终止事件(generation.completed/failed)到达即关闭流(D4:到达静默态);
+ * - 淘汰:终态且无订阅者的流即刻清出(finished run 的重连一律走 §142 的
+ *   events 表重放路径,内存 buffer 对已结束 run 无增量价值)——注册表只进不出
+ *   会让长跑进程随 run 数线性涨内存,这里按懒淘汰兜住。
  */
 
 interface RunStream {
@@ -27,6 +30,7 @@ export class RunStreamRegistry {
   }
 
   track(runId: string, controller: AbortController): void {
+    this.evictIdle()
     this.streams.set(runId, { buffer: [], controller, subscribers: new Set(), finished: false })
   }
 
@@ -44,7 +48,7 @@ export class RunStreamRegistry {
 
   /**
    * 订阅并原子取回 afterSequence 之后的缓冲(单线程同 tick,无丢失窗口)。
-   * 返回退订函数(D4:客户端断开先退订再清理)。
+   * 返回退订函数(D4:客户端断开先退订再清理;终态流退订后即淘汰)。
    */
   subscribe(
     runId: string,
@@ -59,7 +63,15 @@ export class RunStreamRegistry {
       replay,
       unsubscribe: () => {
         stream.subscribers.delete(handler)
+        if (stream.finished && stream.subscribers.size === 0) this.streams.delete(runId)
       },
+    }
+  }
+
+  /** 懒淘汰:清出全部 finished 且无订阅者的流(在册量自然收敛于活跃 run + 终态在场订阅者) */
+  private evictIdle(): void {
+    for (const [runId, stream] of this.streams) {
+      if (stream.finished && stream.subscribers.size === 0) this.streams.delete(runId)
     }
   }
 
@@ -77,7 +89,7 @@ export class RunStreamRegistry {
     }
     if (TERMINAL_EVENTS.has(event.type)) {
       stream.finished = true
-      // 保留 buffer 供重连重放;订阅者由各自流在终态事件后自行关闭
+      // 订阅者要收到本终态事件后由各自流关闭;退订时经 unsubscribe 淘汰
     }
   }
 }

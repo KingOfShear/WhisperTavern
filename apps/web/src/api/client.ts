@@ -1,7 +1,11 @@
 import type {
   ApiErrorBody,
   ApiEnvelope,
+  ChatSnapshotSummaryDto,
+  DebugExportBundleDto,
+  DebugExportPolicyDto,
   MessageWithVariantsDto,
+  PromptDiffDto,
   PromptSnapshotDto,
   ProviderDto,
 } from '@whispertavern/api-types'
@@ -106,6 +110,18 @@ export const api = {
 
   getSnapshot: (snapshotId: string) =>
     apiRequest<PromptSnapshotDto>('/api/v2/prompt-snapshots/' + snapshotId),
+
+  /** §36 修订:会话快照列表(createdAt 降序;Inspector 相邻两轮 diff 的枚举面) */
+  listChatSnapshots: (chatId: string) =>
+    apiRequest<ChatSnapshotSummaryDto[]>(`/api/v2/chats/${chatId}/prompt-snapshots`),
+
+  /** §38 Prompt Diff:相邻两轮对比(a = 上一轮,b = 当前轮) */
+  getDiff: (snapshotAId: string, snapshotBId: string) =>
+    apiRequest<PromptDiffDto>(`/api/v2/prompt-snapshots/${snapshotAId}/diff/${snapshotBId}`),
+
+  /** §60 debug 导出(还账 #15):默认 sanitized;full 需显式声明 */
+  exportDebugBundle: (body: { resourceType: 'snapshot'; resourceId: string; policy?: DebugExportPolicyDto }) =>
+    apiRequest<DebugExportBundleDto>('/api/v2/debug/export', { method: 'POST', body: JSON.stringify(body) }),
 
   activateLeaf: (chatId: string, messageId: string) =>
     apiRequest<{ branchId: string; activeLeafId: string }>(`/api/v2/chats/${chatId}/active-leaf`, {
