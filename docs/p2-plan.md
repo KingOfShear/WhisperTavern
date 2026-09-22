@@ -98,13 +98,16 @@ R-P2-9  群聊缓存命名空间(worldbook-cache-design §6):世界书哈希缓�
 **任务清单**:
 
 ```text
-1. per-chat 哈希缓存服务(§2.1 更新公式:chatCache ← chatCache ∪ {h(e)|e∈A}):读/写/惰性清理
-2. CachePlan 真实装配(§17,总设计 §17):stablePrefixSegments/freshSegments/volatileSegments/
-   checkpoints/invalidationRisk/breakReasons——替代 P0 恒空(R-P0-4 退役)
-3. Budget Manager(总设计 §15):maxContextTokens 分配 + 预算裁剪序(R-P2-5);
-   percent+cap 超预算裁剪(P1 挂账解除——S11 注记的"留 P2")
-4. Elastic History(总设计 §16):历史区上下文超限时的裁剪/压缩策略
-5. 单测:CachePlan 装配形状、预算裁剪序、Elastic History 边界
+1. ✅ per-chat 哈希缓存服务(§2.1 更新公式) —— S17 已覆盖(行存储读/写 + 行覆盖惰性清理);
+   S18 审计确认不新建服务层(纪律 5)
+2. ✅ CachePlan 真实装配(core/compiler/cacheplan.ts,§53–§55):stablePrefixSegments/freshSegments/
+   volatileSegments/checkpoints(三处 automatic 断点)/invalidationRisk/breakReasons——
+   version=1,R-P0-4 退役;buildPrefixHash 逐段累积
+3. ✅ Budget Manager(core/compiler/budget.ts,§46–§51):可用=maxContext-output-safety margin;
+   裁剪序对齐 §49 权威序(contracts BUDGET_TRIM_ORDER);percent+cap 配额(P1 挂账解除);
+   header protect;enabled=false 语义(§91)
+4. ✅ Elastic History(§50):Pinned/Elastic 分区 + 整体推出(无状态;pinnedMessageCount 缺省 0)
+5. ✅ 单测:budget(8)/cacheplan(6)/elastic(并入 budget)+ pipeline 裁剪断言 + 金样 CachePlan 断言
 ```
 
 **验收**:CachePlan 真实装配 + 预算裁剪 + Elastic History 单测绿;金样 serialized 含 CachePlan。
@@ -185,7 +188,7 @@ X11 命中率/成本削减是产品级 KPI:任何"看起来快"的局部改动�
 |---|---|---|---|
 | S16 | WP2.1 | ✅ | 宏引擎落地(macro/ 五文件 + pipeline 接线替换 R-P0-1);MACRO_UNEXPANDED_P0 退役;三档 CACHE_UNSAFE_MACRO 处置断言绿;全量 313 测试(37 文件) |
 | S17 | WP2.2 | ✅ | worldbook-cache.ts 纯函数分区层 + worldbook.ts 接线;毕业=哈希命中;physicalOrder append-only;migration v7(first_seen_msg);Compatibility 回退;决策 A(stableWB/freshWB 默认 session);全量 329 测试(38 文件) |
-| S18 | WP2.3 | ☐ | |
+| S18 | WP2.3 | ✅ | budget.ts(Budget Manager:裁剪序权威化/percent+cap/header protect/elastic 整体推出)+ cacheplan.ts(CachePlan v1,R-P0-4 退役)+ pipeline 接线(enabled 语义)+ run.ts cacheInvalidations;全量 345 测试(40 文件) |
 | S19 | WP2.4 | ☐ | |
 | S20 | WP2.5 | ☐ | |
 | S21 | WP2.6 | ☐ | |

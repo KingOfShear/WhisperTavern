@@ -62,10 +62,12 @@ function frameSegment(segment: DeepReadonly<PromptSegment>): Uint8Array {
   ])
 }
 
-/** 按 cachePlacement.zone 分桶,区内保持 IR 数组序(排序语义归 Compiler,§93/§94) */
+/** 按 cachePlacement.zone 分桶,区内保持 IR 数组序(排序语义归 Compiler,§93/§94);
+ * 跳过 enabled=false 段(S18 Budget:Disabled Segment 不参与 Serialization,§91) */
 function segmentsByZone(ir: DeepReadonly<PromptIR>): Map<PromptZoneName, readonly DeepReadonly<PromptSegment>[]> {
   const buckets = new Map<PromptZoneName, DeepReadonly<PromptSegment>[]>()
   for (const segment of ir.segments) {
+    if (!segment.enabled) continue
     const zone = segment.cachePlacement.zone
     const bucket = buckets.get(zone)
     if (bucket) {
@@ -75,6 +77,21 @@ function segmentsByZone(ir: DeepReadonly<PromptIR>): Map<PromptZoneName, readonl
     }
   }
   return buckets
+}
+
+/**
+ * 前缀哈希(§55 CacheCheckpoint.prefixHash):从 IR 首段起逐段累积
+ * sha256(prev || frame(segment))——断点 afterSegmentId 之前的完整前缀哈希。
+ * 跳过 enabled=false 段(与序列化口径一致,§91/§19.2)。
+ */
+export function buildPrefixHash(ir: DeepReadonly<PromptIR>, upToSegmentId: string): string {
+  let acc: Uint8Array = new Uint8Array(0)
+  for (const segment of ir.segments) {
+    if (!segment.enabled) continue
+    acc = concatBytes([acc, frameSegment(segment)])
+    if (segment.id === upToSegmentId) break
+  }
+  return sha256Hex(acc)
 }
 
 /** 八区字节流(§18 区序);空区 = 空字节 */

@@ -171,7 +171,8 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
 
   /** 直接 startRun(固定 now)→ 返回 serialized 的 parts(role/content,防语义回归基线)。
    *  注:不比对完整 serialized——hash/id 含每次导入新建的 UUID(presetId/worldbookId),
-   *  跨 harness 必不同;金样锁的是"同输入 → 同内容字节",id 属运行标识非语义。 */
+   *  跨 harness 必不同;金样锁的是"同输入 → 同内容字节",id 属运行标识非语义。
+   *  S18:顺带断言 CachePlan 真实装配(version=1,stablePrefix 非空,R-P0-4 退役)。 */
   async function compileOnce(chatId: string): Promise<string> {
     const result = startRun(
       { store, bus, snapshots: new SnapshotRegistry() },
@@ -189,8 +190,15 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
       throw new Error(result.error.message)
     }
     await result.value.completion
-    const row = store.sqlite.prepare('SELECT serialized FROM prompt_snapshots WHERE id = ?').get(result.value.snapshotId) as { serialized: string }
+    const row = store.sqlite.prepare('SELECT serialized, cache_plan FROM prompt_snapshots WHERE id = ?').get(result.value.snapshotId) as {
+      serialized: string
+      cache_plan: string
+    }
     const serialized = JSON.parse(row.serialized) as { parts: unknown }
+    // 金样 serialized 含 CachePlan(S18 验收):真实装配 + stablePrefix 非空
+    const cachePlan = JSON.parse(row.cache_plan) as { version: number; stablePrefixSegments: unknown[] }
+    expect(cachePlan.version).toBe(1)
+    expect(cachePlan.stablePrefixSegments.length).toBeGreaterThan(0)
     return JSON.stringify(serialized.parts)
   }
 

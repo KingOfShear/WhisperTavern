@@ -13,6 +13,7 @@ describe('contracts/diagnostics(诊断体系)', () => {
       'EVAL_MACRO_REJECTED',
       'WORLD_BOOK_RETIRED',
       'WORLD_BOOK_DEACTIVATED',
+      'BUDGET_TRIM',
     ]) {
       expect(DIAGNOSTIC_CODES).toContain(code)
     }

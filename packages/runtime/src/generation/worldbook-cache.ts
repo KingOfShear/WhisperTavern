@@ -1,4 +1,4 @@
-import type { Diagnostic, PromptZoneName } from '@whispertavern/contracts'
+import type { Diagnostic } from '@whispertavern/contracts'
 import { sha256Hex } from '../util/id'
 
 /**
@@ -82,9 +82,6 @@ export interface WorldbookZoning {
   retired: string[]
   diagnostics: readonly Diagnostic[]
 }
-
-/** §3.5 预算裁剪序(freshWB 尾 → tail → injection → stableWB 最后手段);S17 只定义序,动作归 S18 */
-export const BUDGET_TRIM_ORDER = ['freshWB', 'tail', 'injection', 'stableWB'] as const satisfies readonly PromptZoneName[]
 
 /** §3.2 哈希对象 = 确定性展开后最终文本;normalize 恒等(决策 B)——空白差异必须产生不同指纹 */
 export function computeContentHash(renderedText: string): string {

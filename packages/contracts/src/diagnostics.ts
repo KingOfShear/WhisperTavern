@@ -27,6 +27,7 @@ export const DIAGNOSTIC_CODES = [
   'EVAL_MACRO_REJECTED', // §42:{{eval:...}} 拒绝 + warning
   'WORLD_BOOK_RETIRED', // §31:世界书条目退休(连续未激活超阈值 + 低优先级)
   'WORLD_BOOK_DEACTIVATED', // §30:Compatibility 模式失活条目即时移除
+  'BUDGET_TRIM', // §49:预算裁剪原因(§46–§51 Budget Manager 落地)
 ] as const
 export type RegisteredDiagnosticCode = (typeof DIAGNOSTIC_CODES)[number]
 export type DiagnosticCode = RegisteredDiagnosticCode | (string & {})

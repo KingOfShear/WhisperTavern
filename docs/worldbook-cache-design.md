@@ -7,6 +7,7 @@
 > **2026-09 修订**：采纳总设计 §11 的 **physicalOrder 修正**——初版"两区各按 (order, uid) 排序"在"新条目排序键小于已毕业条目"时会让毕业动作移动字节、触发第二次历史失效（§3.1 已改写）；稳定区统一命名 stableWB（旧名已废弃）；§3.4 补充 summary 区位置决策（维持 history 之前）。
 > **2026-09 二次修订**：§2.1 分区公式修正——stableWB 成员资格由 chatCache 决定、**与当轮激活解耦**（失活条目照常发送直到退休；Compatibility Mode 按 ST 语义即时移除但产生 WORLD_BOOK_DEACTIVATED 声明事件）。
 > **2026-09-22 三次修订（S17/WP2.2 落地口径）**：①毕业时机定论 = **本轮渲染哈希命中**（fresh 条目本轮未激活也毕业，防序列中部消失 = 未声明前缀断裂）；②WBCacheEntry 落库形态 = `worldbook_runtime_entries` 按 (chat, entry) 一行（不建独立 chatCache 哈希表），per-entry 行覆盖 = 死键惰性清理（编辑条目 → 新哈希 → 旧指纹被行覆盖自然消失）；③§3.2 哈希对象 = 确定性展开后最终文本、**normalize 恒等**（空白差异必须产生不同指纹，否则判定命中但发送字节不同 = 未声明前缀断裂，§60）；④稳定区贡献排序键 = physicalOrder（`semanticPlacement.order` 取物理序而非酒馆 insertionOrder）；⑤`outlet` 槽位并入 injection 区（ST 1.18 注入点，贴近末端）；⑥预算裁剪序常量 BUDGET_TRIM_ORDER 定义（动作归 S18 Budget Manager）。
+> **2026-09-22 四次修订（S18/WP2.3 落地口径）**：⑦预算裁剪序对齐 §49/§15.1 权威序并上提 contracts（`BUDGET_TRIM_ORDER`，见 §3.5 修正说明；S17 的旧序 [freshWB,tail,injection,stableWB] 作废）；⑧CachePlan 真实装配（compiler-spec §53–§55，R-P0-4 退役）：stablePrefixSegments/freshSegments/volatileSegments/checkpoints/invalidationRisk/breakReasons，只做 automatic 断点（provider 翻译归 S19）；⑨Budget Manager 两级裁剪（世界书 percent+cap 配额 + 全局权威序）+ header protect；⑩Elastic History 无状态整体推出（§50）。
 
 ## 1. 背景与问题
 
@@ -97,7 +98,7 @@ prompt 布局：
 4. **历史必须追加式**。编辑消息 / swipe 换回复 / 切分支是显式失效事件（从该点重发一次，之后恢复稳态），可接受；但**摘要替换历史**（传统总结插中间）会反复毁缓存 → P4 的摘要链采用追加式冻结块（S1..Sk），只追加不回写，从布局上规避。
    **summary 区位置决策（2026-09）**：summary 位于 history **之前**（总设计 §10.1）。V2 草案曾将其移到 history 之后以免"新摘要块插入位移历史"，但那样摘要链字节永远无法进入前缀缓存、每轮全价重发且随链增长——长对话累计成本远高于"每次追加摘要块重发一次历史"（40–80 楼才一次）。故维持现状布局，并把"追加摘要块"定义为显式 CacheBreak 事件。
 
-5. **预算裁剪从 freshWB 尾部开始**。超上下文预算时优先裁 freshWB（其后失效窗口小），再裁 injection/tail；裁 stableWB 等于移动历史，是最后手段（"退休"机制见 §7）。
+5. **预算裁剪序（2026-09-22 对齐 §49/§15.1 权威序）**：超上下文预算时按**纯缓存成本序**裁——`tail → injection → freshWB → elastic history → summary → stableWB → header`（越稳定越晚裁）。修正说明：初版"从 freshWB 尾部先裁"是缓存成本倒置——裁 freshWB 要位移整个 history、代价中，裁 tail/injection 位于历史后、零伤害；stableWB 是最后手段（"退休"机制见 §7）。权威常量 = contracts `BUDGET_TRIM_ORDER`（S18 落地，R-P2-5 措辞以此为准）。
 
 6. **@D 深度注入条目不参与分区**。作者把条目设为 @D 就是要它贴近对话（注意力更近），尊重原语义直接进 injection 区；只有"角色前/角色后"位置的条目进入 hit/fresh 分区。
 

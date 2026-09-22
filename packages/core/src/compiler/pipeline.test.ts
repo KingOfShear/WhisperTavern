@@ -225,8 +225,8 @@ describe('S4/S16 管线:确定性 + 宏展开(R-P0-1 退役)', () => {
     ])
   })
 
-  it('R-P0-2 硬上限:超限报 PROMPT_CONTEXT_TOO_LARGE 终止,不裁剪(两种模式一致)', () => {
-    // 'main prompt' = 11 字符 → 估算 3 tokens;上限 2 触发超限
+  it('R-P0-2 硬上限(S18 语义):header protect 不可裁 → 裁剪后仍超限 → PROMPT_CONTEXT_TOO_LARGE', () => {
+    // 'main prompt' = 11 字符 → 估算 3 tokens;上限 2 触发超限且 header 不可裁(§71 修订口径)
     for (const mode of ['strict', 'preview'] as const) {
       const outcome = compile(request({ mode, maxContextTokens: 2 }))
       expect(outcome.ok).toBe(false)
@@ -234,6 +234,47 @@ describe('S4/S16 管线:确定性 + 宏展开(R-P0-1 退役)', () => {
       expect(outcome.error.code).toBe('PROMPT_CONTEXT_TOO_LARGE')
       expect(outcome.error.diagnostics.some((d) => d.code === 'PROMPT_CONTEXT_TOO_LARGE')).toBe(true)
     }
+  })
+
+  it('S18 预算裁剪:tail 段超限被裁(enabled=false,IR 保留),serialized 排除', () => {
+    const outcome = compile(
+      request({
+        maxContextTokens: 4,
+        contributions: [
+          presetContribution({ id: 'runtime:tail:a', source: { type: 'runtime', key: 'a' }, segment: { role: 'user', content: '尾部内容', zone: 'tail' }, semanticPlacement: { type: 'tail', order: 0 } }),
+        ],
+      }),
+    )
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    // 尾部段 4 字符 → 估算 1 token(全宽);maxContext=4 足够 → 不裁
+    expect(outcome.value.ir.segments[0]?.enabled).toBe(true)
+
+    // 收紧:header(3 tok)+tail(1 tok)=4 > available=3 → tail 被裁
+    const tight = compile(
+      request({
+        maxContextTokens: 3,
+        contributions: [
+          presetContribution(),
+          presetContribution({ id: 'runtime:tail:a', source: { type: 'runtime', key: 'a' }, segment: { role: 'user', content: '尾部', zone: 'tail' }, semanticPlacement: { type: 'tail', order: 0 } }),
+        ],
+      }),
+    )
+    expect(tight.ok).toBe(true)
+    if (!tight.ok) return
+    const tailSeg = tight.value.ir.segments.find((s) => s.id === 'runtime:tail:a')
+    expect(tailSeg?.enabled).toBe(false) // §91:IR 保留但 disabled
+    expect(tight.value.serialized.parts.some((p) => p.content === '尾部')).toBe(false) // serialized 排除
+    expect(tight.value.diagnostics.some((d) => d.code === 'BUDGET_TRIM')).toBe(true)
+  })
+
+  it('S18:CachePlan 真实装配(version=1,stablePrefix 非空,R-P0-4 退役)', () => {
+    const outcome = compile(request())
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.value.cachePlan.version).toBe(1)
+    expect(outcome.value.cachePlan.stablePrefixSegments).toContain('preset:default:main')
+    expect(outcome.value.snapshot.cachePlan.version).toBe(1)
   })
 
   it('normalize:段 ID 重复直接失败(§9 稳定性前提);P0 不支持的模式被拒', () => {
@@ -259,6 +300,7 @@ describe('S4/S16 管线:确定性 + 宏展开(R-P0-1 退役)', () => {
       'sorting',
       'budget-limit',
       'ir-assembly',
+      'cacheplan',
       'snapshot',
     ])
     expect(outcome.value.trace.cacheHits).toBe(0)

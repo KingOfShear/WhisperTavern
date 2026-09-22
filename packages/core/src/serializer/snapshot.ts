@@ -1,6 +1,7 @@
 import {
   CachePlanSchema,
   PromptSnapshotSchema,
+  type CachePlan,
   type ChatId,
   type Diagnostic,
   type MessageId,
@@ -41,6 +42,8 @@ export interface BuildPromptSnapshotInput {
   tokenCountMode?: TokenCountMode
   /** 注入时钟:参与快照元数据,但**不参与任何哈希** */
   createdAt: Timestamp
+  /** S18:真实 CachePlan(pipeline 装配);缺省 = P0 空形状(R-P0-4 兼容) */
+  cachePlan?: DeepReadonly<CachePlan>
 }
 
 /**
@@ -48,14 +51,14 @@ export interface BuildPromptSnapshotInput {
  * 1. 按 §18 区序把段分桶为规范字节流 → 八区 SHA-256(§67);
  * 2. serialized = 规范序列化(format 'custom';S4 的 Provider Serialization(§63)
  *    落 provider 格式后,由管线替换本字段的生成路径);
- * 3. cachePlan = P0 空形状(R-P0-4,Cache Planner P2 接管)。
+ * 3. cachePlan = 传入值或 P0 空形状(R-P0-4 兼容;S18 起由 Cache Planner 装配)。
  */
 export function buildPromptSnapshot(input: BuildPromptSnapshotInput): DeepReadonly<PromptSnapshot> {
   const { hashes } = buildZoneHashes(input.ir)
   const serialized = buildCanonicalSerialized(input.ir, hashes, input.tokenCountMode ?? 'estimated')
 
-  // P0 CachePlan 恒空(R-P0-4):automatic-prefix 家族无需断点标记
-  const cachePlan = CachePlanSchema.parse({
+  // S18:真实 CachePlan 由 pipeline 装配传入;缺省保持 P0 空形状(snapshot.test 兼容)
+  const cachePlan = input.cachePlan ?? CachePlanSchema.parse({
     version: 0,
     stablePrefixSegments: [],
     stablePrefixTokens: 0,
@@ -96,6 +99,7 @@ function buildCanonicalSerialized(
   const parts: SerializedPart[] = []
   let tokenCount = 0
   for (const segment of ir.segments) {
+    if (!segment.enabled) continue // §91 Disabled Segment:不参与 Serialization
     parts.push({ role: segment.role, content: segment.content })
     tokenCount += segment.tokenCount
   }

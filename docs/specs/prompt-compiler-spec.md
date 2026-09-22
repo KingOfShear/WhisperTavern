@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.3（2026-09-22 修订版。S17 缓存分区口径：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.4（2026-09-22 修订版。S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -1564,6 +1564,8 @@ ProviderCapabilities
 BudgetResult
 ```
 
+**S18 落地口径（2026-09-22）**：Budget Manager 落 `core/compiler/budget.ts` 纯函数层。裁剪 = 段标记 enabled=false（§91 Disabled Segment：不参与 Serialization 但 Snapshot 可记录）；两级裁剪——①世界书 percent+cap 配额（`worldbookQuota = min(available*percent/100, cap ?? available)`，ST `world_info_budget` 默认 percent=25、cap=null）；②全局按 §49 权威序。header 区段 protect 硬编码不可裁（防空 prompt）；裁到只剩 header 仍超限 → PROMPT_CONTEXT_TOO_LARGE（§71 修订口径"裁剪后仍放不进模型上下文窗口"）。裁剪原因以 info 诊断 BUDGET_TRIM 记录。Elastic History（§50）无状态整体推出（撑满后锚点前移的完整跨轮语义留 S20+）。
+
 ---
 
 # 47. Context Budget
@@ -2263,6 +2265,8 @@ EVAL_MACRO_REJECTED   // 补（2026-09-22）：§42 {{eval:...}} 拒绝 + warnin
 WORLD_BOOK_RETIRED   // 补（2026-09-22）：§31 世界书条目退休（连续未激活超阈值 + 低优先级）
 
 WORLD_BOOK_DEACTIVATED   // 补（2026-09-22）：§30 Compatibility 模式失活条目即时移除
+
+BUDGET_TRIM   // 补（2026-09-22）：§49 预算裁剪原因（§46–§51 Budget Manager 落地）
 
 PROMPT_CONTEXT_TOO_LARGE   // 补（2026-09）：裁剪后仍放不进模型上下文窗口
 

@@ -1,4 +1,5 @@
 import {
+  type CacheBreakReason,
   type CachePlan,
   type ChatId,
   type CompileMode,
@@ -16,6 +17,8 @@ import {
   type StabilityClass,
   type Timestamp,
 } from '@whispertavern/contracts'
+import { applyBudget, type BudgetSegment, type WorldbookBudgetConfig } from './budget'
+import { buildCachePlan } from './cacheplan'
 import { createPromptIR, deepFreeze, type DeepReadonly } from '../ir/segment'
 import { expandWithAnalysis } from '../macro/engine'
 import { seededRng } from '../macro/rng'
@@ -25,15 +28,16 @@ import { buildPromptSnapshot } from '../serializer/snapshot'
 import { estimateTokens, type TokenCountMode } from '../tokens/estimate'
 
 /**
- * Compiler 最小管线 —— compiler-spec §3 的 P0 子集(p0-plan S4 任务 1)+ S16 宏引擎。
+ * Compiler 管线 —— compiler-spec §3 的 P0 子集(p0-plan S4 任务 1)+ S16 宏引擎 + S18 预算/CachePlan。
  *
  * 阶段:分区归类(提交方声明 zone)→ 宏展开 + Macro Cache Rule(S16,§37–§45)
- * → stable sorting(§93/§94)→ 硬上限(R-P0-2,不裁剪)→ IR 组装(含 I5 运行期断言)
- * → 序列化(§62 规范路径)→ CachePlan=空(R-P0-4)→ Snapshot 落点(§66)。
+ * → stable sorting(§93/§94)→ Budget Manager(S18,§46–§51:按 §49 权威序裁剪,
+ *   percent+cap 配额)→ IR 组装(enabled 标记)→ Cache Planner(S18,§53–§55)→
+ *   序列化(§62 规范路径)→ Snapshot 落点(§66)。
  *
- * 不做(Non-goals):stableWB/freshWB/summary 填充策略(S17)、预算裁剪(P2)、
- * CachePlan(P2)、strict/preview 之外四模式(P1+)。宏引擎已落地(S16),
- * R-P0-1 宏透传退役(MACRO_UNEXPANDED_P0 移除)。
+ * 不做(Non-goals):Elastic History 完整跨轮锚点前移(S20+)、provider 断点翻译(S19)、
+ * strict/preview 之外四模式(P1+)。S17 已落地 stableWB/freshWB 填充;R-P0-2 硬上限
+ * 语义升级为"预算裁剪后仍超限才报错"(§71 修订口径);R-P0-4 CachePlan 恒空退役。
  *
  * 失败语义:可预期失败走 Result(共享契约 §2 禁 throw 作普通控制流);
  * 不变式违例按 compiler-spec 抛 INVARIANT_VIOLATION——那是实现 bug,不是控制流。
@@ -53,7 +57,7 @@ export interface CompileRequest {
   compilerVersion: string
   /** 注入时钟(确定性:同输入含同 now → 逐字节同输出;宏 {{time}}/{{date}}/{{random}} 种子源) */
   now: Timestamp
-  /** R-P0-2 硬上限:总 token 超限 → PROMPT_CONTEXT_TOO_LARGE,不裁剪 */
+  /** 模型上下文窗口(§47:可用 = maxContext - output reservation - safety margin) */
   maxContextTokens: number
   mode: CompileMode
   contributions: readonly PromptContribution[]
@@ -64,6 +68,16 @@ export interface CompileRequest {
   /** §43 三档:缺省按 mode 推导(strict→'strict',preview→'normal');显式值优先 */
   macroCachePolicy?: MacroCachePolicy
   tokenCountMode?: TokenCountMode
+  /** §47 输出 token 保留;缺省 0(纯编译视角,run.ts 传 adapter 能力值) */
+  maxOutputTokens?: number
+  /** §47 安全余量;缺省 0 */
+  safetyMarginTokens?: number
+  /** ST world_info_budget(percent+cap 超预算裁剪,S18 解除 P1 挂账);缺省 { percent: 25, cap: null } */
+  worldbookBudget?: WorldbookBudgetConfig
+  /** §50 Elastic History:Pinned 消息数;缺省 0 = 全 Pinned(与 S17 行为逐字节一致) */
+  pinnedMessageCount?: number
+  /** §58 跨轮失效事件(runtime 注入;MESSAGE_EDITED/BRANCH_SWITCHED 等变体类型就位、S20 消费) */
+  cacheInvalidations?: readonly CacheBreakReason[]
 }
 
 export interface CompileSuccess {
@@ -174,27 +188,54 @@ export function compile(request: CompileRequest): CompileOutcome {
   })
   mark('sorting', stageStart)
 
-  // —— token 汇总与硬上限(R-P0-2:只报错终止,不裁剪;按展开后文本估算,R-P2-3)——
+  // —— token 估算(按展开后文本估算,R-P2-3)+ Budget Manager(S18,§46–§51)——
   stageStart = performance.now()
   const tokenCountMode = request.tokenCountMode ?? 'estimated'
-  let totalTokens = 0
   for (const item of sorted) {
     item.tokenCount =
       item.contribution.segment.tokenCount ?? estimateTokens(item.expandedContent)
-    totalTokens += item.tokenCount
   }
-  if (totalTokens > request.maxContextTokens) {
+  // 可用上下文 = maxContext - output reservation - safety margin(§47)
+  const availableTokens = request.maxContextTokens - (request.maxOutputTokens ?? 0) - (request.safetyMarginTokens ?? 0)
+  const budgetResult = applyBudget({
+    segments: sorted.map((item): BudgetSegment => ({
+      id: item.contribution.id,
+      zone: item.zone,
+      order: placementOrder(item.contribution),
+      tokenCount: item.tokenCount,
+      source: item.contribution.source,
+    })),
+    availableTokens,
+    worldbookBudget: request.worldbookBudget,
+    elastic: request.pinnedMessageCount !== undefined ? { pinnedMessageCount: request.pinnedMessageCount } : undefined,
+  })
+  // 预算裁剪:段标记 disabled(§91);裁剪原因以 info 诊断记录
+  for (const r of budgetResult.reasons) {
+    diagnostics.push({
+      level: 'info',
+      code: 'BUDGET_TRIM',
+      message: '预算裁剪(compiler-spec §49)',
+      details: { reason: r },
+    })
+  }
+  const enabledIds = new Set(budgetResult.included)
+  for (const item of sorted) {
+    item.enabled = enabledIds.has(item.contribution.id)
+  }
+  const totalTokens = budgetResult.totalTokens
+  // §71 修订口径:预算裁剪后仍放不进模型上下文窗口才报错(header protect 兜底,防空 prompt)
+  if (budgetResult.included.length > 0 && totalTokens > availableTokens && sorted.every((i) => i.zone === 'header' || !i.enabled)) {
     diagnostics.push({
       level: 'error',
       code: 'PROMPT_CONTEXT_TOO_LARGE',
-      message: `序列化后 ${totalTokens} tokens 超过模型上限 ${request.maxContextTokens}(R-P0-2:不裁剪,报错终止)`,
-      details: { totalTokens, maxContextTokens: request.maxContextTokens },
+      message: `预算裁剪后仍超限 ${totalTokens} tokens > 可用 ${availableTokens}(compiler-spec §71 修订口径)`,
+      details: { totalTokens, availableTokens },
     })
     return failure('PROMPT_CONTEXT_TOO_LARGE', 'prompt 超出模型上下文硬上限', diagnostics)
   }
   mark('budget-limit', stageStart)
 
-  // —— IR 组装 ——
+  // —— IR 组装(enabled 来自预算决策,§91)——
   stageStart = performance.now()
   const ir = createPromptIR({
     schemaVersion: 1,
@@ -209,7 +250,7 @@ export function compile(request: CompileRequest): CompileOutcome {
       order: placementOrder(item.contribution),
       tokenCount: item.tokenCount,
       dependencies: [],
-      enabled: true,
+      enabled: item.enabled,
     })),
     zones: [...new Set(sorted.map((item) => item.zone))]
       .sort((a, b) => ZONE_ORDER.indexOf(a) - ZONE_ORDER.indexOf(b))
@@ -218,7 +259,16 @@ export function compile(request: CompileRequest): CompileOutcome {
   })
   mark('ir-assembly', stageStart)
 
-  // —— 序列化 + Snapshot 落点(S3 构建器;CachePlan 恒空 R-P0-4)——
+  // —— Cache Planner(S18,§53–§55;R-P0-4 退役)——
+  stageStart = performance.now()
+  const cachePlan = buildCachePlan({
+    ir,
+    invalidations: request.cacheInvalidations ?? [],
+    diagnostics,
+  })
+  mark('cacheplan', stageStart)
+
+  // —— 序列化 + Snapshot 落点(S3 构建器;CachePlan 由本管线装配)——
   stageStart = performance.now()
   const snapshot = buildPromptSnapshot({
     id: request.snapshotId,
@@ -232,6 +282,7 @@ export function compile(request: CompileRequest): CompileOutcome {
     tokenCountMode,
     diagnostics,
     createdAt: request.now,
+    cachePlan,
   })
   mark('snapshot', stageStart)
 
@@ -269,6 +320,8 @@ interface ResolvedItem {
   tokenCount: number
   /** 宏展开后的最终文本(R-P2-3:哈希对象;IR 组装用) */
   expandedContent: string
+  /** S18 预算裁剪标记(§91 Disabled Segment) */
+  enabled: boolean
 }
 
 /** 单条贡献解析:zone 取自提交方声明;stability 取声明或按区默认(§16) */
@@ -298,6 +351,7 @@ function resolveContribution(
     stability: contribution.segment.stability ?? ZONE_DEFAULT_STABILITY[zone],
     tokenCount: 0,
     expandedContent: contribution.segment.content,
+    enabled: true,
   }
 }
 

@@ -1,6 +1,8 @@
 import { compile } from '@whispertavern/core'
 import {
   type ApplicationError,
+  type CacheBreakReason,
+  type Diagnostic,
   type MessageRole,
   type PromptContribution,
   type PromptRole,
@@ -132,6 +134,7 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
     compilerVersion: SERVER_COMPILER_VERSION,
     now,
     maxContextTokens: input.adapter.capabilities(input.model).maxContextTokens,
+    maxOutputTokens: input.adapter.capabilities(input.model).maxOutputTokens,
     mode: 'preview',
     contributions: [
       ...buildContributions(chat.value, chain.value),
@@ -141,6 +144,9 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
     ],
     variables,
     ...(last !== undefined ? { lastMessage: { id: last.id, role: last.role, content: last.content } } : {}),
+    // S18 §58:跨轮失效事件(runtime 从世界书分区诊断注入;MESSAGE_EDITED 等变体类型
+    // 就位、S20 遥测消费面)
+    cacheInvalidations: toCacheInvalidations(worldbook.diagnostics),
   })
   if (!outcome.ok) {
     const budgetLike = outcome.error.code === 'PROMPT_CONTEXT_TOO_LARGE'
@@ -326,6 +332,18 @@ function resolveWorldbookMode(store: WhisperTavernDb, presetId: string | undefin
   if (presetId === undefined) return 'performance'
   const row = store.db.select().from(presets).where(eq(presets.id, presetId)).get()
   return row?.compilerMode === 'compatibility' ? 'compatibility' : 'performance'
+}
+
+/** S18 §58:世界书分区诊断 → CacheBreakReason(§31 退休 / §30 失活移除) */
+function toCacheInvalidations(diagnostics: readonly Diagnostic[]): CacheBreakReason[] {
+  const invalidations: CacheBreakReason[] = []
+  for (const d of diagnostics) {
+    const entryId = typeof d.details?.entryId === 'string' ? d.details.entryId : undefined
+    if (entryId === undefined) continue
+    if (d.code === 'WORLD_BOOK_RETIRED') invalidations.push({ type: 'WORLD_BOOK_RETIREMENT', entryId })
+    if (d.code === 'WORLD_BOOK_DEACTIVATED') invalidations.push({ type: 'WORLD_BOOK_DEACTIVATED', entryId })
+  }
+  return invalidations
 }
 
 function recordToRow(record: {

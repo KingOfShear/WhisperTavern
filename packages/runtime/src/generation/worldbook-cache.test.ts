@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BUDGET_TRIM_ORDER, computeContentHash, zoneWorldbook, type CacheRowView, type ZoningCandidate } from './worldbook-cache'
+import { computeContentHash, zoneWorldbook, type CacheRowView, type ZoningCandidate } from './worldbook-cache'
+import { BUDGET_TRIM_ORDER } from '@whispertavern/contracts'
 
 /** 构造候选(宏安全已预检;contentHash 由调用方预计算) */
 function candidate(overrides: Partial<ZoningCandidate> = {}): ZoningCandidate {
@@ -219,7 +220,15 @@ describe('S17 worldbook-cache:哈希与裁剪序', () => {
     expect(computeContentHash('hello')).toBe(computeContentHash('hello'))
   })
 
-  it('§3.5 裁剪序:freshWB → tail → injection → stableWB(最后手段)', () => {
-    expect([...BUDGET_TRIM_ORDER]).toEqual(['freshWB', 'tail', 'injection', 'stableWB'])
+  it('§49/§15.1 裁剪序:tail → injection → freshWB → elasticHistory → summary → stableWB → header(权威序,越稳定越晚裁)', () => {
+    expect([...BUDGET_TRIM_ORDER]).toEqual([
+      'tail',
+      'injection',
+      'freshWB',
+      'elasticHistory',
+      'summary',
+      'stableWB',
+      'header',
+    ])
   })
 })
