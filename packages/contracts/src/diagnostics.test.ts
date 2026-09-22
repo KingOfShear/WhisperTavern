@@ -1,21 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { DiagnosticSchema, P0_DIAGNOSTIC_CODES } from './diagnostics'
+import { DIAGNOSTIC_CODES, DiagnosticSchema } from './diagnostics'
 
 describe('contracts/diagnostics(诊断体系)', () => {
-  it('P0 码表注册完整(R-P0-1 / R-P0-3 / compiler-spec §71)', () => {
+  it('诊断码注册完整(R-P0-2 / compiler-spec §71 + S16 宏引擎新码)', () => {
     for (const code of [
-      'MACRO_UNEXPANDED_P0',
       'PROMPT_CONTEXT_TOO_LARGE',
       'EMPTY_SEGMENT',
       'DUPLICATE_SEGMENT_ID',
       'STABILITY_OVERRIDE',
+      'CACHE_UNSAFE_MACRO',
+      'UNKNOWN_MACRO',
+      'EVAL_MACRO_REJECTED',
     ]) {
-      expect(P0_DIAGNOSTIC_CODES).toContain(code)
+      expect(DIAGNOSTIC_CODES).toContain(code)
     }
   })
 
-  it('P0 注册码无重复', () => {
-    expect(new Set(P0_DIAGNOSTIC_CODES).size).toBe(P0_DIAGNOSTIC_CODES.length)
+  it('R-P0-1 退役:MACRO_UNEXPANDED_P0 不在注册集(S16 宏引擎取代)', () => {
+    expect(DIAGNOSTIC_CODES).not.toContain('MACRO_UNEXPANDED_P0')
+  })
+
+  it('注册码无重复', () => {
+    expect(new Set(DIAGNOSTIC_CODES).size).toBe(DIAGNOSTIC_CODES.length)
   })
 
   it('Diagnostic round-trip,可挂 segmentId/source/details', () => {

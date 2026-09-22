@@ -83,7 +83,7 @@ describe('contracts/snapshot(Prompt Snapshot)', () => {
       serialized,
       hashes,
       diagnostics: [
-        DiagnosticSchema.parse({ level: 'info', code: 'MACRO_UNEXPANDED_P0', message: '{{char}} 透传' }),
+        DiagnosticSchema.parse({ level: 'info', code: 'UNKNOWN_MACRO', message: '{{place}} 原样保留' }),
       ],
       createdAt: '2026-09-05T12:00:00Z',
     }

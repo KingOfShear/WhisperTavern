@@ -6,7 +6,7 @@ import { cleanupHarnesses, makeE2eHarness, type E2eHarness } from './harness'
  * - §81 编译顺序:ST prompts[] + prompt_order[] → 段,按 prompt_order 索引排序;
  *   不在 prompt_order 的段(隐藏段)被排除;injection_position 0/1 → header/injection 区。
  * - Persona 注入:chat 绑定 persona → 档案渲染为 header 区贡献。
- * - 宏透传 R-P0-1:预设段含 {{user}} → 编译产出 MACRO_UNEXPANDED_P0 info 诊断。
+ * - 宏展开(S16):预设段含 {{user}} → 展开为 'User'(无 persona 绑定缺省,§44)。
  * - 绑定 API:persona/preset 单值绑定(成功 / 404 / 空体 / 解绑)。
  */
 
@@ -102,7 +102,7 @@ describe('S12 预设编译顺序(§81)', () => {
     expect(serialized).toContain('A-系统角色设定')
     expect(serialized).toContain('B-玩家档案占位')
     expect(serialized).toContain('C-风格约束')
-    expect(serialized).toContain('{{user}} 推门而入')
+    expect(serialized).toContain('User 推门而入')
     // 隐藏段(不在 prompt_order)必须被排除
     expect(serialized).not.toContain('Z-不应出现')
 
@@ -143,11 +143,11 @@ describe('S12 Persona 注入 header 区', () => {
   })
 })
 
-describe('S12 宏透传 R-P0-1', () => {
+describe('S16 宏展开(§44/R-P2-3)', () => {
   let ctx: ReturnType<typeof openHarness>
   afterEach(() => cleanupHarnesses())
 
-  it('预设段含 {{user}} → 编译产出 MACRO_UNEXPANDED_P0 info 诊断', async () => {
+  it('预设段含 {{user}} → 展开为 "User"(chat 无 persona 绑定缺省,§44)', async () => {
     ctx = openHarness()
     const { app, store } = ctx
     const presetId = await importPreset(app, ST_PRESET)
@@ -157,9 +157,68 @@ describe('S12 宏透传 R-P0-1', () => {
     const { snapshotId } = await startGeneration(app, chatId, [{ text: '推门进来。' }])
     await wait(80)
 
-    const diag = store.sqlite.prepare('SELECT diagnostics FROM prompt_snapshots WHERE id = ?').get(snapshotId) as { diagnostics: string }
+    // 展开后文本进入 serialized(R-P2-3:哈希对象 = 宏展开后的最终文本)
+    const snap = store.sqlite.prepare('SELECT serialized FROM prompt_snapshots WHERE id = ?').get(snapshotId) as {
+      serialized: string
+    }
+    expect(snap.serialized).toContain('User 推门而入')
+    expect(snap.serialized).not.toContain('{{user}} 推门而入')
+
+    // MACRO_UNEXPANDED_P0 已退役(S16 宏引擎取代),无该码
+    const diag = store.sqlite.prepare('SELECT diagnostics FROM prompt_snapshots WHERE id = ?').get(snapshotId) as {
+      diagnostics: string
+    }
     const diagnostics = JSON.parse(diag.diagnostics) as { code: string }[]
-    expect(diagnostics.some((d) => d.code === 'MACRO_UNEXPANDED_P0')).toBe(true)
+    expect(diagnostics.some((d) => d.code === 'MACRO_UNEXPANDED_P0')).toBe(false)
+  })
+})
+
+describe('S16 宏缓存规则(CACHE_UNSAFE_MACRO 标红路径,§43/R-P2-4)', () => {
+  let ctx: ReturnType<typeof openHarness>
+  afterEach(() => cleanupHarnesses())
+
+  /** 内嵌 {{date}} 的 header 段预设:隐性命中率杀手场景(R-P2-4 点名的"系统提示嵌 {{date}}") */
+  const VOLATILE_PRESET = {
+    name: 'S16 挥发宏预设',
+    temperature: 0.8,
+    max_context: 8000,
+    prompts: [
+      { identifier: 'withDate', role: 'system', content: '当前时间 {{date}}', injection_position: 0 },
+    ],
+    prompt_order: [{ identifier: 'withDate', order: 0, enabled: true }],
+  }
+
+  it('header 段内嵌 {{date}} → CACHE_UNSAFE_MACRO warning + 段移 tail + 展开为日期', async () => {
+    ctx = openHarness()
+    const { app, store } = ctx
+    const presetId = await importPreset(app, VOLATILE_PRESET)
+    const chatId = await createChat(app, '你好')
+    await bindChat(app, chatId, { presetId })
+
+    const { snapshotId } = await startGeneration(app, chatId, [{ text: '现在几点？' }])
+    await wait(80)
+
+    const row = store.sqlite.prepare('SELECT ir, diagnostics FROM prompt_snapshots WHERE id = ?').get(snapshotId) as {
+      ir: string
+      diagnostics: string
+    }
+    const ir = JSON.parse(row.ir) as { segments: { content: string; cachePlacement: { zone: string } }[] }
+    const diagnostics = JSON.parse(row.diagnostics) as { code: string; level: string; details?: Record<string, unknown> }[]
+
+    // §43:诊断存在且为 warning(normal 档,mode=preview 缺省推导)
+    const unsafe = diagnostics.find((d) => d.code === 'CACHE_UNSAFE_MACRO')
+    expect(unsafe).toBeDefined()
+    expect(unsafe?.level).toBe('warning')
+    expect(unsafe?.details).toMatchObject({ action: 'moved_to_tail' })
+
+    // normal 档:整段 cachePlacement.zone 改 tail(§13 语义位不动)
+    const dateSegment = ir.segments.find((s) => s.content.startsWith('当前时间'))
+    expect(dateSegment).toBeDefined()
+    expect(dateSegment?.cachePlacement.zone).toBe('tail')
+
+    // 展开后文本进入 IR(哈希对象 = 宏展开后最终文本,R-P2-3);只断言格式不断言值(避免 wall-clock 依赖,X10)
+    expect(dateSegment?.content).toMatch(/^当前时间 \d{4}-\d{2}-\d{2}$/)
+    expect(dateSegment?.content).not.toContain('{{date}}')
   })
 })
 

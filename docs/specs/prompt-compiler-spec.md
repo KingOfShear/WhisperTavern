@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.1（2026-09 收编修订版。4 处修正与总设计对齐：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.2（2026-09-22 修订版。S16 宏引擎落地口径：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -1333,6 +1333,18 @@ macro-registry.ts
 
 而不是 Compiler 硬编码。
 
+**S16 落地口径（2026-09-22 修订）**：
+
+```text
+{{time}}    → UTC HH:MM（24 小时制，getUTCHours/getUTCMinutes 零填充）
+{{date}}    → UTC YYYY-MM-DD（getUTCFullYear/getUTCMonth+1/getUTCDate 零填充）
+{{random}}  → 整数 [1,100]（含）；确定性种子流
+{{roll}}    → 骰子求和，支持 NdM / NdM±K（如 1d20 / 2d6 / 1d20+3）；
+             无效参数保留原文，不报错
+```
+
+确定性口径：`{{random}}`/`{{roll}}` 使用引擎级**确定性种子流**（RNG 种子 = `sha256Hex(now|chatId)` → mulberry32）。同输入（同 now 同 chat）任意次编译逐字节一致、跨运行可复现（§5 Determinism）；同一轮内多个 `{{random}}` 取值不同（保留 ST 语义）。种子**不得**引入 snapshotId/messageId 等每轮新建标识——否则破坏确定性测试与金样。
+
 ---
 
 # 41. Macro Registry
@@ -1344,12 +1356,15 @@ interface MacroDefinition {
   volatility: StabilityClass
 
   evaluate(
-    context: MacroContext
+    context: MacroContext,
+    args?: string
   ): string
 
   dependencies?: string[]
 }
 ```
+
+**S16 修订（2026-09-22）**：`evaluate` 增可选 `args`——参数化宏（如 `{{roll:1d20}}`）以 `:` 后的部分作为 args 传入（`'1d20'`）；无参数宏（`{{user}}`）args 为 `undefined`。
 
 ---
 
@@ -1418,6 +1433,34 @@ compat:
 preserve position + mark cache unsafe
 ```
 
+**S16 落地口径（2026-09-22 修订）**：
+
+```text
+稳定区枚举（stable zone）: { header, stableWB, freshWB, summary }
+  —— technical-plan §5.2 稳定性表格：这四区是 history 之前的缓存敏感前缀区；
+     history/injection/tail 不在稳定区（历史追加式、注入贴近末端、tail 本就每轮可变）。
+
+触发判据: 段 zone ∈ 稳定区 ∧ 存在 occurrence.volatility 低于段 effective stability。
+  稳定性阶梯: static(0) < session(1) < request(2) < message(3) < volatile(4)
+  例: header 段（effective session）含 {{time}}（volatile）→ 触发；
+      header 段含 {{char}}（session == session）→ 不触发；
+      history 段含 {{time}}（不在稳定区）→ 不触发；
+      {{lastMessage}}（message < session）出现在 header → 触发。
+
+处置粒度: 整段（不做段内 split）——R-P2-4 口径是"条目/段落标 volatile → 一律进 tail"；
+  段内 split 需为碎片分配新稳定 ID（§9 ID=assetId+logicalPath），哈希键变化自伤缓存；
+  混合场景（系统提示内嵌 {{date}}）由 Inspector 标红引导用户修预设源头。
+
+三档 ↔ 编译模式映射（S16 以独立 macroCachePolicy 字段显式传入）:
+  strict      ↔ CompileMode.strict        → error 级诊断 → compile failure（§75）
+  normal      ↔ CompileMode.preview/performance → 整段 cachePlacement.zone 改 'tail'、
+                stability 改 'volatile'（仅当非用户显式声明）+ warning 诊断
+  compat      ↔ CompileMode.compatibility  → 段位置不动 + warning 诊断（preserved）
+
+§13 双 Placement 分离: normal 档只改 cachePlacement.zone 与排序键，不改 semanticPlacement——
+  语义上仍属原位置，物理上移入 tail 区，序列化/哈希按 cachePlacement 分区落位。
+```
+
 ---
 
 # 44. Runtime Variables
@@ -1441,6 +1484,16 @@ interface RuntimeVariables {
 }
 ```
 
+**S16 落地口径（2026-09-22 修订）**：
+
+```text
+user 缺省 'User'（chat 无 persona 绑定时的 ST 默认 persona 名）；
+char 缺省 ''（无角色绑定）；
+time/date 可预置（chat_state 按聊天冻结取值，R-P2-4 的另一隔离路径）——
+  预置值优先于引擎按 MacroContext.now 推导；
+custom.persona 承载 persona 描述/名（{{persona}} 取文对象）。
+```
+
 ---
 
 # 45. Macro Evaluation Context
@@ -1462,6 +1515,9 @@ interface MacroContext {
     | 'preview'
     | 'simulation'
     | 'replay'
+
+  rng: Rng
+  seed?: string
 }
 ```
 
@@ -1473,6 +1529,18 @@ freeze random seed
 ```
 
 从而实现确定性 Replay。
+
+**S16 落地口径（2026-09-22 修订）**：
+
+```text
+rng: Rng —— 引擎注入的确定性种子流（sha256Hex(now|chatId) → mulberry32），
+  调用方不构造；整次 expand 调用共享一条流（多个 {{random}} 自然不同值）。
+seed?: string —— replay 冻结位：mode==='replay' 时 now 取 context.now 原值、
+  RNG 种子取 context.seed（不派生），实现确定性 Replay（§45/§78）。
+MessageContext = { id, role, content }（contracts Message 字段子集）；
+CharacterContext = { name, description? } / ChatContext = { id, title? } 为最小占位，
+  随对应宏落地扩展（S16 仅 {{lastMessage}} 消费 message）。
+```
 
 ---
 
@@ -2184,9 +2252,15 @@ DUPLICATE_SEGMENT_ID
 
 NON_DETERMINISTIC_MACRO
 
+UNKNOWN_MACRO   // 补（2026-09-22）：未注册宏（{{place}} 等）→ 原样保留 + info
+
+EVAL_MACRO_REJECTED   // 补（2026-09-22）：§42 {{eval:...}} 拒绝 + warning
+
 PROMPT_CONTEXT_TOO_LARGE   // 补（2026-09）：裁剪后仍放不进模型上下文窗口
 
 `PROMPT_CONTEXT_TOO_LARGE` 是**可降级但不可盲目重试**的诊断码。消费方（Agent Runtime）的处理口径见 agent-runtime-spec §49.1：降级后**只有当 replacement generation 确实前进**才允许重试一次，否则原错误保持权威。Compiler 侧只负责报码与提供裁剪建议，不参与重试决策。
+
+退役（2026-09-22）：`MACRO_UNEXPANDED_P0`（R-P0-1 宏透传期结束，由 S16 宏引擎展开取代，全仓零产出方）。
 
 ---
 

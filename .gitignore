@@ -23,6 +23,9 @@ reference/
 # 内部会话上下文（跨会话日记/实验记录）——不对外发布（AGENTS §6 / §9 五版）
 .workbuddy/
 
+# 规划文档（TRAE 会话级计划产物，非仓库文档）
+.trae/
+
 # 操作系统杂物
 .DS_Store
 Thumbs.db

@@ -81,3 +81,7 @@ export {
   type StartedRun,
   type StartRunResult,
 } from './generation/run'
+export {
+  buildRuntimeVariables,
+  type BuildRuntimeVariablesInput,
+} from './generation/variables'

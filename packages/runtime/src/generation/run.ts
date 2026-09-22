@@ -16,6 +16,7 @@ import { activeLeafId, ancestorChain, createMessage, loadChat, loadMessage } fro
 import { buildWorldbookContributions } from './worldbook'
 import { buildPresetContributions } from './preset'
 import { buildPersonaContributions } from './persona'
+import { buildRuntimeVariables } from './variables'
 import type { Chat, Message } from '@whispertavern/contracts'
 import { dispatchGeneration, SnapshotRegistry, type DispatchResult } from './dispatch'
 import type { EventBus } from '../events/bus'
@@ -115,6 +116,10 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   const persona = buildPersonaContributions({ store, chatId: input.chatId })
   const preset = buildPresetContributions({ store, chatId: input.chatId })
 
+  // S16 宏展开变量(§44):user/char/persona 取文对象;lastMessage 取活跃链末条
+  // (生成必须以 user 结尾,链尾即当轮输入,{{lastMessage}} 的取文对象)。
+  const variables = buildRuntimeVariables({ store, chat: chat.value })
+
   const outcome = compile({
     chatId: input.chatId,
     snapshotId,
@@ -130,6 +135,8 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
       ...preset.contributions,
       ...worldbook.contributions,
     ],
+    variables,
+    ...(last !== undefined ? { lastMessage: { id: last.id, role: last.role, content: last.content } } : {}),
   })
   if (!outcome.ok) {
     const budgetLike = outcome.error.code === 'PROMPT_CONTEXT_TOO_LARGE'

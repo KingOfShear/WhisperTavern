@@ -21,6 +21,7 @@ import {
   activeLeafId,
   activateMessage,
   buildContributions,
+  buildRuntimeVariables,
   createBranch,
   createChat,
   createMessage,
@@ -569,6 +570,7 @@ export function createApp(deps: ServerDeps): CreatedApp {
       maxContextTokens: resolved.adapter.capabilities(resolved.model).maxContextTokens,
       mode: 'preview',
       contributions: buildContributions(chat.value, chain.value),
+      variables: buildRuntimeVariables({ store: deps.store, chat: chat.value }),
     })
     if (!outcome.ok) {
       return fail(
