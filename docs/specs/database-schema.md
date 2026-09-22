@@ -537,6 +537,9 @@ CREATE TABLE worldbook_runtime_entries (
 
     content_hash         TEXT,
 
+    -- 首次注入轮序（WP2.2 S17 起；单调不变量，供二分/调试；重注入更新）
+    first_seen_msg       INTEGER,
+
     updated_at           TIMESTAMPTZ NOT NULL,
 
     UNIQUE(chat_id, worldbook_entry_id)

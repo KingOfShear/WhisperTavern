@@ -25,6 +25,8 @@ export const DIAGNOSTIC_CODES = [
   'CACHE_UNSAFE_MACRO', // §43:stable zone 含低于段稳定性的宏
   'UNKNOWN_MACRO', // 未注册宏({{place}} 等):原样保留 + info
   'EVAL_MACRO_REJECTED', // §42:{{eval:...}} 拒绝 + warning
+  'WORLD_BOOK_RETIRED', // §31:世界书条目退休(连续未激活超阈值 + 低优先级)
+  'WORLD_BOOK_DEACTIVATED', // §30:Compatibility 模式失活条目即时移除
 ] as const
 export type RegisteredDiagnosticCode = (typeof DIAGNOSTIC_CODES)[number]
 export type DiagnosticCode = RegisteredDiagnosticCode | (string & {})

@@ -415,6 +415,15 @@ CREATE TABLE chat_worldbooks (
 CREATE INDEX idx_chat_worldbooks_chat ON chat_worldbooks(chat_id);
 `
 
+/**
+ * v7(S17/WP2.2):worldbook_runtime_entries 增 first_seen_msg——首次注入轮序
+ * (worldbook-cache-design §4 WBCacheEntry;单调不变量,lastActivationSeq 是最近
+ * 激活值会被刷新,不可近似)。
+ */
+const V7_CACHE_FIRST_SEEN = /* sql */ `
+ALTER TABLE worldbook_runtime_entries ADD COLUMN first_seen_msg INTEGER;
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -451,5 +460,11 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'p1-chat-worldbook-binding',
     sql: V6_CHAT_WORLDBOOKS,
     checksum: sha256Hex(V6_CHAT_WORLDBOOKS),
+  },
+  {
+    version: 7,
+    name: 'p2-cache-first-seen-msg',
+    sql: V7_CACHE_FIRST_SEEN,
+    checksum: sha256Hex(V7_CACHE_FIRST_SEEN),
   },
 ]

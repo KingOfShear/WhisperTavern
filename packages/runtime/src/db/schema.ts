@@ -305,6 +305,8 @@ export const worldbookRuntimeEntries = sqliteTable('worldbook_runtime_entries', 
   delayUntilSeq: integer('delay_until_seq'),
   activationCount: integer('activation_count').notNull().default(0),
   contentHash: text('content_hash'),
+  /** 首次注入轮序(单调不变量;WP2.2 S17 起由 fresh 注入时赋值,重注入更新) */
+  firstSeenMsg: integer('first_seen_msg'),
   updatedAt: text('updated_at').notNull(),
 })
 // UNIQUE(chat_id, worldbook_entry_id) —— 一条目一 chat 一行,driver 扁平 DI 约束不同步 Drizzle,

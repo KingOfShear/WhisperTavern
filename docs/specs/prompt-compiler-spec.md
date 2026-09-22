@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.2（2026-09-22 修订版。S16 宏引擎落地口径：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.3（2026-09-22 修订版。S17 缓存分区口径：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -633,6 +633,8 @@ session
 volatile
 ```
 
+**S17 修订（2026-09-22）**：stableWB / freshWB 段的区默认稳定性为 **session**（决策 A）——世界书条目几乎必含 `{{user}}` 等 session 级宏，若区默认为 static 则 Macro Cache Rule（§43）会把含 session 宏的条目判 CACHE_UNSAFE_MACRO 全量移 tail，稳定区恒空、分区空转。改为 session 后 session 宏不触发（与 §43 示例"header 段含 {{char}} 不触发"对齐）；`{{random}}`(volatile)/`{{roll}}`(request)/`{{lastMessage}}`(message) 仍触发 → 移 tail，正是 R-P2-4 要隔离的逐轮易变宏。
+
 ---
 
 # 17. Manual Stability Override
@@ -1043,6 +1045,8 @@ cacheState = stable
 ```
 
 这是合法状态。
+
+**S17 注记（2026-09-22）**：`stale` 转场 S17 不产出（狐神抚"stale 标记而非删除"归 P4 评估，保留枚举无转场）。
 
 ---
 
@@ -2255,6 +2259,10 @@ NON_DETERMINISTIC_MACRO
 UNKNOWN_MACRO   // 补（2026-09-22）：未注册宏（{{place}} 等）→ 原样保留 + info
 
 EVAL_MACRO_REJECTED   // 补（2026-09-22）：§42 {{eval:...}} 拒绝 + warning
+
+WORLD_BOOK_RETIRED   // 补（2026-09-22）：§31 世界书条目退休（连续未激活超阈值 + 低优先级）
+
+WORLD_BOOK_DEACTIVATED   // 补（2026-09-22）：§30 Compatibility 模式失活条目即时移除
 
 PROMPT_CONTEXT_TOO_LARGE   // 补（2026-09）：裁剪后仍放不进模型上下文窗口
 

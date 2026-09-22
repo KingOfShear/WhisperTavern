@@ -76,13 +76,18 @@ R-P2-9  群聊缓存命名空间(worldbook-cache-design §6):世界书哈希缓�
 **任务清单**:
 
 ```text
-1. 分区核心(§2.1 修订公式):chatCache 哈希集(per-chatId)驱动的成员资格判定
-2. physicalOrder 分配器:首次进入稳定区时分配、永不改变(§3.1);毕业只改 cacheState
-3. chat_state 缓存记录(WBCacheEntry,§4):hash/uid/cacheState(unseen|fresh|stable|stale|retired)/
-   physicalOrder/firstSeenMsg——落库(database-schema 新表或 chat_state 扩展)
-4. 退休机制(§7):retired 判定 + 移除;预算裁剪从 freshWB 尾部开始(§3.5)
-5. Compatibility Mode 回退语义序(总设计 §11):Performance 默认,Compatibility 语义序
-6. 单测:毕业零失效(逐轮字节演化示例 §2.3 全用例)、失活照发、退休移除、预算裁剪序
+1. ✅ 分区核心(§2.1 修订公式):chatCache 哈希集(per-chatId)驱动的成员资格判定
+   —— worldbook-cache.ts 纯函数层(zoneWorldbook/computeContentHash/CacheRowView)
+2. ✅ physicalOrder 分配器:首次进入分区时分配、永不改变(§3.1);毕业只改 cacheState
+   —— fresh 阶段即分配;max(全部既有,含 retired 不回收)+1
+3. ✅ chat_state 缓存记录(WBCacheEntry,§4):hash/uid/cacheState/physicalOrder/firstSeenMsg
+   —— 落 worldbook_runtime_entries 行(不建独立哈希表);migration v7 增 first_seen_msg
+4. ✅ 退休机制(§7):retired 判定 + 移除(默认关闭,chats.runtime_state 配置);
+   预算裁剪序常量 BUDGET_TRIM_ORDER(动作归 S18)
+5. ✅ Compatibility Mode 回退(§11):worldbook 层跳过分区 + 失活即时移除
+   (WORLD_BOOK_DEACTIVATED 诊断);pipeline 六模式 gate 不动
+6. ✅ 单测:毕业零失效(§2.3 轮1–4 字节演化)、失活照发、退休移除、裁剪序、
+   volatile 预检、编辑重注入、per-chat 隔离、Compatibility
 ```
 
 **验收**:分区语义全集单测绿;§2.3 逐轮演化字节断言(轮1–4 对照)。
@@ -179,7 +184,7 @@ X11 命中率/成本削减是产品级 KPI:任何"看起来快"的局部改动�
 | 会话 | WP | 状态 | 恢复点注记 |
 |---|---|---|---|
 | S16 | WP2.1 | ✅ | 宏引擎落地(macro/ 五文件 + pipeline 接线替换 R-P0-1);MACRO_UNEXPANDED_P0 退役;三档 CACHE_UNSAFE_MACRO 处置断言绿;全量 313 测试(37 文件) |
-| S17 | WP2.2 | ☐ | |
+| S17 | WP2.2 | ✅ | worldbook-cache.ts 纯函数分区层 + worldbook.ts 接线;毕业=哈希命中;physicalOrder append-only;migration v7(first_seen_msg);Compatibility 回退;决策 A(stableWB/freshWB 默认 session);全量 329 测试(38 文件) |
 | S18 | WP2.3 | ☐ | |
 | S19 | WP2.4 | ☐ | |
 | S20 | WP2.5 | ☐ | |

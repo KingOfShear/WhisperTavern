@@ -132,7 +132,7 @@ describe('S8 端到端(§4.10 DoD 自动化面)', () => {
     // 重启恢复:关闭后重开同一库文件
     store.close()
     const reopened = harness.open()
-    expect(reopened.store.appliedMigrations.to).toBe(6)
+    expect(reopened.store.appliedMigrations.to).toBe(7)
 
     const messages = (await (await reopened.app.request(`/api/v2/chats/${chatId}/messages`)).json()) as {
       data: { role: string; content: string }[]

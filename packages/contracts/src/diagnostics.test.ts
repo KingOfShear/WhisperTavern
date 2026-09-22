@@ -11,6 +11,8 @@ describe('contracts/diagnostics(诊断体系)', () => {
       'CACHE_UNSAFE_MACRO',
       'UNKNOWN_MACRO',
       'EVAL_MACRO_REJECTED',
+      'WORLD_BOOK_RETIRED',
+      'WORLD_BOOK_DEACTIVATED',
     ]) {
       expect(DIAGNOSTIC_CODES).toContain(code)
     }

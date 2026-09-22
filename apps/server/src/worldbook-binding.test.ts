@@ -58,6 +58,15 @@ async function startGeneration(app: ReturnType<E2eHarness['open']>['app'], chatI
   return gen.data
 }
 
+/** 追加 user 消息(每轮生成前置:链尾必须是 user,§24 续聊语义) */
+async function sendUser(app: ReturnType<E2eHarness['open']>['app'], chatId: string, content: string): Promise<void> {
+  const res = await app.request(`/api/v2/chats/${chatId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ role: 'user', content }),
+  })
+  expect(res.status).toBe(201)
+}
+
 describe('S11 chat↔worldbook 绑定 API', () => {
   let ctx: ReturnType<typeof openHarness>
   afterEach(() => cleanupHarnesses())
@@ -170,6 +179,79 @@ describe('S11 激活层接线(startRun → freshWB 贡献 + 审计 + 运行时�
       .prepare('SELECT serialized FROM prompt_snapshots ORDER BY created_at DESC LIMIT 1')
       .get() as { serialized: string }
     expect(snap.serialized).not.toContain('镇上唯一的酒馆')
+  })
+
+  it('S17 缓存分区:轮1 freshWB → 轮2 毕业 stableWB,后轮以先轮为字节前缀(append-only)', async () => {
+    ctx = openHarness()
+    const { app, store } = ctx
+    const worldbookId = await importWorldbook(app, OLD_LOREBOOK)
+    const chatId = await createChat(app, '我们今晚去酒馆碰头')
+    await app.request(`/api/v2/chats/${chatId}/worldbooks`, { method: 'POST', body: JSON.stringify({ worldbookId }) })
+
+    // 轮1:含"酒馆"关键词 → 条目 0 激活进 freshWB
+    const r1 = await startGeneration(app, chatId, [{ text: '好,在酒馆见。' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    const snap1 = store.sqlite.prepare('SELECT serialized FROM prompt_snapshots WHERE id = ?').get(r1.snapshotId) as {
+      serialized: string
+    }
+    const parts1 = (JSON.parse(snap1.serialized) as { parts: { role: string; content: string }[] }).parts
+
+    // 轮1 落库:条目 0 cache_state=fresh + physical_order 分配 + content_hash 写入
+    const entry0Id = store.sqlite
+      .prepare('SELECT id FROM worldbook_entries WHERE worldbook_id = ? AND entry_key = ?')
+      .get(worldbookId, '0') as { id: string }
+    const rt1 = store.sqlite
+      .prepare('SELECT cache_state, physical_order, content_hash, first_seen_msg FROM worldbook_runtime_entries WHERE worldbook_entry_id = ?')
+      .get(entry0Id.id) as { cache_state: string; physical_order: number; content_hash: string; first_seen_msg: number }
+    expect(rt1.cache_state).toBe('fresh')
+    expect(rt1.physical_order).toBe(1)
+    expect(rt1.content_hash).toBeTruthy()
+    expect(rt1.first_seen_msg).toBeGreaterThan(0)
+
+    // 轮2:追加 user 消息(含"酒馆")→ 条目 0 命中 → 毕业 stable,字节原位
+    await sendUser(app, chatId, '那就去酒馆喝一杯。')
+    const r2 = await startGeneration(app, chatId, [{ text: '干杯!' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    const snap2 = store.sqlite.prepare('SELECT serialized FROM prompt_snapshots WHERE id = ?').get(r2.snapshotId) as {
+      serialized: string
+    }
+    const parts2 = (JSON.parse(snap2.serialized) as { parts: { role: string; content: string }[] }).parts
+
+    const rt2 = store.sqlite
+      .prepare('SELECT cache_state, physical_order FROM worldbook_runtime_entries WHERE worldbook_entry_id = ?')
+      .get(entry0Id.id) as { cache_state: string; physical_order: number }
+    expect(rt2.cache_state).toBe('stable')
+    expect(rt2.physical_order).toBe(1) // append-only:物理序永不改变
+
+    // 前缀稳定:轮2 的序列化 parts 以轮1 为字节前缀(header+stableWB+history 追加式)
+    const joined1 = parts1.map((p) => p.content).join('|')
+    const joined2 = parts2.map((p) => p.content).join('|')
+    expect(joined2.startsWith(joined1)).toBe(true)
+  })
+
+  it('S17 失活照发(§30):stable 条目本轮关键词不出现仍发送', async () => {
+    ctx = openHarness()
+    const { app, store } = ctx
+    const worldbookId = await importWorldbook(app, OLD_LOREBOOK)
+    const chatId = await createChat(app, '我们今晚去酒馆碰头')
+    await app.request(`/api/v2/chats/${chatId}/worldbooks`, { method: 'POST', body: JSON.stringify({ worldbookId }) })
+
+    // 轮1:激活 → fresh
+    await startGeneration(app, chatId, [{ text: '好,在酒馆见。' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    // 轮2:激活 → stable
+    await sendUser(app, chatId, '再去酒馆。')
+    await startGeneration(app, chatId, [{ text: '行。' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+
+    // 轮3:消息不含"酒馆" → 条目 0 未激活但 cacheState=stable → 仍发送(§30)
+    await sendUser(app, chatId, '我们换个地方吧。')
+    const r3 = await startGeneration(app, chatId, [{ text: '好。' }])
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    const snap3 = store.sqlite.prepare('SELECT serialized FROM prompt_snapshots WHERE id = ?').get(r3.snapshotId) as {
+      serialized: string
+    }
+    expect(snap3.serialized).toContain('镇上唯一的酒馆')
   })
 
   it('多书不同 scanDepth:全局窗口取最大值(超集),depth 大的书不被漏掉', async () => {

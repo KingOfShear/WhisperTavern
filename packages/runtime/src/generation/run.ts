@@ -13,7 +13,7 @@ import {
   type ProviderChatRequest,
 } from '@whispertavern/contracts'
 import { activeLeafId, ancestorChain, createMessage, loadChat, loadMessage } from '../tree/messages'
-import { buildWorldbookContributions } from './worldbook'
+import { buildWorldbookContributions, type WorldbookMode } from './worldbook'
 import { buildPresetContributions } from './preset'
 import { buildPersonaContributions } from './persona'
 import { buildRuntimeVariables } from './variables'
@@ -21,7 +21,7 @@ import type { Chat, Message } from '@whispertavern/contracts'
 import { dispatchGeneration, SnapshotRegistry, type DispatchResult } from './dispatch'
 import type { EventBus } from '../events/bus'
 import type { WhisperTavernDb } from '../db/database'
-import { generations, messages, promptSnapshots, runs } from '../db/schema'
+import { generations, messages, presets, promptSnapshots, runs } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { uuidv7 } from '../util/id'
 
@@ -98,8 +98,14 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   // swipe 填充:run 的 message_id = 预建变体壳(runs/snapshots 归因到壳);常规生成内部新建
   const messageId: MessageId = input.variantMessageId ?? (uuidv7() as MessageId)
 
+  // S16 宏展开变量(§44):user/char/persona 取文对象;构造须在 worldbook 分区之前
+  // (分区哈希需要宏展开上下文)。
+  const variables = buildRuntimeVariables({ store, chat: chat.value })
+  const mode = resolveWorldbookMode(store, chat.value.presetId)
+
   // 世界书激活层(WP1.2):加载 chat 绑定的世界书 → 激活 → freshWB/injection 贡献 +
   // 运行时态落库 + 审计。激活判定用本轮轮序(messageSequence,单调)驱动 sticky/cooldown/delay。
+  // S17(WP2.2):激活后接缓存分区(宏安全条目 → stableWB/freshWB,§2.1)。
   // 激活产生的 UNSUPPORTED_SEMANTIC 等诊断归入 worldbook_activations 审计表(§16),
   // 不并入 compile 快照诊断(P1:Inspector 直接读审计表;快照诊断通道归 P2 统一)。
   const worldbook = buildWorldbookContributions({
@@ -109,16 +115,14 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
     messages: chain.value.map((m) => ({ id: m.id, role: m.role, content: m.content })),
     runId,
     now,
+    variables,
+    mode,
   })
 
   // WP1.3 资产注入(S12):persona / preset 绑定 → 贡献。二者均为单值 chat 绑定,
   // 只读 DB 解析,无运行时态落库(persona 是静态档案,preset 是静态提示词配置)。
   const persona = buildPersonaContributions({ store, chatId: input.chatId })
   const preset = buildPresetContributions({ store, chatId: input.chatId })
-
-  // S16 宏展开变量(§44):user/char/persona 取文对象;lastMessage 取活跃链末条
-  // (生成必须以 user 结尾,链尾即当轮输入,{{lastMessage}} 的取文对象)。
-  const variables = buildRuntimeVariables({ store, chat: chat.value })
 
   const outcome = compile({
     chatId: input.chatId,
@@ -315,6 +319,13 @@ function mapRole(role: MessageRole): PromptRole {
   if (role === 'tool') return 'tool'
   if (role === 'character' || role === 'assistant') return 'assistant'
   return 'user' // user / narrator
+}
+
+/** §11 双模式:chat 绑定的 preset.compilerMode='compatibility' → compatibility;其余 → performance */
+function resolveWorldbookMode(store: WhisperTavernDb, presetId: string | undefined): WorldbookMode {
+  if (presetId === undefined) return 'performance'
+  const row = store.db.select().from(presets).where(eq(presets.id, presetId)).get()
+  return row?.compilerMode === 'compatibility' ? 'compatibility' : 'performance'
 }
 
 function recordToRow(record: {

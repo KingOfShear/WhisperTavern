@@ -186,6 +186,26 @@ describe('S4/S16 管线:确定性 + 宏展开(R-P0-1 退役)', () => {
     expect(outcome.value.diagnostics.some((d) => d.code === 'CACHE_UNSAFE_MACRO')).toBe(true)
   })
 
+  it('S17 决策 A 回归:stableWB 段含 {{user}}(session==session)不触发 CACHE_UNSAFE_MACRO', () => {
+    const outcome = compile(
+      request({
+        mode: 'preview',
+        contributions: [presetContribution({
+          id: 'worldbook:e1',
+          source: { type: 'worldbook', worldbookId: 'wb1', entryId: 'e1' },
+          segment: { role: 'system', content: '你是 {{user}} 的旅伴', zone: 'stableWB' },
+          semanticPlacement: { type: 'worldbook', position: 'before', order: 1 },
+        })],
+      }),
+    )
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok) return
+    expect(outcome.value.ir.segments[0]?.cachePlacement.zone).toBe('stableWB')
+    expect(outcome.value.diagnostics.some((d) => d.code === 'CACHE_UNSAFE_MACRO')).toBe(false)
+    // {{user}} 展开为 variables.user
+    expect(outcome.value.ir.segments[0]?.content).toBe('你是 User 的旅伴')
+  })
+
   it('§93/§94:zone 序主导排序,同序按提交序与 stable ID 决胜', () => {
     const outcome = compile(
       request({

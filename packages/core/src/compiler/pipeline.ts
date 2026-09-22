@@ -91,11 +91,12 @@ export interface CompileFailure {
 
 export type CompileOutcome = Result<CompileSuccess, CompileFailure>
 
-/** §16 推断的 P0 占位:按区默认;宏感知推断归 P2 */
+/** §16 推断的 P0 占位:按区默认;S17 决策 A——stableWB/freshWB 默认 session(世界书条目
+ * 几乎必含 {{user}} 等 session 宏,保持 static 会让 Macro Cache Rule 全量移 tail) */
 const ZONE_DEFAULT_STABILITY: Record<PromptZoneName, StabilityClass> = {
   header: 'session',
-  stableWB: 'static',
-  freshWB: 'static',
+  stableWB: 'session',
+  freshWB: 'session',
   summary: 'session',
   history: 'message',
   injection: 'request',

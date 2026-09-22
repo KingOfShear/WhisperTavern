@@ -6,6 +6,7 @@
 > **文档层级（2026-09）**：本文是 [technical-design.md](./technical-design.md) 之下的 **Cache Engine 详细规格**。
 > **2026-09 修订**：采纳总设计 §11 的 **physicalOrder 修正**——初版"两区各按 (order, uid) 排序"在"新条目排序键小于已毕业条目"时会让毕业动作移动字节、触发第二次历史失效（§3.1 已改写）；稳定区统一命名 stableWB（旧名已废弃）；§3.4 补充 summary 区位置决策（维持 history 之前）。
 > **2026-09 二次修订**：§2.1 分区公式修正——stableWB 成员资格由 chatCache 决定、**与当轮激活解耦**（失活条目照常发送直到退休；Compatibility Mode 按 ST 语义即时移除但产生 WORLD_BOOK_DEACTIVATED 声明事件）。
+> **2026-09-22 三次修订（S17/WP2.2 落地口径）**：①毕业时机定论 = **本轮渲染哈希命中**（fresh 条目本轮未激活也毕业，防序列中部消失 = 未声明前缀断裂）；②WBCacheEntry 落库形态 = `worldbook_runtime_entries` 按 (chat, entry) 一行（不建独立 chatCache 哈希表），per-entry 行覆盖 = 死键惰性清理（编辑条目 → 新哈希 → 旧指纹被行覆盖自然消失）；③§3.2 哈希对象 = 确定性展开后最终文本、**normalize 恒等**（空白差异必须产生不同指纹，否则判定命中但发送字节不同 = 未声明前缀断裂，§60）；④稳定区贡献排序键 = physicalOrder（`semanticPlacement.order` 取物理序而非酒馆 insertionOrder）；⑤`outlet` 槽位并入 injection 区（ST 1.18 注入点，贴近末端）；⑥预算裁剪序常量 BUDGET_TRIM_ORDER 定义（动作归 S18 Budget Manager）。
 
 ## 1. 背景与问题
 
@@ -89,7 +90,7 @@ prompt 布局：
    ```
    即毕业动作本身可能触发第二次历史重发（§2.3 初版声称的"毕业=字节原位"只在 D 的排序键大于全部已毕业条目时成立）。修正后：**graduation 只改 cacheState（fresh→stable），不改物理位置**；物理顺序 = 首次激活顺序，与新条目的 order 值无关。代价是条目物理顺序偏离酒馆 (order, uid) 语义序——由总设计的 Compatibility / Performance 双模式兜底（Performance 为默认，需通过 Semantic Equivalence Test；Compatibility Mode 回退语义序、放弃该优化；条目级 `zoning.pin` 可强制单条回语义位置）。不变的部分：**分区装配禁止依赖任何逐轮动态状态**。
 
-2. **哈希对象 = 宏展开后的最终文本**（规范化空白后）。`{{user}}` 改名、条目编辑都会正确地变成新指纹进 freshWB 重注入。注意哈希后**旧指纹留在缓存里无害**（死键，可惰性清理）。
+2. **哈希对象 = 宏展开后的最终文本**（normalize 恒等，2026-09-22 修订：空白差异必须产生不同指纹，否则判定命中但发送字节不同 = 未声明前缀断裂，compiler-spec §60）。`{{user}}` 改名、条目编辑都会正确地变成新指纹进 freshWB 重注入。注意哈希后**旧指纹留在缓存里无害**（per-entry 行覆盖 = 死键惰性清理：编辑条目 → 新哈希 → 旧指纹被行覆盖自然消失）。
 
 3. **逐轮易变宏必须隔离**。`{{time}}`/`{{random}}`/`{{roll}}` 类宏若出现在 header 或世界书里，每轮改字节 → 全盘失效。策略：此类条目/段落标记为 volatile → 一律进 tail 区（历史之后）；或在 chat_state 里按聊天冻结取值。酒馆预设里常见的系统提示嵌 `{{date}}` 是隐性的命中率杀手，Inspector 要能标红。
 
@@ -104,8 +105,11 @@ prompt 布局：
 
 ```ts
 // chat_state 中的缓存记录
+// S17 落库形态:worldbook_runtime_entries 按 (chat, entry) 一行(不建独立 chatCache 哈希表);
+// per-entry 行覆盖 = 死键惰性清理(编辑条目 → 新哈希 → 旧指纹被行覆盖自然消失)。
+// firstSeenMsg = worldbook_runtime_entries.first_seen_msg 列(migration v7)。
 type WBCacheEntry = {
-  hash: string            // sha256(normalizedRenderedText)
+  hash: string            // sha256(确定性展开后最终文本)
   uid: number             // 来源条目
   cacheState: 'unseen' | 'fresh' | 'stable' | 'stale' | 'retired'   // 与总设计 §14.2 生命周期对齐（原 retired: boolean 并入）
   physicalOrder: number   // 首次进入稳定区时分配，此后永不改变（§3.1 修订）
@@ -119,6 +123,8 @@ interface WorldbookZoning {
   evicted: RenderedEntry[]   // 本轮因预算被裁的条目（供 UI 提示）
 }
 ```
+
+**毕业时机（2026-09-22 定论）**：**本轮渲染哈希命中即毕业**——fresh 条目本轮未激活也迁移 stable（防序列中部消失 = 未声明前缀断裂，与 §30 对 stable 条目失活的论断同构）。
 
 首轮行为：**只把本轮激活的条目**写入 freshWB 并入缓存（蓝灯常驻 + 绿灯已触发）。不做"全量塞入"——未触发的绿灯条目塞进去是纯浪费；需要强设定覆盖率的小世界书可开 `preloadAll` 开关。
 
