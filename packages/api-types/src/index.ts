@@ -185,13 +185,15 @@ export type DebugExportBundleDto = DebugExportBundle
 
 // ===== §33 遥测与缓存诊断(S20/WP2.5)=====
 
-/** 单轮遥测记录(§33.1 每轮记录 + 缓存计划投影) */
+/** 单轮遥测记录(§41 CacheRoundMetric 落地 + 缓存计划投影) */
 export type TelemetryRoundDto = {
   round: number
   runId: string
   createdAt: string
   status: string
-  inputTokens: number
+  /** provider prompt_tokens(§2.2 token 计) */
+  promptTokens: number
+  /** provider cached_tokens(§2.2) */
   cachedTokens: number
   outputTokens: number
   usageSource: string
@@ -202,16 +204,33 @@ export type TelemetryRoundDto = {
   prefixTooSmall?: { threshold: number; actualTokens: number; zone: string }
   breakReasons: string[]
   invalidationRisk: 'low' | 'medium' | 'high'
+  /** 每轮**实际发送内容**(serialized.parts 投影;role=null 表示无角色块) */
+  sentParts: { role: string | null; content: string }[]
+  sentTokenCount: number
+  /** serialized 全量哈希(跨轮字节前缀比对的锚点,§57/§65) */
+  sentHash: string
+  segmentCount: number
 }
 
-/** §33.2 四层口径成本估算(本地 token 计,§2.2) */
-export type TelemetryCostEstimateDto = {
-  baselineInputTokens: number
-  cachedInputTokens: number
-  freshInputTokens: number
-  /** reported 才计命中率;无 reported 轮 = undefined */
-  reportedHitRatio?: number
-  overallHitRatio?: number
+/**
+ * §41 aggregate —— 状态量分层(plan 计 = 理论可缓存面;provider 计 = 实际回传面)。
+ * `estimatedCost`(货币化)暂缺:仓库无 provider 价格表,§2.2 token 计是唯一权威。
+ */
+export type TelemetryAggregateDto = {
+  /** Σ plan 计稳定前缀 token(理论可缓存基线) */
+  stableTokens: number
+  /** Σ plan 计输入 token(可参与缓存判定的总量) */
+  eligibleTokens: number
+  /** Σ provider cached_tokens(实际层) */
+  cachedTokens: number
+  /** Σ provider (prompt − cached)(实际层) */
+  freshTokens: number
+  /** 理论缓存率(plan 计;= simulator.theoreticalHitRatio) */
+  theoreticalHitRate: number
+  /** 实际命中率(provider 计;无 reported 轮 → undefined) */
+  actualHitRate?: number
+  reportedHitRate?: number
+  overallHitRate?: number
 }
 
 /** §33.3 CacheBreak 事件 */
@@ -222,23 +241,82 @@ export type TelemetryCacheBreakDto = {
   stablePrefixTokens: number
 }
 
-/** §20 Cache Simulator 摘要(消费真实编译产物;理论缓存率/成本削减/Killer) */
-export type TelemetrySimulatorDto = {
-  theoreticalHitRatio: number
+/** §20 Cache Simulator 单轮结果(plan 计理论层 + provider 计实际层并列) */
+export type TelemetrySimulatorRoundDto = {
+  round: number
+  theoreticalStableTokens: number
+  theoreticalCachedTokens: number
+  theoreticalFreshTokens: number
+  planInputTokens: number
+  providerInputTokens?: number
+  actualCachedTokens?: number
+  hitRatio: number
   actualHitRatio?: number
-  baselineInputTokens: number
-  cachedInputTokens: number
-  inputCostReduction: number
-  topCacheKillers: { reason: string; count: number }[]
+  cacheBreak: boolean
+  breakReasons: string[]
+  firstDivergenceSegment?: string
 }
 
+/**
+ * §20 Cache Simulator 摘要(消费真实编译产物;理论缓存率/成本削减/Killer)。
+ * §33.2 两套口径并列:理论层 = plan token 计,实际层 = provider 回传,严禁混算。
+ */
+export type TelemetrySimulatorDto = {
+  /** 理论缓存率 = Σ 理论承接 / Σ 计划输入(plan token 计) */
+  theoreticalHitRatio: number
+  /** 实际命中率 = Σ provider cached / Σ provider prompt(仅实际层齐全轮次) */
+  actualHitRatio?: number
+  /** 无缓存基线 = Σ 计划输入 token */
+  baselineInputTokens: number
+  /** 需全价处理 = Σ 理论新鲜 token */
+  uncachedInputTokens: number
+  inputCostReduction: number
+  topCacheKillers: { reason: string; count: number }[]
+  rounds: TelemetrySimulatorRoundDto[]
+}
+
+/** §41 Cache Telemetry 响应 */
 export type ChatTelemetryDto = {
   rounds: TelemetryRoundDto[]
-  summary: {
-    costEstimate: TelemetryCostEstimateDto
-    cacheBreaks: TelemetryCacheBreakDto[]
+  aggregate: TelemetryAggregateDto
+  cacheBreaks: TelemetryCacheBreakDto[]
+  simulator: TelemetrySimulatorDto
+}
+
+/** §42 Cache Break Diagnosis(二分定位"谁毁了缓存") */
+export type CacheBreakDiagnosisDto = {
+  broken: boolean
+  firstDivergence?: {
+    previousSnapshot: string
+    currentSnapshot: string
+    segmentId: string
+    /** 段 content 内首个分歧字节的 UTF-8 偏移(S20 补齐) */
+    byteOffset: number
+    sourceId?: string
+    reason: string
+  }
+  affectedTokens: number
+  suggestions: string[]
+}
+
+/** §44 Cache Simulation Result(零 API 成本;不调 Provider) */
+export type CacheSimulationResultDto = {
+  rounds: {
+    round: number
+    stableTokens: number
+    freshTokens: number
+    volatileTokens: number
+    prefixHash: string
+    theoreticalCachedTokens: number
+    cacheBreak?: string
+  }[]
+  aggregate: {
+    expectedCacheRatio: number
+    totalInvalidatedTokens: number
   }
   simulator: TelemetrySimulatorDto
+  /** §43 scenarios 属确定性回放,S21 WP2.6 交付;此处回显未支持项 */
+  unsupportedScenarios: string[]
 }
 
 // ===== providers(§37 投影;密钥零回显)=====

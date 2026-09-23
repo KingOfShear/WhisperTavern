@@ -1,6 +1,8 @@
 import type {
   ApiErrorBody,
   ApiEnvelope,
+  CacheBreakDiagnosisDto,
+  CacheSimulationResultDto,
   ChatSnapshotSummaryDto,
   ChatTelemetryDto,
   DebugExportBundleDto,
@@ -120,8 +122,16 @@ export const api = {
   getDiff: (snapshotAId: string, snapshotBId: string) =>
     apiRequest<PromptDiffDto>(`/api/v2/prompt-snapshots/${snapshotAId}/diff/${snapshotBId}`),
 
-  /** §33 遥测与缓存诊断(S20):命中率曲线 + 成本 + CacheBreak + Simulator */
-  getTelemetry: (chatId: string) => apiRequest<ChatTelemetryDto>(`/api/v2/chats/${chatId}/telemetry`),
+  /** §41 Cache Telemetry(S20):命中率曲线 + cached/prompt 口径 + 前缀过小 + Simulator */
+  getTelemetry: (chatId: string) =>
+    apiRequest<ChatTelemetryDto>(`/api/v2/chats/${chatId}/cache/telemetry`),
+
+  /** §43/§44 Cache Simulation(S20):零 API 成本——只消费已编译快照,不调 Provider */
+  simulateCache: (body: { chatId: string; rounds?: number; scenarios?: string[] }) =>
+    apiRequest<CacheSimulationResultDto>('/api/v2/cache/simulate', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** §42 Cache Break Diagnosis(S20):二分层定位 CacheBreak 源 + 影响 token + 建议 */
+  getCacheBreak: (runId: string) => apiRequest<CacheBreakDiagnosisDto>(`/api/v2/runs/${runId}/cache-break`),
 
   /** §60 debug 导出(还账 #15):默认 sanitized;full 需显式声明 */
   exportDebugBundle: (body: { resourceType: 'snapshot'; resourceId: string; policy?: DebugExportPolicyDto }) =>

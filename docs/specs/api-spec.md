@@ -1,6 +1,6 @@
 # WhisperTavern V2 API Specification
 
-> **Version:** 2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
+> **Version:** 2.4（2026-09-22：S20/WP2.5——§38 Prompt Diff `firstDivergence.byteOffset` 由省略转为必填（UTF-8 字节偏移，Breaking: N，纯增量/无既有消费方读取该字段）；§41 Cache Telemetry、§42 Cache Break Diagnosis、§43/§44 Cache Simulation 三节由骨架转为已实现契约（`GET /api/v2/chats/:id/cache/telemetry`、`GET /api/v2/runs/:id/cache-break`、`POST /api/v2/cache/simulate`，自 §153 P2 提前至 P2 先行落地）；2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
 > **Status:** Implementation Specification  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **HTTP/SSE API 模块详细规格**  
 > **Protocol:** HTTP/1.1 + SSE  
@@ -1074,7 +1074,7 @@ type PromptDiff = {
 
   firstDivergence?: {
     segmentId: string
-    byteOffset?: number   // P0 省略(段内容内偏移属 P2 精确归因)
+    byteOffset: number    // 该段 content 内首个分歧字节的 UTF-8 偏移(S20 补齐;added/removed 记 0)
   }
 
   tokenDelta: {
@@ -1088,6 +1088,8 @@ type PromptDiff = {
 ```
 
 【2026-09-17 修订(S14/WP1.5 落地)】对齐键 = **段 ID**(compiler-spec §9 稳定语义 ID);内容一致性 = 段框架哈希((id,role,content) netstring SHA-256,§57 口径)——role 变化同样算 changed,因为它改变序列化字节。`SegmentDiff.kind`:same / changed / added / removed(removed 记 `before`,added 记 `after`,changed 两侧都带);序 = 先 A 侧发送序(removed/changed/same 在原位),再 B 侧新增段,`firstDivergence` = 该序下第一个非 same 段(removed 也破坏字节前缀,算分歧)。`cacheBreak` 按**首分歧段来源族**启发式归类:message → MESSAGE_EDITED、worldbook → WORLD_BOOK_CONTENT_CHANGED、preset → PRESET_CHANGED、persona/character → *_CHANGED、其余 → MANUAL_INVALIDATION(Inspector 展示为"疑似")。原列于 §153 P2,随 S14 提前至 P1 落地。
+
+【2026-09-22 修订(S20/WP2.5 补齐 byteOffset,Breaking: N)】`firstDivergence.byteOffset` 由 P0 省略转为**必填**:changed 段取其两侧 `content` 公共前缀的 **UTF-8 字节数**(多字节字符下字节偏移 ≠ 字符下标,而缓存前缀是字节前缀,故必须按字节);added/removed 记 0(整段缺失即分歧起点)。消费方 = 缓存二分工具第二层「下钻分屏字节级 diff」的定位锚点(ui-design §4.5)。纯增量字段,既有消费方读 `segmentId` 不受影响。
 
 ---
 
@@ -1166,6 +1168,8 @@ type CacheTelemetry = {
 }
 ```
 
+【2026-09-22 修订(S20/WP2.5 落地)】本节由骨架转为**已实现契约**(apps/server `GET /api/v2/chats/:id/cache/telemetry`)。`from`/`to` = ISO 时间窗,按轮次 `createdAt` 过滤(缺省全窗)。`CacheRoundMetric` 落地字段:`round`/`runId`/`createdAt`/`status`/`promptTokens`(= provider prompt_tokens,§2.2)/`cachedTokens`(= provider cached_tokens)/`outputTokens`/`usageSource`/`stablePrefixTokens`/`freshTokens`/`volatileTokens`(后三者 = plan 计投影)/`prefixTooSmall?`/`breakReasons[]`/`invalidationRisk`/`sentParts[]`(本轮**实际发送内容**,serialized.parts 的 role/content 投影,§7 任务 1)/`sentTokenCount`/`sentHash`/`segmentCount`。`aggregate` 为**两套口径并列**:`stableTokens`/`eligibleTokens`/`theoreticalHitRate` 属 plan 计理论层,`cachedTokens`/`freshTokens`/`actualHitRate` 属 provider 计实际层——**两套口径严禁相加减**(§33.2;S20 金样正是抓出此处混算导致 fresh 为负)。`actualHitRate` 只在存在 `usageSource='reported'` 轮时有定义(estimated 不入分母亦不冒充命中);另补 `reportedHitRate`/`overallHitRate` 供前端曲线。**`estimatedCost` 暂缺**:仓库无 provider 价格表,§2.2 token 计是唯一权威,货币化待价格表引入后再补。响应另附 `cacheBreaks[]`(§33.3 事件)与 `simulator`(§20 Cache Simulator 摘要,见 §43)。
+
 ---
 
 # 42. Cache Break Diagnosis
@@ -1195,6 +1199,8 @@ type CacheBreakDiagnosis = {
   suggestions: string[]
 }
 ```
+
+【2026-09-22 修订(S20/WP2.5 落地)】本节由骨架转为**已实现契约**(apps/server `GET /api/v2/runs/:id/cache-break`);它就是缓存**二分工具**(ui-design §4.5 两层形态)的服务端面:对同一 chat 内「上一轮快照 vs 本轮快照」跑 `diffSnapshots`(S14 构建器),用段哈希链定位**首个分歧段**。落地语义:上一轮 = 同 chat 中 `createdAt` 早于本轮、且时间最近的快照;无前置快照 → `broken: false`(首轮无缓存可毁)。`firstDivergence` 在骨架之上补 **`byteOffset`**(该段 `content` 内首个分歧字节的 UTF-8 偏移,added/removed 记 0)——供下钻分屏视图精确锚点;`sourceId` 取自分歧段 `source` 的 messageId/entryId/presetId/assetId 之一;`reason` = S14 归因族(MESSAGE_EDITED / WORLD_BOOK_CONTENT_CHANGED / WORLD_BOOK_NEW_ENTRY / WORLD_BOOK_RETIREMENT / WORLD_BOOK_DEACTIVATED / MACRO_VOLATILE / PRESET_CHANGED / PERSONA_CHANGED / CHARACTER_CHANGED / MANUAL_INVALIDATION)。`affectedTokens` = 首分歧段起的**整个后缀** token 和(字节前缀断裂后后续段全部重发);`suggestions` 按归因给可执行下一步(只给方向,不自动改写——红线:不用 Prompt 修架构问题)。
 
 ---
 
@@ -1258,6 +1264,8 @@ type CacheSimulationResult = {
   }
 }
 ```
+
+【2026-09-22 修订(S20/WP2.5 落地)】§43+§44 由骨架转为**已实现契约**(apps/server `POST /api/v2/cache/simulate`)。落地语义:**零 API 成本**——只消费该 chat **已编译快照**序列 + 已落库 usage(不调 Provider,不虚构数据);`rounds` 为窗口大小(缺省 50,上限 200),只聚合最近 N 轮(窗口首轮无前置基线,理论承接自窗口第 2 轮起算)。响应 `rounds[]` 逐轮补 `theoreticalCachedTokens`(= 本轮 plan 计可承接 token,首轮/分歧轮为 0),`prefixHash` = 该轮 serialized 全量哈希。`aggregate.expectedCacheRatio` = §20 理论缓存率(plan 计);`totalInvalidatedTokens` = 发生 CacheBreak 的各轮中**未能承接的稳定前缀 token 之和**。响应另附 `simulator`(逐轮理论/实际两套口径 + topCacheKillers + inputCostReduction)与 `unsupportedScenarios`——**§43 的 `scenarios`(世界书触发/编辑/宏/swipe/分支/摘要/预算/群聊)属确定性回放,由 S21(WP2.6 1000 轮模拟门禁)交付**;S20 只回放真实快照序列,请求里出现的场景名原样回显在 `unsupportedScenarios` 中,不静默忽略。
 
 ---
 
@@ -3919,13 +3927,10 @@ POST   /presets
 加入：
 
 ```text
-GET  /chats/:id/cache/telemetry
-
-POST /cache/simulate
-
-GET  /runs/:id/cache-break
-
-GET  /prompt-snapshots/:a/diff/:b   ← 已随 S14 提前至 P1(§38 修订;其余仍 P2)
+GET  /chats/:id/cache/telemetry      ← 已随 S20 落地(§41)
+POST /cache/simulate                 ← 已随 S20 落地(§43/§44;scenarios 回放留 S21)
+GET  /runs/:id/cache-break           ← 已随 S20 落地(§42)
+GET  /prompt-snapshots/:a/diff/:b    ← 已随 S14 提前至 P1(§38 修订)
 ```
 
 ---

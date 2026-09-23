@@ -147,6 +147,29 @@ R-P2-9  群聊缓存命名空间(worldbook-cache-design §6):世界书哈希缓�
 **验收**:遥测展示真实编译结果命中率;二分工具定位真实 CacheBreak 源;Simulator 输出对齐金样。
 **spec 锚点**:ui-design §4.6;总设计 §20/§33;technical-plan §8 要点 4。
 
+**落地记录(S20 收口)**:
+
+```text
+交付面(三节 spec 骨架 → 已实现契约,api-spec 升 2.4):
+  §41 GET  /api/v2/chats/:id/cache/telemetry  逐轮实际发送内容 + 命中率曲线 + aggregate(两口径并列)
+  §42 GET  /api/v2/runs/:id/cache-break       二分诊断:首分歧段 + 首个分歧字节 + 影响 token 后缀 + 按归因给建议
+  §43 POST /api/v2/cache/simulate             零 API 成本模拟(§44 结果形状;scenarios 回放留 S21,回显 unsupportedScenarios)
+  core simulateCachePlan 纯函数(9 单测)+ S20 金样:真实预设(狐神抚 V182)+ 世界书(Table)3 轮报告对齐
+  web CacheTelemetry(仪表/曲线/CacheBreak/Simulator/前缀过小/每轮发送内容)+ CacheBinaryDiff
+    (两层形态:段级哈希对齐条 → 点红段下钻全屏分屏字节级 diff,锚点 = byteOffset)
+  contracts:PromptDiff.firstDivergence 补 byteOffset(UTF-8 字节;api-spec §38 记 Breaking: N)
+```
+
+**金样首战抓出 2 个真实口径缺陷(均已修 + 回归测试)**:
+
+```text
+① 首轮被判 CacheBreak —— 首轮没有上一轮,不存在"被毁的缓存";
+   修:CacheBreak 的前提是 hasBaseline(有前置轮次),首轮恒 false 且不产 firstDivergenceSegment。
+② 理论新鲜为负(freshTokens = -764) —— 拿 plan 计稳定前缀(11720)去减 provider 计 prompt(10956),
+   两套口径混算(违 §33.2)。修:理论层(plan 计)/实际层(provider 计)彻底分离为两套字段,
+   理论承接要求"有基线且哈希可校验且无分歧"三条件同时成立,缺一记 0(宁保守不乐观)。
+```
+
 # 8. S21 — WP2.6 CI 硬门禁
 
 **任务清单**:
@@ -191,7 +214,7 @@ X11 命中率/成本削减是产品级 KPI:任何"看起来快"的局部改动�
 | S17 | WP2.2 | ✅ | worldbook-cache.ts 纯函数分区层 + worldbook.ts 接线;毕业=哈希命中;physicalOrder append-only;migration v7(first_seen_msg);Compatibility 回退;决策 A(stableWB/freshWB 默认 session);全量 329 测试(38 文件) |
 | S18 | WP2.3 | ✅ | budget.ts(Budget Manager:裁剪序权威化/percent+cap/header protect/elastic 整体推出)+ cacheplan.ts(CachePlan v1,R-P0-4 退役)+ pipeline 接线(enabled 语义)+ run.ts cacheInvalidations;全量 345 测试(40 文件) |
 | S19 | WP2.4 | ✅ | 缓存标记翻译落地:contracts CacheTypeSchema/MIN_PREFIX_TOKENS/ProviderStrategySchema + ProviderChatRequest.cachePlan;core cacheplan 装配 providerStrategy(breakpoints 投影 afterPartIndex/stableZoneTokens/prefixTooSmall)+ run.ts 注入 providerCacheType;adapters translate.ts 纯函数 + anthropic wire 挂载(system 块形/user 挂载/assistant 丢弃/prefixTooSmall 抑制)+ openai/gemini 无动作断言 + fake cachedInputTokens 注入;runtime buildGenerationRequest 透传 cachePlan;金样断言升级(providerStrategy 随快照持久化);还账 #6 勾销(§23 开放点 1:隐式缓存默认,显式 cachedContent 暂缓);全量 362 测试(42 文件) |
-| S20 | WP2.5 | ✅ | Cache Simulator(core 纯函数 simulateCachePlan 6 单测:稳定前缀承接/哈希分歧/CacheBreak/Killer/实际口径降级)+ 遥测 API(GET /api/v2/chats/:id/telemetry:逐轮曲线/§33.2 四层口径/§33.3 CacheBreak/list+Simulator 摘要;顺带修复 server buildAdapter fakeTurns cachedInputTokens 透传)+ web CacheTelemetry 面板(命中率仪表/曲线/CacheBreak/Simulator/前缀过小提示)+ api-types ChatTelemetryDto + web client/store/App 接线 + 二分定位复用 PromptInspector diff+HashStrip;全量 371 测试(44 文件,金样零漂移) |
+| S20 | WP2.5 | ✅ | 三节 spec 骨架转已实现契约(api-spec 2.4):§41 `GET /chats/:id/cache/telemetry`(逐轮**实际发送内容** sentParts/哈希锚点 + 命中率曲线 + aggregate 两口径并列 + 前缀过小 + from/to 窗)、§42 `GET /runs/:id/cache-break`(二分诊断:首分歧段 + **首个分歧字节 byteOffset** + 影响 token 后缀 + 按归因建议)、§43/§44 `POST /cache/simulate`(零 API 成本,窗口 rounds,scenarios 回显 unsupportedScenarios 留 S21);core simulateCachePlan 纯函数 9 单测 + diff `firstDivergingByteOffset` 3 单测;S20 金样(真实狐神抚预设+Table 书 3 轮报告,语义量归一化);web CacheTelemetry + CacheBinaryDiff(段级对齐条 → 下钻全屏分屏字节级 diff);**金样抓出并修复 2 处口径缺陷**(首轮误判 CacheBreak / plan 计与 provider 计混算致理论新鲜为负);全量 385 测试(44 文件,金样零漂移) |
 | S21 | WP2.6 | ☐ | |
 
 ---

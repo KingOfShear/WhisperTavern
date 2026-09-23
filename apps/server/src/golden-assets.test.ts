@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FakeProviderAdapter } from '@whispertavern/adapters'
+import { projectSegment, simulateCachePlan, type CacheSimRound } from '@whispertavern/core'
 import { EventBus, SnapshotRegistry, createSqliteEventSink, startRun } from '@whispertavern/runtime'
 import { cleanupHarnesses, makeE2eHarness } from './harness'
 
@@ -249,5 +250,124 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
       return
     }
     expect(serialized).toBe(baseline)
+  }, 60_000)
+
+  /**
+   * S20 验收「Simulator 输出对齐金样」(p2-plan §7 任务 3 / 总设计 §20)。
+   * 真实金样资产(狐神抚主预设 217 段 + Table 世界书)绑定同一 chat 跑 3 轮真实编译,
+   * 逐轮 CachePlan + 段级 contentHash 喂 `simulateCachePlan`(零 API 成本:只消费已编译产物),
+   * 报告对金样基线严格比对。
+   *
+   * 归一化口径:段 ID 内嵌每次导入新建的 chatId/presetId UUID,跨 harness 必不同——
+   * 金样只锁**语义量**(token 数 / 命中率 / 削减率 / 分歧段在稳定前缀中的**位序**)与
+   * 失效归因(breakReasons),不锁运行标识(与 S15 字节金样同一纪律)。
+   *
+   * 读法提示:基线里 `actualHitRatio` 极低不是 KPI 失败——FakeProviderAdapter 用
+   * "字符数 / 4" 合成 usage(ASCII 取向),而 plan 计对中文 ≈ 1 token/汉字,两套口径
+   * 天然差 ~3.6 倍;真实 provider 的 cached_tokens/prompt_tokens 才是有意义的实际层。
+   * 本用例锁的是**理论层**(theoreticalHitRatio/inputCostReduction)与两口径的分离性。
+   */
+  it('S20 缓存模拟金样:真实预设+世界书 3 轮 → simulateCachePlan 报告对齐', async () => {
+    const presetFile = MANIFEST.find((m) => m.output === 'preset/主预设_V182_狐神抚_毓忻.json')
+    const wbFile = MANIFEST.find((m) => m.output === 'worldbook/Table_v2011.json')
+    expect(presetFile).toBeDefined()
+    expect(wbFile).toBeDefined()
+    const importedPreset = await importAsset(app, '/api/v2/presets/import', readAsset(presetFile!.output))
+    expect(importedPreset.status).toBe(201)
+    const presetId = (importedPreset.body.data as { preset: { id: string } }).preset.id
+    const importedWb = await importAsset(app, '/api/v2/worldbooks/import', readAsset(wbFile!.output))
+    expect(importedWb.status).toBe(201)
+    const wbId = (importedWb.body.data as { worldbook: { id: string } }).worldbook.id
+
+    const chatId = await setupChat([{ role: 'user', content: '你好' }], { presetId })
+    await app.request(`/api/v2/chats/${chatId}/worldbooks`, { method: 'POST', body: JSON.stringify({ worldbookId: wbId }) })
+
+    const simRounds: CacheSimRound[] = []
+    /** 每轮稳定前缀段 ID 序(把分歧段 ID 归一化为位序) */
+    const prefixOrders: string[][] = []
+    for (let i = 0; i < 3; i += 1) {
+      await app.request(`/api/v2/chats/${chatId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ role: 'user', content: `第${i + 1}轮输入内容` }),
+      })
+      const result = startRun(
+        { store, bus, snapshots: new SnapshotRegistry() },
+        {
+          chatId: chatId as never,
+          adapter: new FakeProviderAdapter([{ text: '金样回放', cachedInputTokens: i === 0 ? 0 : 96 }], {
+            maxContextTokens: 131072,
+          }),
+          providerId,
+          model: 'fake-model',
+          now: FIXED_NOW as never,
+        },
+      )
+      if (!result.ok) throw new Error(result.error.message)
+      await result.value.completion
+
+      const snap = store.sqlite
+        .prepare('SELECT cache_plan, ir FROM prompt_snapshots WHERE id = ?')
+        .get(result.value.snapshotId) as { cache_plan: string; ir: string }
+      const plan = JSON.parse(snap.cache_plan) as CacheSimRound['plan']
+      const ir = JSON.parse(snap.ir) as { segments: unknown[] }
+      const hashes: Record<string, string> = {}
+      for (const seg of ir.segments) {
+        const p = projectSegment(seg as never)
+        hashes[p.id] = p.contentHash
+      }
+      const usage = store.sqlite
+        .prepare('SELECT input_tokens, cached_tokens FROM generations WHERE run_id = ?')
+        .get(result.value.runId) as { input_tokens: number | null; cached_tokens: number | null }
+      prefixOrders.push([...plan.stablePrefixSegments])
+      simRounds.push({
+        round: i + 1,
+        plan,
+        stablePrefixHashes: hashes,
+        actualCachedTokens: usage.cached_tokens ?? undefined,
+        providerInputTokens: usage.input_tokens ?? undefined,
+      })
+    }
+
+    const report = simulateCachePlan(simRounds)
+    // 语义量归一化:分歧段 ID → 该轮稳定前缀中的位序(不锁 UUID)
+    const normalized = {
+      rounds: report.rounds.map((r, index) => ({
+        round: r.round,
+        theoreticalStableTokens: r.theoreticalStableTokens,
+        theoreticalCachedTokens: r.theoreticalCachedTokens,
+        theoreticalFreshTokens: r.theoreticalFreshTokens,
+        planInputTokens: r.planInputTokens,
+        providerInputTokens: r.providerInputTokens ?? null,
+        actualCachedTokens: r.actualCachedTokens ?? null,
+        hitRatio: r.hitRatio,
+        actualHitRatio: r.actualHitRatio ?? null,
+        cacheBreak: r.cacheBreak,
+        breakReasons: r.breakReasons,
+        divergenceAt: r.firstDivergenceSegment === undefined ? null : prefixOrders[index]!.indexOf(r.firstDivergenceSegment),
+      })),
+      theoreticalHitRatio: report.theoreticalHitRatio,
+      actualHitRatio: report.actualHitRatio ?? null,
+      baselineInputTokens: report.baselineInputTokens,
+      uncachedInputTokens: report.uncachedInputTokens,
+      inputCostReduction: report.inputCostReduction,
+      topCacheKillers: report.topCacheKillers,
+    }
+    const serializedReport = JSON.stringify(normalized, null, 2)
+
+    const rel = 'cache-simulator/hushen-fu-table.report.json'
+    const baseline = golden(rel)
+    if (baseline === undefined) {
+      golden(rel, serializedReport)
+      console.log(`  [基线生成] ${rel} (${serializedReport.length} 字节)`)
+    } else {
+      expect(serializedReport).toBe(baseline)
+    }
+    // §20 口径:理论缓存率与成本削减为真实量(第 1 轮无基线,第 2 轮起稳定前缀承接)
+    expect(report.rounds[0]!.theoreticalCachedTokens).toBe(0)
+    expect(report.rounds[1]!.theoreticalCachedTokens).toBeGreaterThan(0)
+    expect(report.theoreticalHitRatio).toBeGreaterThan(0)
+    expect(report.inputCostReduction).toBeGreaterThan(0)
+    // §33.2:actual 只统计真实回传轮次(第 1 轮 0、第 2/3 轮 96)
+    expect(report.actualHitRatio).toBeGreaterThan(0)
   }, 60_000)
 })

@@ -101,6 +101,38 @@ describe('core/serializer diff(api-spec §38)', () => {
     expect(diff.tokenDelta.fresh).toBeGreaterThan(0)
   })
 
+  it('S20 首个分歧字节:changed 段给出 UTF-8 字节偏移(多字节字符按字节非字符计)', () => {
+    const a = snapshotOf(baseSegments, 'a6')
+    const b = snapshotOf(
+      baseSegments.map((s) => (s.id === 'chat:1:message:983' ? { ...s, content: '本轮输入(重写)' } : s)),
+      'b6',
+    )
+    const diff = diffSnapshots(a, b)
+    // '本轮输入' = 4 汉字 × 3 字节 = 12 字节公共前缀(字符偏移会是 4,故按字节断言)
+    expect(diff.firstDivergence).toEqual({ segmentId: 'chat:1:message:983', byteOffset: 12 })
+  })
+
+  it('S20 首个分歧字节:一方为另一方前缀 → 偏移 = 较短者字节长度', () => {
+    const a = snapshotOf(
+      baseSegments.map((s) => (s.id === 'chat:1:message:983' ? { ...s, content: 'ABC本轮输入' } : s)),
+      'a7',
+    )
+    const b = snapshotOf(
+      baseSegments.map((s) => (s.id === 'chat:1:message:983' ? { ...s, content: 'ABC本轮输入追加' } : s)),
+      'b7',
+    )
+    // 公共前缀 'ABC本轮输入' = 3 ASCII + 12 字节中文 = 15
+    expect(diffSnapshots(a, b).firstDivergence).toEqual({ segmentId: 'chat:1:message:983', byteOffset: 15 })
+  })
+
+  it('S20 首个分歧字节:removed 整段缺失 → 偏移 0', () => {
+    const a = snapshotOf(baseSegments, 'a8')
+    const b = snapshotOf(baseSegments.slice(0, 2), 'b8')
+    const diff = diffSnapshots(a, b)
+    expect(diff.segments.find((d) => d.kind === 'removed')?.segmentId).toBe('chat:1:message:983')
+    expect(diff.firstDivergence).toEqual({ segmentId: 'chat:1:message:983', byteOffset: 0 })
+  })
+
   it('新增历史消息:added 段入 diff;firstDivergence 指向新增段;input = token 差', () => {
     const a = snapshotOf(baseSegments, 'a3')
     const b = snapshotOf([

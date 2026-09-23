@@ -1,5 +1,6 @@
-import { useEffect, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { useChatStore } from '../stores/chat'
+import { CacheBinaryDiff } from './CacheBinaryDiff'
 import type { ChatTelemetryDto } from '@whispertavern/api-types'
 
 /**
@@ -22,26 +23,27 @@ function fmt(n: number): string {
 
 /** 命中率仪表:四层口径(§33.2)——理论稳定前缀 → 实际命中 → 新鲜 */
 function HitRateGauge({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElement {
-  const { costEstimate } = telemetry.summary
-  const total = costEstimate.baselineInputTokens
-  const cached = costEstimate.cachedInputTokens
-  const fresh = costEstimate.freshInputTokens
+  const aggregate = telemetry.aggregate
+  const total = aggregate.eligibleTokens
+  const cached = aggregate.cachedTokens
+  const fresh = aggregate.freshTokens
+  const hitRate = aggregate.theoreticalHitRate
   const cachedPct = total === 0 ? 0 : (cached / total) * 100
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] font-semibold">本会话累计(§33.2)</span>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          新鲜 {fmt(fresh)} tok · 命中 {fmt(cached)} tok ({pct(costEstimate.reportedHitRatio)})
+          新鲜 {fmt(fresh)} tok · 命中 {fmt(cached)} tok (实际 {pct(aggregate.actualHitRate)})
         </span>
       </div>
-      <div className="flex h-2.5 w-full overflow-hidden rounded bg-[var(--muted)]" role="img" aria-label={`命中率 ${pct(costEstimate.reportedHitRatio)}`}>
+      <div className="flex h-2.5 w-full overflow-hidden rounded bg-[var(--muted)]" role="img" aria-label={`命中率 ${pct(aggregate.actualHitRate)}`}>
         <div className="bg-[#22c55e]" style={{ width: `${cachedPct}%` }} />
         <div className="bg-[#f97316]" style={{ width: `${100 - cachedPct}%` }} />
       </div>
       <div className="flex justify-between text-[10px] text-[var(--muted-foreground)]">
-        <span>命中(绿) {pct(costEstimate.reportedHitRatio)}</span>
-        <span>新鲜(橙) {pct(total === 0 ? undefined : 1 - (costEstimate.reportedHitRatio ?? 0))}</span>
+        <span>实际命中(绿) {pct(aggregate.actualHitRate)}</span>
+        <span>理论缓存率(plan 计) {pct(hitRate)}</span>
       </div>
     </div>
   )
@@ -51,16 +53,16 @@ function HitRateGauge({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElem
 function HitRateCurve({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElement {
   const rounds = telemetry.rounds
   if (rounds.length === 0) return <div className="text-[10px] text-[var(--muted-foreground)]">尚无生成轮次</div>
-  const max = Math.max(...rounds.map((r) => r.inputTokens), 1)
+  const max = Math.max(...rounds.map((r) => r.promptTokens), 1)
   return (
     <div className="space-y-1">
       <h4 className="text-[11px] font-semibold">命中率曲线(逐轮)</h4>
       <div className="flex h-16 items-end gap-0.5">
         {rounds.map((r) => {
-          const hitPct = r.inputTokens === 0 ? 0 : (r.cachedTokens / r.inputTokens) * 100
-          const height = (r.inputTokens / max) * 100
+          const hitPct = r.promptTokens === 0 ? 0 : (r.cachedTokens / r.promptTokens) * 100
+          const height = (r.promptTokens / max) * 100
           return (
-            <div key={r.round} className="flex flex-1 flex-col items-center gap-0.5" title={`轮${r.round}: 输入 ${r.inputTokens} · 命中 ${r.cachedTokens} (${pct(r.cachedTokens / Math.max(r.inputTokens, 1))})`}>
+            <div key={r.round} className="flex flex-1 flex-col items-center gap-0.5" title={`轮${r.round}: prompt ${r.promptTokens} · 命中 ${r.cachedTokens} (${pct(r.cachedTokens / Math.max(r.promptTokens, 1))})`}>
               <div className="flex w-full flex-col justify-end rounded-sm" style={{ height: `${height}%` }}>
                 <div className="w-full bg-[#22c55e]" style={{ height: `${hitPct}%` }} />
                 <div className="w-full bg-[#f97316]" style={{ height: `${100 - hitPct}%` }} />
@@ -76,7 +78,7 @@ function HitRateCurve({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElem
 
 /** CacheBreak 事件列表(§33.3) */
 function CacheBreakList({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElement {
-  const breaks = telemetry.summary.cacheBreaks
+  const breaks = telemetry.cacheBreaks
   if (breaks.length === 0) return <div className="text-[10px] text-[var(--muted-foreground)]">无失效事件</div>
   return (
     <div className="space-y-1">
@@ -117,6 +119,34 @@ function SimulatorSummary({ telemetry }: { telemetry: ChatTelemetryDto }): React
   )
 }
 
+/** 每轮实际发送内容(§7 任务 1):serialized.parts = 本轮真正上 wire 的消息序列 */
+function SentContentList({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElement {
+  if (telemetry.rounds.length === 0) return <div className="text-[10px] text-[var(--muted-foreground)]">尚无发送记录</div>
+  return (
+    <div className="space-y-1">
+      <h4 className="text-[11px] font-semibold">每轮实际发送内容</h4>
+      {telemetry.rounds.map((r) => (
+        <details key={r.round} className="text-[10px]">
+          <summary className="cursor-pointer">
+            轮{r.round} · {r.sentParts.length} 块 · {fmt(r.sentTokenCount)} tok
+            <span className="ml-1 text-[var(--muted-foreground)]">hash {r.sentHash.slice(0, 8)}</span>
+          </summary>
+          <div className="mt-1 space-y-0.5">
+            {r.sentParts.map((part, index) => (
+              <div key={index} className="rounded bg-[var(--muted)]/50 px-1.5 py-1">
+                <span className="mr-1 text-[var(--primary)]">{part.role ?? '?'}</span>
+                <span className="whitespace-pre-wrap break-all text-[var(--muted-foreground)]">
+                  {part.content.length > 240 ? `${part.content.slice(0, 240)}…` : part.content}
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      ))}
+    </div>
+  )
+}
+
 /** 前缀过小提示(§5:stableZoneTokens < MIN_PREFIX_TOKENS → 缓存不激活) */
 function PrefixTooSmall({ telemetry }: { telemetry: ChatTelemetryDto }): ReactElement {
   const flagged = telemetry.rounds.filter((r) => r.prefixTooSmall !== undefined)
@@ -133,6 +163,7 @@ export function CacheTelemetry(): ReactElement | null {
   const currentChatId = useChatStore((s) => s.currentChatId)
   const telemetry = useChatStore((s) => s.telemetry)
   const loadTelemetry = useChatStore((s) => s.loadTelemetry)
+  const [binaryOpen, setBinaryOpen] = useState(false)
 
   useEffect(() => {
     if (currentChatId !== null) void loadTelemetry()
@@ -141,11 +172,20 @@ export function CacheTelemetry(): ReactElement | null {
   if (currentChatId === null) return null
   return (
     <aside className="w-80 shrink-0 overflow-y-auto border-l border-[var(--border)] bg-[var(--background)] p-3">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-1">
         <h3 className="text-sm font-semibold">缓存遥测</h3>
-        <button type="button" className="rounded px-2 py-0.5 text-[10px] hover:bg-[var(--muted)]" onClick={() => void loadTelemetry()}>
-          刷新
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="rounded px-2 py-0.5 text-[10px] hover:bg-[var(--muted)]"
+            onClick={() => setBinaryOpen(true)}
+          >
+            二分定位
+          </button>
+          <button type="button" className="rounded px-2 py-0.5 text-[10px] hover:bg-[var(--muted)]" onClick={() => void loadTelemetry()}>
+            刷新
+          </button>
+        </div>
       </div>
       {telemetry === null ? (
         <div className="text-[10px] text-[var(--muted-foreground)]">加载中…</div>
@@ -156,8 +196,10 @@ export function CacheTelemetry(): ReactElement | null {
           <HitRateCurve telemetry={telemetry} />
           <CacheBreakList telemetry={telemetry} />
           <SimulatorSummary telemetry={telemetry} />
+          <SentContentList telemetry={telemetry} />
         </div>
       )}
+      {binaryOpen && <CacheBinaryDiff onClose={() => setBinaryOpen(false)} />}
     </aside>
   )
 }

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve as resolvePath, sep as pathSep, dirname } from 'node:path'
 import { Hono } from 'hono'
-import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, lt, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
 import { compile, diffSnapshots, projectSegment, simulateCachePlan } from '@whispertavern/core'
@@ -731,17 +731,25 @@ export function createApp(deps: ServerDeps): CreatedApp {
     })))
   })
 
-  // §33 遥测与缓存诊断(S20/WP2.5):聚合 chat 的 runs+usage+cachePlan → 命中率曲线/成本/CacheBreak 事件
-  app.get('/api/v2/chats/:id/telemetry', (c) => {
-    const requestId = requestIdOf(c)
-    const chat = loadChat(deps.store, c.req.param('id') as ChatId)
-    if (!chat.ok) return runtimeError(c, requestId, chat.error)
-    const runRows = deps.store.db
+  // —— §41 Cache Telemetry / §43 Cache Simulation 共用聚合(纯读库;§43「不调用真实 Provider」)——
+  // limit:只聚合最近 N 轮(§43 的 rounds 窗口;窗口首轮无前置基线,理论承接从窗口第 2 轮起算)
+  function buildCacheTelemetry(
+    chatId: ChatId,
+    limit?: number,
+  ): {
+    rounds: Record<string, unknown>[]
+    aggregate: Record<string, number | undefined>
+    cacheBreaks: Record<string, unknown>[]
+    simulator: Record<string, unknown>
+    runCount: number
+  } {
+    const allRunRows = deps.store.db
       .select()
       .from(runsTable)
-      .where(eq(runsTable.chatId, chat.value.id))
+      .where(eq(runsTable.chatId, chatId))
       .orderBy(runsTable.createdAt)
       .all()
+    const runRows = limit === undefined ? allRunRows : allRunRows.slice(-limit)
     const usageByRun = new Map<string, { inputTokens: number; cachedTokens: number; outputTokens: number; source: string }>()
     for (const row of deps.store.db.select().from(generationsTable).all()) {
       if (row.runId === null) continue
@@ -776,12 +784,20 @@ export function createApp(deps: ServerDeps): CreatedApp {
       const snapshot = run.snapshotId === null ? undefined : loadSnapshotRow(run.snapshotId)?.snapshot
       const cachePlan = snapshot?.cachePlan
       const breakReasons = (cachePlan?.breakReasons ?? []) as { type: string }[]
+      // §7 任务 1「每轮实际发送内容」:serialized.parts = 本轮真正上 wire 的消息序列(§65)
+      const serialized = (snapshot?.serialized ?? { parts: [], tokenCount: 0, hash: '' }) as {
+        parts: { role?: string; content?: string }[]
+        tokenCount?: number
+        hash?: string
+      }
       rounds.push({
         round,
         runId: run.id,
         createdAt: run.createdAt,
         status: run.status,
-        inputTokens: usage?.inputTokens ?? 0,
+        /** provider prompt_tokens(§2.2 token 计;§41 CacheRoundMetric) */
+        promptTokens: usage?.inputTokens ?? 0,
+        /** provider cached_tokens(§2.2) */
         cachedTokens: usage?.cachedTokens ?? 0,
         outputTokens: usage?.outputTokens ?? 0,
         usageSource: usage?.source ?? 'estimated',
@@ -791,25 +807,35 @@ export function createApp(deps: ServerDeps): CreatedApp {
         prefixTooSmall: cachePlan?.providerStrategy?.prefixTooSmall,
         breakReasons: breakReasons.map((r) => r.type),
         invalidationRisk: cachePlan?.invalidationRisk ?? 'low',
+        /** 本轮实际发送内容(role/content 序;§7 任务 1) */
+        sentParts: serialized.parts.map((p) => ({ role: p.role ?? null, content: p.content ?? '' })),
+        sentTokenCount: serialized.tokenCount ?? 0,
+        sentHash: serialized.hash ?? '',
+        segmentCount: (snapshot?.ir as { segments?: unknown[] } | undefined)?.segments?.length ?? 0,
         cachePlan,
       })
     }
 
-    // §33.2 四层口径:reported 才计命中率;estimated 单列(不入分母)
+    // §33.2 四层口径:reported 才计命中率;estimated 单列(不入分母,亦不冒充实际命中)
     const reported = rounds.filter((r) => r.usageSource === 'reported')
-    const reportedInput = reported.reduce((sum, r) => sum + (r.inputTokens as number), 0)
-    const reportedCached = reported.reduce((sum, r) => sum + (r.cachedTokens as number), 0)
-    const allInput = rounds.reduce((sum, r) => sum + (r.inputTokens as number), 0)
-    const allCached = rounds.reduce((sum, r) => sum + (r.cachedTokens as number), 0)
-    const allFresh = allInput - allCached
-    // 成本估算:本地口径(input+output token 计,§2.2);ratios 供前端曲线
-    const costEstimate = {
-      baselineInputTokens: allInput,
-      cachedInputTokens: allCached,
-      freshInputTokens: allFresh,
-      reportedHitRatio: reportedInput === 0 ? undefined : reportedCached / reportedInput,
-      overallHitRatio: allInput === 0 ? undefined : allCached / allInput,
-    }
+    const sumOf = (rows: Record<string, unknown>[], key: string): number =>
+      rows.reduce((sum, r) => sum + (r[key] as number), 0)
+    const reportedPrompt = sumOf(reported, 'promptTokens')
+    const reportedCached = sumOf(reported, 'cachedTokens')
+    const promptTokens = sumOf(rounds, 'promptTokens')
+    const cachedTokens = sumOf(rounds, 'cachedTokens')
+    // S20 验收③:Simulator 消费真实编译产物 → 理论缓存率/成本削减/Killer(输出对齐金样)
+    // §33.2 两套口径并列:理论层用 plan token 计,实际层用 provider 回传(绝不混算)
+    const simulatorRounds = rounds
+      .filter((r) => r.cachePlan !== undefined)
+      .map((r) => ({
+        round: r.round as number,
+        plan: r.cachePlan as import('@whispertavern/contracts').CachePlan,
+        stablePrefixHashes: stableHashesByRun.get(r.runId as string) ?? {},
+        actualCachedTokens: r.usageSource === 'reported' ? (r.cachedTokens as number) : undefined,
+        providerInputTokens: r.usageSource === 'reported' ? (r.promptTokens as number) : undefined,
+      }))
+    const simulator = simulateCachePlan(simulatorRounds)
     // CacheBreak 事件(§33.3):breakReasons 非空轮 + 其轮次/原因清单
     const cacheBreaks = rounds
       .filter((r) => (r.breakReasons as string[]).length > 0)
@@ -819,27 +845,166 @@ export function createApp(deps: ServerDeps): CreatedApp {
         reasons: r.breakReasons as string[],
         stablePrefixTokens: r.stablePrefixTokens as number,
       }))
-    // S20 验收③:Simulator 消费真实编译产物 → 理论缓存率/成本削减/Killer(输出对齐金样)
-    const simulatorRounds = rounds.map((r) => ({
-      round: r.round as number,
-      plan: r.cachePlan as import('@whispertavern/contracts').CachePlan,
-      stablePrefixHashes: stableHashesByRun.get(r.runId as string) ?? {},
-      actualCachedTokens: r.usageSource === 'reported' ? (r.cachedTokens as number) : undefined,
-      totalInputTokens: r.inputTokens as number,
-    }))
-    const simulator = simulateCachePlan(simulatorRounds)
 
-    return ok(c, requestId, {
+    return {
       rounds,
-      summary: { costEstimate, cacheBreaks },
+      // §41 aggregate(状态量分层:plan 计 = 理论可缓存面;provider 计 = 实际回传面)
+      aggregate: {
+        stableTokens: sumOf(rounds, 'stablePrefixTokens'),
+        eligibleTokens: simulator.baselineInputTokens,
+        cachedTokens,
+        freshTokens: promptTokens - cachedTokens,
+        theoreticalHitRate: simulator.theoreticalHitRatio,
+        actualHitRate: reportedPrompt === 0 ? undefined : reportedCached / reportedPrompt,
+        reportedHitRate: reportedPrompt === 0 ? undefined : reportedCached / reportedPrompt,
+        overallHitRate: promptTokens === 0 ? undefined : cachedTokens / promptTokens,
+      },
+      cacheBreaks,
       simulator: {
         theoreticalHitRatio: simulator.theoreticalHitRatio,
         actualHitRatio: simulator.actualHitRatio,
         baselineInputTokens: simulator.baselineInputTokens,
-        cachedInputTokens: simulator.cachedInputTokens,
+        uncachedInputTokens: simulator.uncachedInputTokens,
         inputCostReduction: simulator.inputCostReduction,
         topCacheKillers: simulator.topCacheKillers,
+        rounds: simulator.rounds,
       },
+      runCount: runRows.length,
+    }
+  }
+
+  // §41 Cache Telemetry(S20/WP2.5 落地):命中率曲线 + cached/prompt 口径 + 前缀过小 + Simulator
+  app.get('/api/v2/chats/:id/cache/telemetry', (c) => {
+    const requestId = requestIdOf(c)
+    const chat = loadChat(deps.store, c.req.param('id') as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const telemetry = buildCacheTelemetry(chat.value.id)
+    // §41 Query:from/to(ISO 时间窗;按轮次 createdAt 过滤)
+    const from = c.req.query('from')
+    const to = c.req.query('to')
+    if (from === undefined && to === undefined) return ok(c, requestId, telemetry)
+    const inWindow = (r: Record<string, unknown>): boolean => {
+      const createdAt = r.createdAt as string
+      return (from === undefined || createdAt >= from) && (to === undefined || createdAt <= to)
+    }
+    return ok(c, requestId, { ...telemetry, rounds: telemetry.rounds.filter(inWindow) })
+  })
+
+  // §42 Cache Break Diagnosis(S20/WP2.5 落地):二分层——定位"谁毁了缓存" + 影响 token + 建议
+  app.get('/api/v2/runs/:id/cache-break', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'NOT_FOUND', `run 不存在: ${runId}`)
+    if (run.snapshotId === null) return fail(c, requestId, 'GENERATION_NOT_FOUND', `run 无快照: ${runId}`)
+    const current = loadSnapshotRow(run.snapshotId)
+    if (current === undefined) return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${run.snapshotId}`)
+    // 上一轮 = 同 chat 中 createdAt 早于本轮的最近一条快照(二分比较的 A 侧)
+    const prior = deps.store.db
+      .select()
+      .from(promptSnapshots)
+      .where(and(eq(promptSnapshots.chatId, run.chatId), lt(promptSnapshots.createdAt, current.row.createdAt)))
+      .orderBy(desc(promptSnapshots.createdAt))
+      .limit(1)
+      .all()
+    if (prior.length === 0) {
+      return ok(c, requestId, {
+        broken: false,
+        affectedTokens: 0,
+        suggestions: ['本轮为该会话首轮快照,无前置缓存可破坏(§33:首轮不计 CacheBreak)'],
+      })
+    }
+    const previous = loadSnapshotRow(prior[0]!.id)
+    if (previous === undefined) return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${prior[0]!.id}`)
+    const diff = diffSnapshots(previous.snapshot, current.snapshot)
+    if (diff.firstDivergence === undefined) {
+      return ok(c, requestId, {
+        broken: false,
+        affectedTokens: 0,
+        suggestions: ['两轮段哈希链逐段一致,稳定前缀未断裂'],
+      })
+    }
+    const segments = current.snapshot.ir.segments
+    const index = segments.findIndex((s) => s.id === diff.firstDivergence!.segmentId)
+    // 影响面 = 首分歧段起的**整个后缀**(字节前缀断裂后,后续段全部重发)
+    const affectedTokens = index < 0 ? 0 : segments.slice(index).reduce((sum, s) => sum + s.tokenCount, 0)
+    const segment = segments.find((s) => s.id === diff.firstDivergence!.segmentId) ?? previous.snapshot.ir.segments.find((s) => s.id === diff.firstDivergence!.segmentId)
+    const source = segment?.source
+    const sourceId =
+      source === undefined
+        ? undefined
+        : 'messageId' in source
+          ? source.messageId
+          : 'entryId' in source
+            ? source.entryId
+            : 'presetId' in source
+              ? source.presetId
+              : 'assetId' in source
+                ? source.assetId
+                : undefined
+    const reason = diff.cacheBreak?.type ?? 'MANUAL_INVALIDATION'
+    return ok(c, requestId, {
+      broken: true,
+      firstDivergence: {
+        previousSnapshot: previous.snapshot.id,
+        currentSnapshot: current.snapshot.id,
+        segmentId: diff.firstDivergence.segmentId,
+        /** S20 补齐:S14 只给段级,这里给段内**首个分歧字节**(UTF-8 偏移) */
+        byteOffset: diff.firstDivergence.byteOffset,
+        sourceId,
+        reason,
+      },
+      affectedTokens,
+      suggestions: cacheBreakSuggestions(reason),
+    })
+  })
+
+  // §43/§44 Cache Simulation(S20/WP2.5 落地):零 API 成本——只消费已编译快照,不调 Provider
+  app.post('/api/v2/cache/simulate', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    const chatId = typeof body.chatId === 'string' ? body.chatId : ''
+    if (chatId === '') return fail(c, requestId, 'VALIDATION_ERROR', 'chatId 必填(§43 CacheSimulationRequest)')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const requestedRounds = body.rounds
+    const limit =
+      typeof requestedRounds === 'number' && Number.isFinite(requestedRounds) && requestedRounds > 0
+        ? Math.min(Math.floor(requestedRounds), 200)
+        : 50
+    const telemetry = buildCacheTelemetry(chat.value.id, limit)
+    const simulatorRounds = telemetry.simulator.rounds as {
+      round: number
+      theoreticalStableTokens: number
+      theoreticalCachedTokens: number
+      cacheBreak: boolean
+    }[]
+    const scenarios = Array.isArray(body.scenarios) ? body.scenarios.filter((s) => typeof s === 'string') : []
+    return ok(c, requestId, {
+      // §44 CacheSimulationResult
+      rounds: telemetry.rounds.map((r) => {
+        const sim = simulatorRounds.find((s) => s.round === r.round)
+        return {
+          round: r.round as number,
+          stableTokens: r.stablePrefixTokens as number,
+          freshTokens: r.freshTokens as number,
+          volatileTokens: r.volatileTokens as number,
+          prefixHash: r.sentHash as string,
+          theoreticalCachedTokens: sim?.theoreticalCachedTokens ?? 0,
+          cacheBreak: (r.breakReasons as string[])[0],
+        }
+      }),
+      aggregate: {
+        expectedCacheRatio: telemetry.simulator.theoreticalHitRatio as number,
+        // 失效总量 = 发生 CacheBreak 的轮次中未能承接的稳定前缀 token 之和
+        totalInvalidatedTokens: simulatorRounds
+          .filter((s) => s.cacheBreak)
+          .reduce((sum, s) => sum + (s.theoreticalStableTokens - s.theoreticalCachedTokens), 0),
+      },
+      simulator: telemetry.simulator,
+      // §43 scenarios(世界书触发/编辑/宏/swipe/分支/摘要/预算/群聊)属**确定性回放**,
+      // 由 S21 WP2.6 的 1000 轮模拟门禁交付;S20 只回放已有真实快照序列,不虚构场景。
+      unsupportedScenarios: scenarios,
     })
   })
 
@@ -1289,6 +1454,33 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+/**
+ * §42 CacheBreakDiagnosis.suggestions —— 按失效归因给可执行下一步(§58 归因 + §15.1 分区语义)。
+ * 只给"为什么断+往哪调"的方向,不给自动改写(红线:不用 Prompt 修架构问题)。
+ */
+function cacheBreakSuggestions(reason: string): string[] {
+  switch (reason) {
+    case 'MESSAGE_EDITED':
+      return ['历史消息被编辑 → 其后全部前缀失效;把易改内容留在 tail,或用 swipe 生成新变体而非改写历史']
+    case 'WORLD_BOOK_CONTENT_CHANGED':
+      return ['世界书条目内容变更 → 该条目所在稳定区整段失效;检查条目是否应留在 freshWB 观察一轮再毕业']
+    case 'WORLD_BOOK_NEW_ENTRY':
+      return ['稳定区插入新条目 → 新条目打乱物理序;让其先入 freshWB(append-only 序不回溯)']
+    case 'WORLD_BOOK_RETIREMENT':
+    case 'WORLD_BOOK_DEACTIVATED':
+      return ['条目退休/失活改变了稳定区成员集合;确认退休策略是否应与缓存分区解耦']
+    case 'MACRO_VOLATILE':
+      return ['易变宏({{random}}/{{time}} 等)落在稳定区 → 每轮重渲染必断;按 Macro Cache Rule 移出 stable zone']
+    case 'PRESET_CHANGED':
+      return ['预设段变更 → 预设属 header 稳定区,变更代价最高;确认是否可用 Persona/世界书覆盖替代']
+    case 'PERSONA_CHANGED':
+    case 'CHARACTER_CHANGED':
+      return ['角色/Persona 资产变更 → 其段位于稳定区前列;变更会使整个稳定前缀重发']
+    default:
+      return ['未归类失效:用 /prompt-snapshots/{a}/diff/{b} 查看段级 firstDivergence 与 byteOffset 定位具体段']
+  }
 }
 
 /**

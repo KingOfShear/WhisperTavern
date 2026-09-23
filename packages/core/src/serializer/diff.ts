@@ -10,7 +10,8 @@ import type { DeepReadonly } from '../ir/segment'
  * - 内容一致性 = 段框架哈希((id,role,content) netstring,§57 口径)——role 变化
  *   同样算 changed,因为它改变序列化字节;
  * - 序:先 A 侧发送序(removed/changed/same 在原位),再 B 侧新增段(发送序);
- *   firstDivergence = 该序下第一个非 same 段(removed 也破坏字节前缀,算分歧);
+ *   firstDivergence = 该序下第一个非 same 段(removed 也破坏字节前缀,算分歧),
+ *   并给出该段 content 内**首个分歧字节的 UTF-8 偏移**(S20/WP2.5 二分工具定位锚点);
  * - tokenDelta.input = B 总 token − A 总 token;cached = 两轮逐段一致 token;
  *   fresh = B 中不能沿用上轮缓存的部分(added + changed.after);
  * - cacheBreak 是 P0 **启发式标签**(§58 精确归因属 Cache Planner P2):按首分歧
@@ -21,7 +22,8 @@ import type { DeepReadonly } from '../ir/segment'
 
 export interface SnapshotDiffResult {
   segments: SegmentDiff[]
-  firstDivergence?: { segmentId: string }
+  /** byteOffset = 该段 content 内首个分歧字节的 UTF-8 偏移(added/removed 记 0);S20 二分工具消费 */
+  firstDivergence?: { segmentId: string; byteOffset: number }
   tokenDelta: { input: number; cached: number; fresh: number }
   cacheBreak?: PromptDiffCacheBreak
 }
@@ -34,6 +36,23 @@ function frameHash(segment: DeepReadonly<PromptSegment>): string {
   return sha256Hex(
     concatBytes([frameField(segment.id), frameField(segment.role), frameField(segment.content)]),
   )
+}
+
+/**
+ * 首个分歧字节的 UTF-8 偏移(S20/WP2.5;ui-design §4.5 第二层定位锚点)。
+ * 按**字节**而非字符定位:多字节字符(中文/emoji)下字符偏移会低估真实断裂位置,
+ * 而缓存前缀是字节前缀(provider 按 token/字节切分),故必须按 UTF-8 字节比。
+ * 一方为另一方前缀时返回较短者长度(= 插入点)。
+ */
+function firstDivergingByteOffset(a: string, b: string): number {
+  const encoder = new TextEncoder()
+  const bytesA = encoder.encode(a)
+  const bytesB = encoder.encode(b)
+  const limit = Math.min(bytesA.length, bytesB.length)
+  for (let i = 0; i < limit; i += 1) {
+    if (bytesA[i] !== bytesB[i]) return i
+  }
+  return limit
 }
 
 /** 段投影(Inspector 展示与 diff 共用;八区哈希口径下的单段视图) */
@@ -88,9 +107,20 @@ export function diffSnapshots(a: DeepReadonly<PromptSnapshot>, b: DeepReadonly<P
 
   const breakSegment =
     firstChanged?.after !== undefined ? bById.get(firstChanged.after.id) : undefined
+  // 首个分歧字节(S20):changed 取两段 content 的公共前缀字节数;added/removed 整段缺失记 0
+  const aById = new Map(a.ir.segments.map((s) => [s.id, s]))
+  let byteOffset = 0
+  if (firstChanged !== undefined) {
+    const segA = aById.get(firstChanged.segmentId)
+    const segB = bById.get(firstChanged.segmentId)
+    if (segA !== undefined && segB !== undefined) {
+      byteOffset = firstDivergingByteOffset(segA.content, segB.content)
+    }
+  }
   return {
     segments,
-    firstDivergence: firstChanged === undefined ? undefined : { segmentId: firstChanged.segmentId },
+    firstDivergence:
+      firstChanged === undefined ? undefined : { segmentId: firstChanged.segmentId, byteOffset },
     tokenDelta: { input: totalB - totalA, cached, fresh: added + changedAfter },
     cacheBreak: classifyBreak(breakSegment, firstChanged?.kind),
   }

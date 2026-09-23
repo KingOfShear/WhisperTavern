@@ -44,7 +44,7 @@ describe('S20 Cache Simulator(§20)', () => {
     expect(report.rounds[1]!.theoreticalCachedTokens).toBe(200)
     expect(report.rounds[1]!.cacheBreak).toBe(false)
     // 本轮总输入 = stable(200) + fresh(50) + volatile(30) = 280;命中 200 → 新鲜 80
-    expect(report.rounds[1]!.freshTokens).toBe(80)
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBe(80)
     // 总输入 = 280×2 = 560;理论命中 = 200(仅第 2 轮)
     expect(report.theoreticalHitRatio).toBeCloseTo(200 / 560, 10)
     expect(report.inputCostReduction).toBeCloseTo(200 / 560, 10)
@@ -58,7 +58,15 @@ describe('S20 Cache Simulator(§20)', () => {
     ])
     expect(report.rounds[0]!.theoreticalCachedTokens).toBe(0)
     expect(report.rounds[1]!.theoreticalCachedTokens).toBe(300)
-    expect(report.rounds[1]!.freshTokens).toBe(100)
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBe(100)
+  })
+
+  /** S20 金样抓出的缺陷回归:首轮无缓存可毁,不得判 CacheBreak */
+  it('首轮(无基线)即使有段哈希也不算 CacheBreak,且无 firstDivergenceSegment', () => {
+    const report = simulateCachePlan([makePlan(200, 50, 30)])
+    expect(report.rounds[0]!.cacheBreak).toBe(false)
+    expect(report.rounds[0]!.firstDivergenceSegment).toBeUndefined()
+    expect(report.rounds[0]!.theoreticalCachedTokens).toBe(0)
   })
 
   it('稳定前缀哈希分歧 → CacheBreak + firstDivergenceSegment,理论命中归零', () => {
@@ -69,7 +77,7 @@ describe('S20 Cache Simulator(§20)', () => {
     expect(report.rounds[1]!.cacheBreak).toBe(true)
     expect(report.rounds[1]!.firstDivergenceSegment).toBe('a')
     expect(report.rounds[1]!.theoreticalCachedTokens).toBe(0)
-    expect(report.rounds[1]!.freshTokens).toBe(280) // 全部重发
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBe(280) // 全部重发
   })
 
   it('breakReasons 非空 → cacheBreak 且计入 Killer 统计', () => {
@@ -85,20 +93,48 @@ describe('S20 Cache Simulator(§20)', () => {
     expect(report.topCacheKillers.find((k) => k.reason === 'WORLD_BOOK_NEW_ENTRY')).toEqual({ reason: 'WORLD_BOOK_NEW_ENTRY', count: 1 })
   })
 
-  it('actualCachedTokens 缺失 → 理论口径;存在 → 实际口径且不高估(§33.2)', () => {
+  /** S20 金样抓出的缺陷回归:理论(plan 计)与实际(provider 回传)是两套口径,严禁相减 */
+  it('实际层齐全 → 理论/实际两口径并列,理论恒非负且不受 provider 数干扰', () => {
     const report = simulateCachePlan([
       makePlan(200, 0, 0),
-      { ...makePlan(200, 0, 0), round: 2, actualCachedTokens: 180, inputTokens: 200 } as CacheSimRound,
+      { ...makePlan(200, 0, 0), round: 2, actualCachedTokens: 96, providerInputTokens: 150 },
     ])
-    expect(report.rounds[1]!.hitRatio).toBe(180 / 200) // 实际口径
-    expect(report.actualHitRatio).toBe(180 / 400)
-    expect(report.theoreticalHitRatio).toBeCloseTo(200 / 400, 10) // 理论口径不受实际值影响
+    // 实际层:provider 口径
+    expect(report.rounds[1]!.actualHitRatio).toBeCloseTo(96 / 150, 10)
+    expect(report.actualHitRatio).toBeCloseTo(96 / 150, 10)
+    // 理论层:plan 口径(200/200),不被 provider 的 150 改写
+    expect(report.rounds[1]!.hitRatio).toBe(1)
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBe(0)
+    expect(report.theoreticalHitRatio).toBeCloseTo(200 / 400, 10)
+    expect(report.baselineInputTokens).toBe(400)
+    expect(report.uncachedInputTokens).toBe(200)
+  })
+
+  it('provider 数目大于 plan 计(本地估算偏差)→ 理论新鲜仍非负(混算回归)', () => {
+    const report = simulateCachePlan([
+      makePlan(11720, 0, 0),
+      { ...makePlan(11720, 0, 0), round: 2, actualCachedTokens: 0, providerInputTokens: 10956 },
+    ])
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBe(0)
+    expect(report.rounds[1]!.theoreticalFreshTokens).toBeGreaterThanOrEqual(0)
+    expect(report.rounds[1]!.planInputTokens).toBe(11720)
+    expect(report.rounds[1]!.providerInputTokens).toBe(10956)
+  })
+
+  it('provider 数缺失 → actualHitRatio undefined(不是 0,不冒充实际命中)', () => {
+    const report = simulateCachePlan([
+      makePlan(200, 0, 0),
+      { ...makePlan(200, 0, 0), round: 2, actualCachedTokens: 96 },
+    ])
+    expect(report.rounds[1]!.actualHitRatio).toBeUndefined()
+    expect(report.actualHitRatio).toBeUndefined()
   })
 
   it('空输入 → 空报告零除安全', () => {
     const report = simulateCachePlan([])
     expect(report.rounds).toEqual([])
     expect(report.theoreticalHitRatio).toBe(0)
+    expect(report.actualHitRatio).toBeUndefined()
     expect(report.inputCostReduction).toBe(0)
     expect(report.topCacheKillers).toEqual([])
   })

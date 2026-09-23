@@ -1,0 +1,52 @@
+{
+  "rounds": [
+    {
+      "round": 1,
+      "theoreticalStableTokens": 11720,
+      "theoreticalCachedTokens": 0,
+      "theoreticalFreshTokens": 39680,
+      "planInputTokens": 39680,
+      "providerInputTokens": 10953,
+      "actualCachedTokens": 0,
+      "hitRatio": 0,
+      "actualHitRatio": 0,
+      "cacheBreak": false,
+      "breakReasons": [],
+      "divergenceAt": null
+    },
+    {
+      "round": 2,
+      "theoreticalStableTokens": 11720,
+      "theoreticalCachedTokens": 11720,
+      "theoreticalFreshTokens": 27971,
+      "planInputTokens": 39691,
+      "providerInputTokens": 10956,
+      "actualCachedTokens": 96,
+      "hitRatio": 0.29528104608097555,
+      "actualHitRatio": 0.008762322015334063,
+      "cacheBreak": false,
+      "breakReasons": [],
+      "divergenceAt": null
+    },
+    {
+      "round": 3,
+      "theoreticalStableTokens": 11720,
+      "theoreticalCachedTokens": 11720,
+      "theoreticalFreshTokens": 27982,
+      "planInputTokens": 39702,
+      "providerInputTokens": 10958,
+      "actualCachedTokens": 96,
+      "hitRatio": 0.2951992342955015,
+      "actualHitRatio": 0.00876072275962767,
+      "cacheBreak": false,
+      "breakReasons": [],
+      "divergenceAt": null
+    }
+  ],
+  "theoreticalHitRatio": 0.19685403072065036,
+  "actualHitRatio": 0.005841725743146621,
+  "baselineInputTokens": 119073,
+  "uncachedInputTokens": 95633,
+  "inputCostReduction": 0.19685403072065033,
+  "topCacheKillers": []
+}

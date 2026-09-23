@@ -185,8 +185,15 @@ export const PromptDiffSchema = z.object({
   snapshotAId: SnapshotIdSchema,
   snapshotBId: SnapshotIdSchema,
   segments: z.array(SegmentDiffSchema),
-  /** 首个非 same 段(api-spec §38 firstDivergence;byteOffset 为该段内容内偏移,P0 省略) */
-  firstDivergence: z.object({ segmentId: z.string() }).optional(),
+  /**
+   * 首个非 same 段(api-spec §38 firstDivergence)。
+   * byteOffset = 该段 **content 内**首个分歧字节的 UTF-8 偏移(S20/WP2.5 补齐,S14 仅给段级)——
+   * 二分工具第二层「下钻分屏字节级 diff」的定位锚点(ui-design §4.5)。added/removed 记 0
+   * (整段缺失即分歧起点,段内无公共前缀可定位)。
+   */
+  firstDivergence: z
+    .object({ segmentId: z.string(), byteOffset: z.number().int().nonnegative() })
+    .optional(),
   /** tokenDelta.fresh = 新增 token − 移除 token 的净值口径太粗,P0 给三项实测量 */
   tokenDelta: z.object({
     input: z.number().int(),
