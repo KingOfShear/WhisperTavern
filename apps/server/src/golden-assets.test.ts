@@ -92,6 +92,10 @@ describe('S15 金样:导入层(Import Compatibility Report 数据源)', () => {
     return out
   }
 
+  // 重 IO 测试:30 次真实导入(10 卡 × 3 载体)/6 预设/2 书,全量并行下曾超 vitest 默认 5s,
+  // 显式放宽超时防并行 CPU 争抢误报(2026-09-22 S19 全量回归实测)
+  const GOLDEN_IO_TIMEOUT = 60_000
+
   it(`卡三载体同源导入(${cardSources.length} 张)`, async () => {
     for (const source of cardSources) {
       const { v3, png, charx } = cardOutputs(source)
@@ -108,7 +112,7 @@ describe('S15 金样:导入层(Import Compatibility Report 数据源)', () => {
       // 三载体指向同一原生卡(同源)
       expect(names.size).toBe(1)
     }
-  })
+  }, GOLDEN_IO_TIMEOUT)
 
   it('世界书两代导入:老 8 字段(地点) + 现代 42 字段(Table)', async () => {
     const wbs = MANIFEST.filter((m) => m.type === 'worldbook')
@@ -120,7 +124,7 @@ describe('S15 金样:导入层(Import Compatibility Report 数据源)', () => {
       expect(data.worldbook.entryCount).toBeGreaterThan(0)
       console.log(`  书 ${m.output}: entries=${data.worldbook.entryCount} sourceFormat=${data.report.asset.sourceFormat} compat=${data.report.compatFields.join(',')}`)
     }
-  })
+  }, GOLDEN_IO_TIMEOUT)
 
   it('预设导入(6 预设)segmentCount > 0', async () => {
     // 注:manifest 的 type=table 资产是 ST "AI Table" 扩展格式(非 prompt-manager 预设,
@@ -134,7 +138,7 @@ describe('S15 金样:导入层(Import Compatibility Report 数据源)', () => {
       expect(data.preset.segmentCount).toBeGreaterThan(0)
       console.log(`  预设 ${m.output}: segments=${data.preset.segmentCount} compat=${data.report.compatFields.join(',')}`)
     }
-  })
+  }, GOLDEN_IO_TIMEOUT)
 })
 
 describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)', () => {
@@ -196,9 +200,17 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
     }
     const serialized = JSON.parse(row.serialized) as { parts: unknown }
     // 金样 serialized 含 CachePlan(S18 验收):真实装配 + stablePrefix 非空
-    const cachePlan = JSON.parse(row.cache_plan) as { version: number; stablePrefixSegments: unknown[] }
+    const cachePlan = JSON.parse(row.cache_plan) as {
+      version: number
+      stablePrefixSegments: unknown[]
+      providerStrategy?: { version: number; breakpoints: unknown[]; stableZoneTokens: number }
+    }
     expect(cachePlan.version).toBe(1)
     expect(cachePlan.stablePrefixSegments.length).toBeGreaterThan(0)
+    // S19 验收:providerStrategy 翻译指令随快照持久化(§16;adapter 按自家 cacheType 决定消费)
+    expect(cachePlan.providerStrategy?.version).toBe(1)
+    expect(cachePlan.providerStrategy?.breakpoints.length).toBeGreaterThan(0)
+    expect(typeof cachePlan.providerStrategy?.stableZoneTokens).toBe('number')
     return JSON.stringify(serialized.parts)
   }
 
@@ -218,7 +230,7 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
       return
     }
     expect(serialized).toBe(baseline)
-  })
+  }, 60_000)
 
   it('世界书字节金样:现代书(Table)激活进 prompt 序列化稳定', async () => {
     const wb = MANIFEST.find((m) => m.output === 'worldbook/Table_v2011.json')
@@ -237,5 +249,5 @@ describe('S15 金样:字节快照(导入→编译→序列化,防语义回归)',
       return
     }
     expect(serialized).toBe(baseline)
-  })
+  }, 60_000)
 })

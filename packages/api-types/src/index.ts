@@ -183,6 +183,64 @@ export type InspectorDataDto = {
 export type DebugExportPolicyDto = Partial<RedactionPolicy>
 export type DebugExportBundleDto = DebugExportBundle
 
+// ===== §33 遥测与缓存诊断(S20/WP2.5)=====
+
+/** 单轮遥测记录(§33.1 每轮记录 + 缓存计划投影) */
+export type TelemetryRoundDto = {
+  round: number
+  runId: string
+  createdAt: string
+  status: string
+  inputTokens: number
+  cachedTokens: number
+  outputTokens: number
+  usageSource: string
+  stablePrefixTokens: number
+  freshTokens: number
+  volatileTokens: number
+  /** §5 前缀过小数据(core 判定;S20 遥测消费) */
+  prefixTooSmall?: { threshold: number; actualTokens: number; zone: string }
+  breakReasons: string[]
+  invalidationRisk: 'low' | 'medium' | 'high'
+}
+
+/** §33.2 四层口径成本估算(本地 token 计,§2.2) */
+export type TelemetryCostEstimateDto = {
+  baselineInputTokens: number
+  cachedInputTokens: number
+  freshInputTokens: number
+  /** reported 才计命中率;无 reported 轮 = undefined */
+  reportedHitRatio?: number
+  overallHitRatio?: number
+}
+
+/** §33.3 CacheBreak 事件 */
+export type TelemetryCacheBreakDto = {
+  round: number
+  runId: string
+  reasons: string[]
+  stablePrefixTokens: number
+}
+
+/** §20 Cache Simulator 摘要(消费真实编译产物;理论缓存率/成本削减/Killer) */
+export type TelemetrySimulatorDto = {
+  theoreticalHitRatio: number
+  actualHitRatio?: number
+  baselineInputTokens: number
+  cachedInputTokens: number
+  inputCostReduction: number
+  topCacheKillers: { reason: string; count: number }[]
+}
+
+export type ChatTelemetryDto = {
+  rounds: TelemetryRoundDto[]
+  summary: {
+    costEstimate: TelemetryCostEstimateDto
+    cacheBreaks: TelemetryCacheBreakDto[]
+  }
+  simulator: TelemetrySimulatorDto
+}
+
 // ===== providers(§37 投影;密钥零回显)=====
 
 export type ProviderDto = {

@@ -102,6 +102,61 @@ describe('S18 cacheplan:checkpoints(§55)', () => {
   })
 })
 
+describe('S19 cacheplan:providerStrategy 翻译指令(§16/§5)', () => {
+  it('breakpoints 投影 afterPartIndex;stableZoneTokens 口径不含 freshWB', () => {
+    const plan = buildCachePlan({
+      ir: ir([
+        segment({ id: 'h', zone: 'header' }),
+        segment({ id: 'wb', zone: 'stableWB', source: { type: 'worldbook', worldbookId: 'wb', entryId: 'e1' } }),
+        segment({ id: 'f', zone: 'freshWB' }),
+        segment({ id: 'sum', zone: 'summary' }),
+        segment({ id: 'hist', zone: 'history', stability: 'message' }),
+      ]),
+      invalidations: [],
+      diagnostics: [],
+    })
+    expect(plan.providerStrategy).toBeDefined()
+    expect(plan.providerStrategy?.version).toBe(1)
+    // breakpoints 与 checkpoints 对齐:afterPartIndex = enabled 段数组下标(parts 1:1)
+    expect(plan.providerStrategy?.breakpoints).toHaveLength(2) // cp-1(header+stableWB+freshWB 末尾) + cp-2(summary+history 末尾)
+    expect(plan.providerStrategy?.breakpoints[0]?.afterSegmentId).toBe('f')
+    expect(plan.providerStrategy?.breakpoints[0]?.afterPartIndex).toBe(2)
+    expect(plan.providerStrategy?.breakpoints[1]?.afterSegmentId).toBe('hist')
+    expect(plan.providerStrategy?.breakpoints[1]?.afterPartIndex).toBe(4)
+    // stableZoneTokens = header+stableWB 合计(不含 freshWB)
+    expect(plan.providerStrategy?.stableZoneTokens).toBe(2)
+    // 未传 providerCacheType → 不产 prefixTooSmall
+    expect(plan.providerStrategy?.prefixTooSmall).toBeUndefined()
+  })
+
+  it('prefixTooSmall:providerCacheType 阈值判定(§5 前缀过小)', () => {
+    const small = buildCachePlan({
+      ir: ir([segment({ id: 'h', zone: 'header', tokenCount: 100 })]),
+      invalidations: [],
+      diagnostics: [],
+      providerCacheType: 'explicit-breakpoint', // 阈值 1024
+    })
+    expect(small.providerStrategy?.prefixTooSmall).toEqual({
+      threshold: 1024,
+      actualTokens: 100,
+      zone: 'header+stableWB',
+    })
+
+    const big = buildCachePlan({
+      ir: ir([segment({ id: 'h', zone: 'header', tokenCount: 5000 }), segment({ id: 'wb', zone: 'stableWB', tokenCount: 1000 })]),
+      invalidations: [],
+      diagnostics: [],
+      providerCacheType: 'context-cache', // 阈值 4096
+    })
+    expect(big.providerStrategy?.prefixTooSmall).toBeUndefined()
+  })
+
+  it('checkpoints 为空(无任何区段)→ 不装配 providerStrategy(P0 空形状兼容)', () => {
+    const plan = buildCachePlan({ ir: ir([]), invalidations: [], diagnostics: [] })
+    expect(plan.providerStrategy).toBeUndefined()
+  })
+})
+
 describe('S18 cacheplan:breakReasons 与 invalidationRisk(§58)', () => {
   it('注入失效 + MACRO_VOLATILE + WORLD_BOOK_NEW_ENTRY,去重', () => {
     const invalidations: CacheBreakReason[] = [

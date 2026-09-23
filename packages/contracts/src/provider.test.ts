@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CacheTypeSchema,
+  MIN_PREFIX_TOKENS,
   ProviderChatRequestPayloadSchema,
   ProviderErrorCodeSchema,
   ProviderStreamEventSchema,
@@ -26,6 +28,14 @@ describe('contracts/provider(归一契约)', () => {
   it('错误码 14 码穷尽且无重复(provider-adapter §12)', () => {
     expect(ProviderErrorCodeSchema.options).toHaveLength(14)
     expect(new Set(ProviderErrorCodeSchema.options).size).toBe(14)
+  })
+
+  it('S19 cacheType 枚举四值 + MIN_PREFIX_TOKENS 键控(§5 阈值)', () => {
+    expect(CacheTypeSchema.options).toEqual(['automatic-prefix', 'explicit-breakpoint', 'context-cache', 'none'])
+    expect(MIN_PREFIX_TOKENS['automatic-prefix']).toBe(1024)
+    expect(MIN_PREFIX_TOKENS['explicit-breakpoint']).toBe(1024)
+    expect(MIN_PREFIX_TOKENS['context-cache']).toBe(4096)
+    expect(MIN_PREFIX_TOKENS.none).toBe(0)
   })
 
   it('请求 payload round-trip;signal 为 IO 注入字段不进 Schema', () => {

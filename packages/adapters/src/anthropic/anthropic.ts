@@ -7,6 +7,7 @@ import type {
   ProviderUsage,
 } from '@whispertavern/contracts'
 import { estimateTokens } from '@whispertavern/core'
+import { translateCachePlan } from '../cache/translate'
 import { parseSseData } from '../shared/sse'
 import {
   createRedact,
@@ -32,7 +33,8 @@ import { DEFAULT_TIMEOUTS, TimeoutController, type TimeoutConfig } from '../shar
  *   P3 组装侧配对成 ContentBlock.thinking,工具循环原样回传。
  * - system 角色消息翻译为顶层 `system` 参数(协议结构翻译,PV1 内容零改写);
  *   Anthropic 无 seed 参数,静默不发送(发未知参数 = 400)。
- * - 缓存 = explicit-breakpoint 家族:P0 无 CachePlan(R-P0-4),标记翻译随 WP2.4(§16)。
+ * - 缓存 = explicit-breakpoint 家族:S19 已实现 CachePlan → cache_control 翻译(§16),
+ *   system 转块形 + user 消息挂 ephemeral 标记,assistant 目标防御性丢弃,前缀过小抑制。
  */
 
 export interface AnthropicConfig {
@@ -120,13 +122,30 @@ export class AnthropicAdapter implements ProviderAdapter {
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/v1/messages`
     // system 角色翻译为顶层 system 参数(PV1:内容零改写,只做结构翻译)
     const systemParts = req.messages.filter((m): m is Extract<ProviderChatRequest['messages'][number], { role: 'system' }> => m.role === 'system')
-    const messages = req.messages.filter((m) => m.role !== 'system')
+    const messages = req.messages.filter(
+      (m): m is AnthropicMessage => m.role !== 'system',
+    )
+
+    // §16 缓存标记翻译(S19):explicit-breakpoint 家族把 CachePlan 断点翻译为 cache_control。
+    // 无标记(undefined)→ 保持现状逐字节不变(兼容既有 fixture/回放)。
+    const cacheMarkers = translateCachePlan(req.cachePlan, this.capabilities(req.model))
+    // system 只在"断点确落 system 区"时才转块形挂标记;否则保持 join 串(无 cachePlan 时逐字节一致)
+    const systemBlocks = cacheMarkers === undefined ? undefined : withSystemCacheControl(systemParts, cacheMarkers)
+    const system =
+      systemParts.length === 0 ? undefined : systemBlocks ?? systemParts.map((m) => m.content).join('\n\n')
+
+    // messages 区 cache_control:对 target 在 messages 区的断点,把该条 content 转块形挂标记
+    const wiredMessages =
+      cacheMarkers === undefined
+        ? messages
+        : applyMessageBreakpoints(messages, systemParts.length, cacheMarkers)
+
     const body = JSON.stringify({
       model: req.model,
       max_tokens: req.sampling.maxOutputTokens, // Anthropic 必填
       stream: true,
-      ...(systemParts.length > 0 ? { system: systemParts.map((m) => m.content).join('\n\n') } : {}),
-      messages,
+      ...(system !== undefined ? { system } : {}),
+      messages: wiredMessages,
       temperature: req.sampling.temperature,
       top_p: req.sampling.topP,
       stop_sequences: req.sampling.stopSequences,
@@ -291,6 +310,64 @@ function estimateFallback(messages: ProviderChatRequest['messages'], text: strin
     outputTokens: Math.max(1, estimateTokens(text) + estimateTokens(reasoning)),
     source: 'estimated', // thinking 计入 output,不单列(§17.1)
   }
+}
+
+// —— §16 缓存标记翻译辅助(S19:explicit-breakpoint → cache_control)——
+
+type AnthropicMessage = Extract<ProviderChatRequest['messages'][number], { role: 'assistant' | 'user' }>
+
+/** cache_control 挂载后的块形(P0 content 纯文本 → blocks;P3 工具块随工具流收编) */
+interface AnthropicCacheBlock {
+  type: 'text'
+  text: string
+  cache_control?: { type: 'ephemeral' }
+}
+/** wire 消息形状:纯文本(未挂标记)或块形(已挂标记) */
+type WiredMessage = AnthropicMessage | { role: 'assistant' | 'user'; content: AnthropicCacheBlock[] }
+
+/**
+ * system 参数转块形并挂 cache_control(§5 断点1:header+stableWB+freshWB 末尾落 system)。
+ * 断点不在 system 区 → 返回 undefined 退回 join 串(无标记必要,基线零漂移)。
+ * 结构翻译(PV1):text 字节零改写,仅字符串 → blocks 容器 + 标记。
+ */
+function withSystemCacheControl(
+  systemParts: readonly { role: 'system'; content: string }[],
+  markers: { breakpoints: { afterPartIndex: number }[] },
+): AnthropicCacheBlock[] | undefined {
+  const systemBreak = markers.breakpoints.find((b) => b.afterPartIndex < systemParts.length)
+  if (systemBreak === undefined) return undefined
+  const blocks: AnthropicCacheBlock[] = systemParts.map((m) => ({ type: 'text' as const, text: m.content }))
+  if (blocks.length > 0) {
+    const last = blocks[blocks.length - 1]
+    if (last !== undefined) last.cache_control = { type: 'ephemeral' }
+  }
+  return blocks
+}
+
+/**
+ * messages 区 cache_control:目标 = 断点 afterPartIndex 对应的消息(parts 下标扣除 system 前缀)。
+ * assistant 角色目标 → 防御性丢弃(Anthropic 禁止 assistant 挂 cache_control,宁缺毋滥)。
+ */
+function applyMessageBreakpoints(
+  messages: AnthropicMessage[],
+  systemCount: number,
+  markers: { breakpoints: { afterPartIndex: number }[] },
+): WiredMessage[] {
+  const targets = new Set<number>()
+  for (const b of markers.breakpoints) {
+    const wireIndex = b.afterPartIndex - systemCount
+    const target = messages[wireIndex]
+    if (target === undefined || target.role === 'assistant') continue // assistant 丢弃
+    targets.add(wireIndex)
+  }
+  if (targets.size === 0) return messages
+  return messages.map((m, i) => {
+    if (!targets.has(i)) return m
+    return {
+      ...m,
+      content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral' } }],
+    }
+  })
 }
 
 // —— §15 静态预设表(claude 全族;用户覆盖经 capabilityOverrides)——

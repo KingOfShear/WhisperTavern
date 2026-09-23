@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.4（2026-09-22 修订版。S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.5（2026-09-22 S19 修订：§54 providerStrategy 定稿——翻译指令落 contracts ProviderStrategySchema（breakpoints 投影 afterPartIndex/stableZoneTokens 不含 freshWB/prefixTooSmall 阈值数据），装配条件 checkpoints>0，providerCacheType 由 run.ts 注入；§71 注记 CACHE_UNSAFE_MACRO 等不动。先前 V2.4 修订内容：S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -1764,9 +1764,17 @@ interface CachePlan {
 
   breakReasons: CacheBreakReason[]
 
-  providerStrategy?: ProviderCacheStrategy
+  providerStrategy?: ProviderStrategy
 }
 ```
+
+> **S19 落地注记（§54 providerStrategy 定稿）**：翻译指令形状落 contracts `ProviderStrategySchema`
+> （version=1；`breakpoints` 为 checkpoints 的翻译投影——`{afterSegmentId, afterPartIndex, reason:'automatic'}`，
+> afterPartIndex 为断点落 `serialized.parts` 的 0-based 下标，core 由 IR 序（enabled 过滤后 parts 1:1）算出，
+> adapter 据此定位自家 wire 形状；`stableZoneTokens` = header+stableWB 合计，不含 freshWB（§5 注口径）；
+> 可选 `prefixTooSmall` = `stableZoneTokens < MIN_PREFIX_TOKENS[providerCacheType]` 时的阈值数据）。
+> 装配条件：`checkpoints.length > 0`（P0 空形状兼容，R-P0-4）；adapter 只翻译、不回写快照（provider-adapter-spec §16）。
+> `providerCacheType` 由 run.ts 注入（`adapter.capabilities(model).cacheType`，§5 阈值判定输入）。
 
 ---
 

@@ -140,7 +140,13 @@ core 的分区结果输出为 CachePlan，适配层翻译：
 | Gemini | 默认走隐式缓存；长设定 + 稳态会话可选显式 cachedContent（管理 TTL） |
 | 本地 vLLM/llama.cpp | 自动前缀缓存，无动作；llama.cpp 的 prompt cache 文件持久化可选 |
 
-注意最小前缀阈值（Anthropic 1024 / OpenAI 1024 / Gemini 4096）：header+stableWB 合计低于阈值时缓存不激活，遥测面板需给出"前缀过小"提示。
+注意最小前缀阈值（Anthropic 1024 / OpenAI 1024 / Gemini 4096，contracts `MIN_PREFIX_TOKENS`）：header+stableWB 合计低于阈值时缓存不激活，遥测面板需给出"前缀过小"提示。
+
+**S19 落地（§5 阈值机制实现）**：阈值判定由 CachePlanner 在编译期完成——core 把 `stableZoneTokens`
+（header+stableWB 合计，**不含 freshWB**，因为 freshWB 是"本轮新内容"、命中它无缓存收益）与
+`MIN_PREFIX_TOKENS[adapter 声明的 cacheType]` 比较，过小则产出 `providerStrategy.prefixTooSmall`
+（含 threshold/actualTokens/zone 数据，随快照持久化供 S20 遥测消费）；adapter 翻译层收到
+prefixTooSmall 即整体抑制（不挂 cache_control 标记）。none 家族阈值 = 0，永不触发"前缀过小"。
 
 ## 6. 群聊的缓存命名空间
 

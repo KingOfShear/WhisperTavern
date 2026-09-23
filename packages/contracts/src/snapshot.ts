@@ -42,6 +42,38 @@ export const CacheBreakReasonSchema = z.discriminatedUnion('type', [
 ])
 export type CacheBreakReason = z.infer<typeof CacheBreakReasonSchema>
 
+/** 断点翻译投影(§16:core 产出翻译指令,adapter 只翻译;S19 定稿) */
+export const CacheBreakpointMarkerSchema = z.object({
+  /** 区级断点对应的末尾段 ID(遥测/二分定位,跨轮可比) */
+  afterSegmentId: z.string(),
+  /** 断点落在 serialized.parts 的 0-based 下标之后(core 由 IR 序算出;adapter 据此定位 wire) */
+  afterPartIndex: z.number().int().nonnegative(),
+  reason: z.literal('automatic'),
+})
+export type CacheBreakpointMarker = z.infer<typeof CacheBreakpointMarkerSchema>
+
+/**
+ * Provider 缓存翻译指令(§16/§5;S19 定稿)。与 CachePlan.checkpoints 的关系:
+ * breakpoints 是翻译投影——只投影 afterSegmentId + 补 afterPartIndex 定位数据,
+ * prefixHash/tokenCount 不重复(checkpoints 已有,防双源)。持久化于
+ * prompt_snapshots.cache_plan JSON 列,S20 遥测零派生读取。
+ */
+export const ProviderStrategySchema = z.object({
+  version: z.literal(1),
+  breakpoints: z.array(CacheBreakpointMarkerSchema),
+  /** §5 阈值输入:header+stableWB 合计 token(不含 freshWB,§5 注口径) */
+  stableZoneTokens: z.number().int().nonnegative(),
+  /** §5"前缀过小"数据(core 按 compile 传入 providerCacheType + MIN_PREFIX_TOKENS 判定;S20 消费) */
+  prefixTooSmall: z
+    .object({
+      threshold: z.number().int().positive(),
+      actualTokens: z.number().int().nonnegative(),
+      zone: z.literal('header+stableWB'),
+    })
+    .optional(),
+})
+export type ProviderStrategy = z.infer<typeof ProviderStrategySchema>
+
 /** CachePlan(compiler-spec §54)。P0 恒空(R-P0-4);checkpoints/breakReasons 为空数组 */
 export const CachePlanSchema = z.object({
   version: z.number().int(),
@@ -54,8 +86,8 @@ export const CachePlanSchema = z.object({
   checkpoints: z.array(CacheCheckpointSchema),
   invalidationRisk: z.enum(['low', 'medium', 'high']),
   breakReasons: z.array(CacheBreakReasonSchema),
-  /** 形状随 WP2.4 缓存标记翻译定稿(P2);P0 恒缺省 */
-  providerStrategy: z.unknown().optional(),
+  /** §16 翻译指令(S19 定稿,替代 P0 unknown 占位);adapter 只翻译、不回写快照 */
+  providerStrategy: ProviderStrategySchema.optional(),
 })
 export type CachePlan = z.infer<typeof CachePlanSchema>
 

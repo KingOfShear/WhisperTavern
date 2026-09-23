@@ -336,6 +336,87 @@ describe('anthropic:capabilities(§15)与请求翻译', () => {
   })
 })
 
+describe('anthropic:S19 §16 缓存标记翻译(显式断点 → cache_control)', () => {
+  /** 捕获 connect 实际发出的 body(断言 wire 翻译产物) */
+  async function captureBody(req: ProviderChatRequest): Promise<Record<string, unknown>> {
+    let captured: { init: RequestInit } | undefined
+    const a = adapter(async (_url, init) => {
+      captured = { init }
+      return sseResponse([
+        anthropicFrame('message_start', { message: { usage: { input_tokens: 1 } } }),
+        anthropicFrame('message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } }),
+      ])
+    })
+    await collect(a, req)
+    return JSON.parse(String(captured?.init.body)) as Record<string, unknown>
+  }
+
+  it('system 区断点 → system 转块形,末块挂 ephemeral;messages 原样(PV1 字节零改写)', async () => {
+    const body = await captureBody({
+      ...baseRequest(),
+      cachePlan: {
+        version: 1,
+        breakpoints: [{ afterSegmentId: 'h', afterPartIndex: 0, reason: 'automatic' }],
+        stableZoneTokens: 2048,
+      },
+    })
+    expect(body.system).toEqual([{ type: 'text', text: 'sys line', cache_control: { type: 'ephemeral' } }])
+    expect(body.messages).toEqual([{ role: 'user', content: '你好' }])
+  })
+
+  it('messages 区断点 → 目标 user 消息 content 转块形挂标记;system 保持 join 串', async () => {
+    const body = await captureBody({
+      ...baseRequest(),
+      cachePlan: {
+        version: 1,
+        breakpoints: [{ afterSegmentId: 'f', afterPartIndex: 1, reason: 'automatic' }],
+        stableZoneTokens: 2048,
+      },
+    })
+    expect(body.system).toBe('sys line')
+    expect(body.messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: '你好', cache_control: { type: 'ephemeral' } }] },
+    ])
+  })
+
+  it('assistant 目标防御性丢弃:任何消息都不挂标记(Anthropic 禁止 assistant cache_control)', async () => {
+    const body = await captureBody({
+      ...baseRequest(),
+      messages: [
+        { role: 'system', content: 'sys line' },
+        { role: 'user', content: '你好' },
+        { role: 'assistant', content: '好的' },
+      ],
+      cachePlan: {
+        version: 1,
+        breakpoints: [{ afterSegmentId: 'hist', afterPartIndex: 2, reason: 'automatic' }],
+        stableZoneTokens: 2048,
+      },
+    })
+    expect(body.system).toBe('sys line')
+    expect(body.messages).toEqual([
+      { role: 'user', content: '你好' },
+      { role: 'assistant', content: '好的' },
+    ])
+    expect(JSON.stringify(body)).not.toContain('cache_control')
+  })
+
+  it('prefixTooSmall → 整体抑制:与无 cachePlan 逐字节一致(基线零漂移)', async () => {
+    const suppressed = await captureBody({
+      ...baseRequest(),
+      cachePlan: {
+        version: 1,
+        breakpoints: [{ afterSegmentId: 'h', afterPartIndex: 0, reason: 'automatic' }],
+        stableZoneTokens: 512,
+        prefixTooSmall: { threshold: 1024, actualTokens: 512, zone: 'header+stableWB' },
+      },
+    })
+    const baseline = await captureBody(baseRequest())
+    expect(JSON.stringify(suppressed)).toBe(JSON.stringify(baseline))
+    expect(JSON.stringify(suppressed)).not.toContain('cache_control')
+  })
+})
+
 function bytesIndexOf(bytes: Uint8Array, char: string): number {
   const probe = encoder.encode(char)
   for (let i = 0; i <= bytes.length - probe.length; i += 1) {

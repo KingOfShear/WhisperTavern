@@ -255,7 +255,8 @@ describe('E Capability 权威域（technical-design §18.2 Capabilities）', () 
     const src = readText('packages/contracts/src/provider.ts')
     const block = /ProviderCapabilitiesSchema = z\.object\(\{([\s\S]*?)\n\}\)/.exec(src)
     expect(block, '未找到 ProviderCapabilitiesSchema').not.toBeNull()
-    return [...(block?.[1] ?? '').matchAll(/^\s{2}(\w+):\s*z\./gm)].map((m) => m[1])
+    // 字段值形态无关(S19:cacheType 引用 CacheTypeSchema 而非内联 z.enum),只取字段名
+    return [...(block?.[1] ?? '').matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1])
   }
 
   it('E1 权威表与 contracts 字段集必须逐字段相等', () => {

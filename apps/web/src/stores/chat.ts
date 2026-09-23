@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import type {
   ChatSnapshotSummaryDto,
   ChatSummaryDto,
+  ChatTelemetryDto,
   DebugExportPolicyDto,
   PromptDiffDto,
   PromptSnapshotDto,
@@ -31,6 +32,8 @@ export interface ChatStore {
   snapshotList: ChatSnapshotSummaryDto[]
   /** §38 相邻两轮 diff(prev → current;无上一轮时为 null) */
   diff: PromptDiffDto | null
+  /** §33 遥测(S20):命中率曲线 + 成本 + CacheBreak + Simulator */
+  telemetry: ChatTelemetryDto | null
   settingsOpen: boolean
 
   loadChats(): Promise<void>
@@ -41,6 +44,8 @@ export interface ChatStore {
   loadProviders(): Promise<void>
   createProvider(body: Parameters<typeof api.createProvider>[0]): Promise<void>
   toggleSnapshot(): void
+  /** §33 遥测(S20):拉取命中率曲线/成本/CacheBreak */
+  loadTelemetry(): Promise<void>
   /** §60 debug 导出下载(默认 sanitized;full 需显式传 mode) */
   exportBundle(policy?: DebugExportPolicyDto): Promise<void>
   switchVariant(messageId: string): Promise<void>
@@ -67,6 +72,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   snapshotOpen: false,
   snapshotList: [],
   diff: null,
+  telemetry: null,
   settingsOpen: false,
 
   loadChats: async () => {
@@ -88,9 +94,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   openChat: async (id) => {
-    set({ currentChatId: id, messages: [], streaming: null, snapshot: null, snapshotOpen: false, snapshotList: [], diff: null })
+    set({ currentChatId: id, messages: [], streaming: null, snapshot: null, snapshotOpen: false, snapshotList: [], diff: null, telemetry: null })
     try {
       set({ messages: await api.listMessages(id) })
+    } catch (error) {
+      set({ error: describe(error) })
+    }
+  },
+
+  loadTelemetry: async () => {
+    const chatId = get().currentChatId
+    if (chatId === null) return
+    try {
+      set({ telemetry: await api.getTelemetry(chatId) })
     } catch (error) {
       set({ error: describe(error) })
     }

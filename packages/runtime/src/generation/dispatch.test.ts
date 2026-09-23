@@ -3,6 +3,7 @@ import {
   ChatIdSchema,
   SnapshotIdSchema,
   type PromptSnapshot,
+  type ProviderStrategy,
   type Timestamp,
 } from '@whispertavern/contracts'
 import { buildPromptSnapshot, type DeepReadonly } from '@whispertavern/core'
@@ -178,5 +179,28 @@ describe('dispatchGeneration(§5.5 四不变量闸口 + usage 入库)', () => {
     const snapshot = snapshotFixture()
     snapshots.register(snapshot)
     expect(() => assertSnapshotRegistered(snapshots, snapshot.id)).not.toThrow()
+  })
+
+  it('S19 §16:快照 cachePlan.providerStrategy 透传为请求 cachePlan;无指令则不挂该键', () => {
+    const bare = buildGenerationRequest(snapshotFixture(), { runId: 'probe' })
+    expect('cachePlan' in bare).toBe(false) // P0 兼容:无指令 → 键不存在,wire 零漂移
+
+    const strategy: ProviderStrategy = {
+      version: 1,
+      breakpoints: [{ afterSegmentId: 'f', afterPartIndex: 1, reason: 'automatic' }],
+      stableZoneTokens: 2048,
+    }
+    const withPlan = snapshotFixture()
+    // 用 buildPromptSnapshot 输入覆盖 cachePlan(快照 JSON 投影含 providerStrategy)
+    const snapshotWithPlan = {
+      ...withPlan,
+      cachePlan: {
+        ...withPlan.cachePlan,
+        version: 1,
+        providerStrategy: strategy,
+      },
+    }
+    const request = buildGenerationRequest(snapshotWithPlan, { runId: 'probe' })
+    expect(request.cachePlan).toEqual(strategy)
   })
 })

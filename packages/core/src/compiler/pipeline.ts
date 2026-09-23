@@ -10,6 +10,7 @@ import {
   type PromptIR,
   type PromptSnapshot,
   type PromptZoneName,
+  type ProviderCacheType,
   type Result,
   type RunId,
   type SerializedPrompt,
@@ -78,6 +79,8 @@ export interface CompileRequest {
   pinnedMessageCount?: number
   /** §58 跨轮失效事件(runtime 注入;MESSAGE_EDITED/BRANCH_SWITCHED 等变体类型就位、S20 消费) */
   cacheInvalidations?: readonly CacheBreakReason[]
+  /** §5 阈值检查输入:adapter 声明的 cacheType(run.ts 传 capabilities 值);缺省不判定 */
+  providerCacheType?: ProviderCacheType
 }
 
 export interface CompileSuccess {
@@ -265,6 +268,7 @@ export function compile(request: CompileRequest): CompileOutcome {
     ir,
     invalidations: request.cacheInvalidations ?? [],
     diagnostics,
+    providerCacheType: request.providerCacheType,
   })
   mark('cacheplan', stageStart)
 

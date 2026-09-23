@@ -30,6 +30,8 @@ export interface FakeTurn {
   chunkSize?: number
   /** 每 delta 之间的模拟延迟(ms,取消/超时类测试用;0 = 不延迟) */
   delayMs?: number
+  /** S19:模拟 API 缓存命中 → usage.cachedInputTokens(供 KPI/金样遥测消费) */
+  cachedInputTokens?: number
 }
 
 const DEFAULT_CHUNK_SIZE = 8
@@ -150,7 +152,7 @@ function estimateUsage(req: ProviderChatRequest, turn: FakeTurn): ProviderUsage 
   const outputChars = (turn.reasoning?.length ?? 0) + (turn.text?.length ?? 0)
   return {
     inputTokens: Math.max(1, Math.ceil(inputChars / 4)),
-    cachedInputTokens: 0,
+    cachedInputTokens: turn.cachedInputTokens ?? 0,
     outputTokens: Math.max(1, Math.ceil(outputChars / 4)),
     source: 'reported',
   }

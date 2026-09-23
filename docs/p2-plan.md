@@ -119,15 +119,16 @@ R-P2-9  群聊缓存命名空间(worldbook-cache-design §6):世界书哈希缓�
 
 ```text
 1. Provider 标记翻译(§5 表):Anthropic cache_control 断点 / OpenAI 无标记仅保前缀 /
-   Gemini 隐式默认 + 可选显式 cachedContent / 本地无动作
-2. 还账 #6:Gemini explicit caching 评估(provider-adapter §23 开放点 1,在此定)
-3. 最小前缀阈值提示(§5 注:Anthropic 1024 / OpenAI 1024 / Gemini 4096):
-   header+stableWB 低于阈值时遥测给"前缀过小"提示
-4. DeepSeek prompt_cache_hit_tokens 单独计费字段接入(usage 归一侧)
-5. 契约测试:各 provider 标记翻译 fixture 回放
+   Gemini 隐式默认(显式 cachedContent 暂缓,已决) / 本地无动作
+2. 还账 #6:Gemini explicit caching 评估(provider-adapter §23 开放点 1)——✅ 已决:
+   隐式缓存默认,显式 cachedContent 暂缓(KPI 命中率经 cachedContentTokenCount 可观测)
+3. 最小前缀阈值提示(§5 注:Anthropic 1024 / OpenAI 1024 / Gemini 4096,contracts
+   MIN_PREFIX_TOKENS):CachePlanner 编译期判定,prefixTooSmall 随 providerStrategy 落快照
+4. DeepSeek prompt_cache_hit_tokens 单独计费字段接入(usage 归一侧,P0 已有)
+5. 契约测试:四类 provider 标记翻译 wire 级断言(anthropic 挂载/抑制;openai/gemini 无动作)
 ```
 
-**验收**:四类 provider 标记翻译契约测试绿;Gemini explicit 评估落定(开放点 1 关闭)。
+**验收**:四类 provider 标记翻译契约测试绿;Gemini explicit 评估落定(开放点 1 关闭,隐式默认)。
 **spec 锚点**:worldbook-cache-design §5;provider-adapter-spec §23 开放点 1/§16。
 
 # 7. S20 — WP2.5 遥测面板 + 缓存二分工具 + Cache Simulator
@@ -189,8 +190,8 @@ X11 命中率/成本削减是产品级 KPI:任何"看起来快"的局部改动�
 | S16 | WP2.1 | ✅ | 宏引擎落地(macro/ 五文件 + pipeline 接线替换 R-P0-1);MACRO_UNEXPANDED_P0 退役;三档 CACHE_UNSAFE_MACRO 处置断言绿;全量 313 测试(37 文件) |
 | S17 | WP2.2 | ✅ | worldbook-cache.ts 纯函数分区层 + worldbook.ts 接线;毕业=哈希命中;physicalOrder append-only;migration v7(first_seen_msg);Compatibility 回退;决策 A(stableWB/freshWB 默认 session);全量 329 测试(38 文件) |
 | S18 | WP2.3 | ✅ | budget.ts(Budget Manager:裁剪序权威化/percent+cap/header protect/elastic 整体推出)+ cacheplan.ts(CachePlan v1,R-P0-4 退役)+ pipeline 接线(enabled 语义)+ run.ts cacheInvalidations;全量 345 测试(40 文件) |
-| S19 | WP2.4 | ☐ | |
-| S20 | WP2.5 | ☐ | |
+| S19 | WP2.4 | ✅ | 缓存标记翻译落地:contracts CacheTypeSchema/MIN_PREFIX_TOKENS/ProviderStrategySchema + ProviderChatRequest.cachePlan;core cacheplan 装配 providerStrategy(breakpoints 投影 afterPartIndex/stableZoneTokens/prefixTooSmall)+ run.ts 注入 providerCacheType;adapters translate.ts 纯函数 + anthropic wire 挂载(system 块形/user 挂载/assistant 丢弃/prefixTooSmall 抑制)+ openai/gemini 无动作断言 + fake cachedInputTokens 注入;runtime buildGenerationRequest 透传 cachePlan;金样断言升级(providerStrategy 随快照持久化);还账 #6 勾销(§23 开放点 1:隐式缓存默认,显式 cachedContent 暂缓);全量 362 测试(42 文件) |
+| S20 | WP2.5 | ✅ | Cache Simulator(core 纯函数 simulateCachePlan 6 单测:稳定前缀承接/哈希分歧/CacheBreak/Killer/实际口径降级)+ 遥测 API(GET /api/v2/chats/:id/telemetry:逐轮曲线/§33.2 四层口径/§33.3 CacheBreak/list+Simulator 摘要;顺带修复 server buildAdapter fakeTurns cachedInputTokens 透传)+ web CacheTelemetry 面板(命中率仪表/曲线/CacheBreak/Simulator/前缀过小提示)+ api-types ChatTelemetryDto + web client/store/App 接线 + 二分定位复用 PromptInspector diff+HashStrip;全量 371 测试(44 文件,金样零漂移) |
 | S21 | WP2.6 | ☐ | |
 
 ---

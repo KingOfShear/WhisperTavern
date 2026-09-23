@@ -169,7 +169,7 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 | WP2.1 | Macro Engine（registry / security / cache rule） | compiler-spec §37–§45 |
 | WP2.2 | stableWB/freshWB 分区 + physicalOrder append-only + 毕业/退休 | worldbook-cache-design §2–§4；compiler-spec §20–§31 |
 | WP2.3 | per-chat 哈希缓存 + CachePlan + Budget + Elastic History | 总设计 §14–§17 |
-| WP2.4 | 缓存标记翻译（Anthropic cache_control / Gemini explicit caching 评估）+ 多 key 轮换 | worldbook-cache-design §5；provider-adapter §23 开放点 1 在此定 |
+| WP2.4 | 缓存标记翻译（Anthropic cache_control 已实现 ✅ S19；Gemini explicit caching 已决：隐式默认、显式暂缓）+ 多 key 轮换 | worldbook-cache-design §5；provider-adapter §23 开放点 1（已决） |
 | WP2.5 | 遥测面板 + 缓存二分工具 + Cache Simulator | ui-design §4.6；总设计 §20/§33 |
 | WP2.6 | CI 硬门禁：100 轮稳定性 + 1000 轮模拟无未声明失效 | technical-plan §8.1 |
 
@@ -211,7 +211,7 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | 3 | ~~api-spec generation SSE 投影复核~~ **✅ 2026-09-05 WP0.7 勾销**（三层映射落地:provider 归一 → bus generation.*(§5.4 分档)→ SSE 信封{id,type,runId,timestamp,sequence,data},run 内 sequence 单调 + Last-Event-ID 续传;契约测试锁定) | WP0.7 | provider-adapter §22 |
 | 4 | ~~ui-design override 编辑器 + 档位徽标；api-spec authority DTO~~ **✅ 2026-09-08 随指令安全特性撤下** | WP1.5 | — |
 | 5 | 剩余诊断码随触发源落地（P0 两码 → P3 全量） | WP0.4 / WP3.2 | compiler-spec §71 |
-| 6 | Gemini explicit caching 评估 | WP2.4 | adapter §23 开放点 1 |
+| 6 | ~~Gemini explicit caching 评估~~ **✅ 2026-09-22 S19/WP2.4 勾销**（provider-adapter §23 开放点 1 关闭：隐式缓存默认，显式 `cachedContent` 暂缓——显式缓存有创建/存储成本与 TTL 管理，KPI 命中率经 usage `cachedContentTokenCount`（§17.1 已归一）同样可观测；待 S20 遥测证明显式收益再启用） | WP2.4 | adapter §23 开放点 1 |
 | 7 | ~~untrusted 工具回灌~~（随指令安全撤下）；结构化/审批提升 | WP3.2 | — |
 | 8 | memory-runtime-spec 骨架 | WP4.1 | 上次文档盘点结论 |
 | 9 | ~~roleplay scope 边界确认~~（随指令安全撤下） | WP4.6 | — |

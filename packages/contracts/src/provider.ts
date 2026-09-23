@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ProviderStrategySchema } from './snapshot'
 
 /**
  * Provider 归一契约 —— provider-adapter-spec §6(核心类型)/ §8.1(流式事件)/
@@ -123,6 +124,9 @@ export const ProviderChatRequestPayloadSchema = z.object({
   metadata: z
     .object({ runId: z.string().optional(), requestId: z.string().optional() })
     .optional(),
+  /** §16 缓存翻译指令(core 产出 ProviderStrategy,与快照同形状;adapter 只翻译);
+   *  automatic-prefix/context-cache/none 家族不消费(无 wire 标记) */
+  cachePlan: ProviderStrategySchema.optional(),
 })
 
 /**
@@ -133,6 +137,22 @@ export const ProviderChatRequestPayloadSchema = z.object({
 export interface ProviderChatRequest extends z.infer<typeof ProviderChatRequestPayloadSchema> {
   /** PV6:AbortSignal 贯穿全链路;取消 = partial + CANCELLED(§14) */
   signal?: AbortSignal
+}
+
+/**
+ * Provider 缓存类型(§16 翻译分派;S19 自 ProviderCapabilities 抽出供双侧复用)。
+ * automatic-prefix = OpenAI/DeepSeek/本地;explicit-breakpoint = Anthropic;context-cache = Gemini。
+ */
+export const CacheTypeSchema = z.enum(['automatic-prefix', 'explicit-breakpoint', 'context-cache', 'none'])
+export type ProviderCacheType = z.infer<typeof CacheTypeSchema>
+
+/** 最小前缀阈值(worldbook-cache-design §5 注:Anthropic 1024 / OpenAI 1024 / Gemini 4096);
+ * none = 本地无前缀缓存,0 = 永不触发"前缀过小"提示(缓存不激活) */
+export const MIN_PREFIX_TOKENS: Readonly<Record<ProviderCacheType, number>> = {
+  'automatic-prefix': 1024,
+  'explicit-breakpoint': 1024,
+  'context-cache': 4096,
+  none: 0,
 }
 
 /**
@@ -147,8 +167,7 @@ export const ProviderCapabilitiesSchema = z.object({
   reasoning: z.boolean(),
   streaming: z.boolean(),
   promptCaching: z.boolean(),
-  /** automatic-prefix = OpenAI/DeepSeek/本地;explicit-breakpoint = Anthropic;context-cache = Gemini */
-  cacheType: z.enum(['automatic-prefix', 'explicit-breakpoint', 'context-cache', 'none']),
+  cacheType: CacheTypeSchema,
   maxContextTokens: z.number().int().positive(),
   maxOutputTokens: z.number().int().positive(),
   /** agent-runtime §82 降级链:json_schema → json_mode → 提示词约束 + repair */

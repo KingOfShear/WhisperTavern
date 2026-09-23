@@ -135,6 +135,8 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
     now,
     maxContextTokens: input.adapter.capabilities(input.model).maxContextTokens,
     maxOutputTokens: input.adapter.capabilities(input.model).maxOutputTokens,
+    // S19 §5:adapter 声明的 cacheType → providerStrategy.prefixTooSmall 阈值判定
+    providerCacheType: input.adapter.capabilities(input.model).cacheType,
     mode: 'preview',
     contributions: [
       ...buildContributions(chat.value, chain.value),

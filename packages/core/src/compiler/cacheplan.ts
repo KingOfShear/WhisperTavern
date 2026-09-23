@@ -5,7 +5,10 @@ import type {
   Diagnostic,
   PromptIR,
   PromptZoneName,
+  ProviderCacheType,
+  ProviderStrategy,
 } from '@whispertavern/contracts'
+import { MIN_PREFIX_TOKENS } from '@whispertavern/contracts'
 import { buildPrefixHash } from '../serializer/hash'
 import { deepFreeze, type DeepReadonly } from '../ir/segment'
 
@@ -36,6 +39,8 @@ export interface BuildCachePlanInput {
   invalidations: readonly CacheBreakReason[]
   /** 编译诊断(供 CACHE_UNSAFE_MACRO → MACRO_VOLATILE 映射) */
   diagnostics: readonly Diagnostic[]
+  /** §5 阈值检查输入:adapter 声明的 cacheType(run.ts 传 capabilities 值);缺省不判定 */
+  providerCacheType?: ProviderCacheType
 }
 
 /** 断点位置(§5 映射表:header+stableWB+freshWB 末尾 / summary+history 末尾 / injection 末尾) */
@@ -46,8 +51,11 @@ const CHECKPOINT_ZONES: readonly (readonly PromptZoneName[])[] = [
 ]
 
 export function buildCachePlan(input: BuildCachePlanInput): DeepReadonly<CachePlan> {
-  const { ir, invalidations, diagnostics } = input
+  const { ir, invalidations, diagnostics, providerCacheType } = input
   const segments = ir.segments.filter((s) => s.enabled)
+  // §19 注释:parts↔messages 在 P0 1:1(enabled 过滤口径与 buildCanonicalSerialized 一致);
+  // P3 工具流引入时 afterPartIndex 映射偏移,届时 parts 需带 segmentId 或改投影
+  const partIndexBySegmentId = new Map(segments.map((s, i) => [s.id, i]))
 
   // —— stablePrefix:从头连续稳定段 ——
   const stablePrefixSegments: string[] = []
@@ -117,6 +125,33 @@ export function buildCachePlan(input: BuildCachePlanInput): DeepReadonly<CachePl
     }
   }
 
+  // —— providerStrategy:翻译指令(S19,§16/§5;仅 checkpoints 非空时装配)——
+  const stableZoneTokens = segments
+    .filter((s) => s.cachePlacement.zone === 'header' || s.cachePlacement.zone === 'stableWB')
+    .reduce((sum, s) => sum + s.tokenCount, 0)
+  const providerStrategy: ProviderStrategy | undefined =
+    checkpoints.length > 0
+      ? {
+          version: 1,
+          breakpoints: checkpoints.map((cp) => ({
+            afterSegmentId: cp.afterSegmentId,
+            afterPartIndex: partIndexBySegmentId.get(cp.afterSegmentId) ?? 0,
+            reason: 'automatic',
+          })),
+          stableZoneTokens,
+          // §5 前缀过小数据(core 纯算术比较;S20 遥测消费)
+          ...(providerCacheType !== undefined && stableZoneTokens < MIN_PREFIX_TOKENS[providerCacheType]
+            ? {
+                prefixTooSmall: {
+                  threshold: MIN_PREFIX_TOKENS[providerCacheType],
+                  actualTokens: stableZoneTokens,
+                  zone: 'header+stableWB' as const,
+                },
+              }
+            : {}),
+        }
+      : undefined
+
   // —— invalidationRisk 启发式(§59 待完善)——
   // 只看 stability='volatile' 的段占比(volatileSegments 是 catch-all 含 history/injection,
   // 不能直接代表"每轮易变";§15 volatile 才是逐轮漂移的)
@@ -136,5 +171,6 @@ export function buildCachePlan(input: BuildCachePlanInput): DeepReadonly<CachePl
     checkpoints,
     invalidationRisk,
     breakReasons,
+    providerStrategy,
   })
 }

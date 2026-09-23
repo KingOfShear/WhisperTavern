@@ -1,8 +1,8 @@
 # WhisperTavern V2 — Provider Adapter Specification
 
 > **文件：** `docs/specs/provider-adapter-spec.md`
-> **版本：** V1.2（2026-09-05 S4'-b 实施：§8.1 reasoning_delta 增 signature 载体（PV8/§11 签名块"缓存于消息组装侧"的归一流通道）；V1.1 S4'-a（开放点 2 落定、Capabilities 定稿）；V1.0.x 骨架期）
-> **状态：** Active（P0 范围定稿：§6–§8/§12/§14/§15 已随 S4'-a 实现落地并过契约测试；§16 缓存标记翻译随 WP2.4）
+> **版本：** V1.3（2026-09-22 S19/WP2.4：§16 缓存标记翻译实现落地——ProviderStrategy 翻译指令/Anthropic cache_control 挂载/§23 开放点 1 已决(隐式缓存默认)；V1.2 2026-09-05 S4'-b 实施：§8.1 reasoning_delta 增 signature 载体（PV8/§11 签名块"缓存于消息组装侧"的归一流通道）；V1.1 S4'-a（开放点 2 落定、Capabilities 定稿）；V1.0.x 骨架期）
+> **状态：** Active（P0 范围定稿：§6–§8/§12/§14/§15 已随 S4'-a 实现落地并过契约测试；§16 缓存标记翻译已随 WP2.4 落地）
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Provider Adapter 模块规格（第六份模块规格）**
 > **决策锚点：** 技术总设计 §38 **决策 30**（含三岔分工修订：Provider 拆"归一契约"与"接入实务"两层）
 > **依赖：** 技术总设计 §18（Provider 层 / §18.2 Capabilities / §18.3 Usage）、[worldbook-cache-design.md](../worldbook-cache-design.md) §5（CachePlan→provider 原语翻译）、[agent-runtime-spec.md](./agent-runtime-spec.md)（C5 执行四层 / §49.1 反循环 / §115.1 审批）、[api-spec.md](./api-spec.md)（generation.* SSE 投影）
@@ -274,14 +274,35 @@ capabilities 来源三层（高→低）：用户手动覆盖 > 静态预设表�
 | parallelToolCalls | 串行调用 |
 | usage 帧缺失（中转站常见） | §17.3 估算降级，标 `estimated` |
 
-# 16. 缓存标记翻译
+# 16. 缓存标记翻译（S19 已实现）
 
-CachePlan（core 产出区级断点）→ provider 原语，**断点选择归 CachePlanner，adapter 只翻译**：
+CachePlan（core 产出区级断点）→ provider 原语，**断点选择归 CachePlanner，adapter 只翻译**。
+
+**翻译指令（§16 契约）**：`CachePlan.providerStrategy`（contracts `ProviderStrategySchema`，S19 定稿）——
+core 在编译期把 checkpoints 投影为 `breakpoints[{afterSegmentId, afterPartIndex, reason:'automatic'}]` +
+`stableZoneTokens`（header+stableWB 合计，**不含 freshWB**，§5 注口径）+ 可选 `prefixTooSmall`
+（§5 阈值数据，S20 遥测消费）。快照持久化于 `prompt_snapshots.cache_plan`，adapter 只读消费、不回写。
+
+**翻译函数**（`adapters/src/cache/translate.ts`，纯函数）：
+
+- `capabilities.cacheType === 'explicit-breakpoint'`（Anthropic 全族）→ 产出 wire 标记定位
+  `{breakpoints:[{afterPartIndex}]}`；
+- 其余家族（automatic-prefix / context-cache / none）→ `undefined` = 无动作——前缀字节稳定由
+  Compiler 契约保证，`req.messages` 原样发送即履行本节义务；
+- `strategy.prefixTooSmall` 非空（§5 前缀过小，缓存不激活）→ 整体抑制，退回无标记。
+
+**Anthropic wire 翻译**（`AnthropicAdapter.connect`，S19）：
+
+- 断点落 system 区 → system 参数转块形，末块挂 `cache_control:{type:'ephemeral'}`；断点不在
+  system 区 → system 保持 join 串（无 cachePlan 时逐字节一致）；
+- 断点落 messages 区 → 目标 user 消息 content 转块形挂标记（parts 下标扣除 system 前缀）；
+  assistant 目标防御性丢弃（Anthropic 禁止 assistant 挂 cache_control，宁缺毋滥）；
+- PV1 边界：只改容器与标记，text 字节零改写。
 
 | 家族 | 翻译 |
 |---|---|
-| Anthropic | zone 边界 → `cache_control` 断点（≤4 个，映射规则见 worldbook-cache-design §5） |
-| Gemini | explicit context caching（P2 评估是否启用，见 §23 开放点） |
+| Anthropic | explicit-breakpoint → `cache_control` 断点（≤4 个，映射规则见 worldbook-cache-design §5，S19 已实现） |
+| Gemini | context-cache 家族：显式 cachedContent **暂缓**（§23 开放点 1 已决：隐式缓存默认），wire 无动作 |
 | OpenAI / DeepSeek / 本地 | automatic-prefix：无标记，adapter 的唯一义务是**保证请求前缀字节稳定**（前缀已由 Compiler 契约保证） |
 
 # 17. usage 归一与成本估算
@@ -350,7 +371,7 @@ T14 同 fixture 重复回放字节级一致（PV7）
 |---|---|
 | **P0** | 三类 adapter（openai-compat / anthropic / gemini）+ 流式归一 + usage 归一 + 错误分类 + 取消/超时 + redact + fixture 测试（T1/T4/T6/T10/T11/T12/T14）+ 单 key + 代理 |
 | **P1** | 自定义插头配置面（实务随 §5.1）；本地端点模型自动发现完善 |
-| **P2** | 缓存标记翻译（Anthropic cache_control / Gemini explicit caching 评估）+ 多 key 轮换完善 + 遥测面板对接（命中率指标） |
+| **P2** | 缓存标记翻译（Anthropic cache_control 已实现（S19）；Gemini explicit caching 已评估暂缓，§23 开放点 1）+ 多 key 轮换完善 + 遥测面板对接（命中率指标） |
 | **P3** | 工具归一全量（T2/T3/T7/T8/T9/T13）+ structuredOutput 降级链 + ModelPolicy fallback 联调 |
 | **P4** | 网络搜索等工具型请求的流式与取消打磨 |
 | **P5** | 插件自定义 provider（若有）；契约测试工具化（用户可自助录制 fixture 报兼容性问题） |
@@ -367,7 +388,11 @@ T14 同 fixture 重复回放字节级一致（PV7）
 
 # 23. 开放决策点（不阻塞 P0，实施期落定）
 
-1. **Gemini explicit context caching 是否启用**：显式缓存有创建/存储成本与 TTL 管理，P2 用 Cache Simulator 对比后定。
+1. **Gemini explicit context caching 是否启用**——**已决（S19/WP2.4 评估，还账 #6 勾销）**：显式
+   `cachedContent` **暂缓**，默认走 Gemini 隐式前缀缓存（同 automatic-prefix 语义：前缀字节稳定由
+   Compiler 契约保证）。理由：显式缓存有创建/存储成本与 TTL 管理，且 KPI 的"真实 API 命中率"在
+   隐式缓存下经 usage `cachedContentTokenCount` 同样可观测（§17.1 已归一）；待 S20 命中率遥测
+   证明显式收益后再启用。
 2. **本地估算器的 tokenizer 选型**——**已决（V1.1，S4'-a 实施期）**：P0/P1 采用 core 启发式估算器（CJK ≈ 1 token/字、其余 ≈ 4 字符/token，误差基线记录于 core tokens 测试），**不引入 tiktoken 运行时依赖**。理由：①P0 硬上限检查（R-P0-2）与 usage 降级（§17.3）只需要稳定、确定性的口径，不需要绝对精确；②精确 token 预算是 P2 Cache Engine（compiler §47 Context Budget）的需求，届时再引入精确计数（本地 gpt-tokenizer 类纯 JS 词表 + Anthropic/Gemini countTokensNative 钩子双轨），口径由 §52 tokenCountMode 记录，缓存命中率统计继续排除 estimated（§33.2）。
 3. **Anthropic thinking 回传的默认策略**：仅工具循环强制回传之外，普通多轮是否也回传（缓存代价 vs 推理连贯性），P3 联调时以缓存指标定。
 

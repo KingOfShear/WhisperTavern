@@ -64,6 +64,12 @@ export {
   type RuntimeVariables,
 } from './macro'
 export {
+  simulateCachePlan,
+  type CacheSimRound,
+  type CacheSimRoundResult,
+  type CacheSimulatorReport,
+} from './compiler/cache-simulator'
+export {
   activateWorldbook,
   type WorldbookActivationInput,
   type WorldbookActivationOutput,

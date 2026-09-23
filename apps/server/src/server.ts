@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
-import { compile, diffSnapshots } from '@whispertavern/core'
+import { compile, diffSnapshots, projectSegment, simulateCachePlan } from '@whispertavern/core'
 import {
   importCard,
   importWorldbook,
@@ -138,10 +138,11 @@ export function createApp(deps: ServerDeps): CreatedApp {
   function buildAdapter(type: string, config: Record<string, unknown>, apiKey: string | undefined): ProviderAdapter {
     const baseUrl = typeof config.baseUrl === 'string' ? config.baseUrl : ''
     const fakeTurns = Array.isArray(config.fakeTurns)
-      ? (config.fakeTurns as { text?: string; chunkSize?: number; delayMs?: number }[]).map((t) => ({
+      ? (config.fakeTurns as { text?: string; chunkSize?: number; delayMs?: number; cachedInputTokens?: number }[]).map((t) => ({
           text: t.text ?? '[fake]',
           chunkSize: t.chunkSize,
           delayMs: t.delayMs,
+          cachedInputTokens: t.cachedInputTokens,
         }))
       : undefined
     switch (type) {
@@ -728,6 +729,118 @@ export function createApp(deps: ServerDeps): CreatedApp {
       tokenCount: (JSON.parse(row.serialized) as { tokenCount?: number }).tokenCount ?? 0,
       createdAt: row.createdAt,
     })))
+  })
+
+  // §33 遥测与缓存诊断(S20/WP2.5):聚合 chat 的 runs+usage+cachePlan → 命中率曲线/成本/CacheBreak 事件
+  app.get('/api/v2/chats/:id/telemetry', (c) => {
+    const requestId = requestIdOf(c)
+    const chat = loadChat(deps.store, c.req.param('id') as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const runRows = deps.store.db
+      .select()
+      .from(runsTable)
+      .where(eq(runsTable.chatId, chat.value.id))
+      .orderBy(runsTable.createdAt)
+      .all()
+    const usageByRun = new Map<string, { inputTokens: number; cachedTokens: number; outputTokens: number; source: string }>()
+    for (const row of deps.store.db.select().from(generationsTable).all()) {
+      if (row.runId === null) continue
+      usageByRun.set(row.runId, {
+        inputTokens: row.inputTokens ?? 0,
+        cachedTokens: row.cachedTokens ?? 0,
+        outputTokens: row.outputTokens ?? 0,
+        source: row.usageSource ?? 'estimated',
+      })
+    }
+
+    type Round = Record<string, unknown>
+    const rounds: Round[] = []
+    let round = 0
+    // 段级 contentHash 投影(core projectSegment 口径;Simulator 跨轮前缀比对输入)
+    const stableHashesByRun = new Map<string, Record<string, string>>()
+    for (const run of runRows) {
+      if (run.snapshotId === null) continue
+      const loaded = loadSnapshotRow(run.snapshotId)
+      if (loaded === undefined) continue
+      const snapshot = loaded.snapshot
+      const hashById: Record<string, string> = {}
+      for (const seg of (snapshot.ir as { segments: unknown[] }).segments) {
+        const p = projectSegment(seg as never)
+        hashById[p.id] = p.contentHash
+      }
+      stableHashesByRun.set(run.id, hashById)
+    }
+    for (const run of runRows) {
+      round += 1
+      const usage = usageByRun.get(run.id)
+      const snapshot = run.snapshotId === null ? undefined : loadSnapshotRow(run.snapshotId)?.snapshot
+      const cachePlan = snapshot?.cachePlan
+      const breakReasons = (cachePlan?.breakReasons ?? []) as { type: string }[]
+      rounds.push({
+        round,
+        runId: run.id,
+        createdAt: run.createdAt,
+        status: run.status,
+        inputTokens: usage?.inputTokens ?? 0,
+        cachedTokens: usage?.cachedTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        usageSource: usage?.source ?? 'estimated',
+        stablePrefixTokens: cachePlan?.stablePrefixTokens ?? 0,
+        freshTokens: cachePlan?.freshTokens ?? 0,
+        volatileTokens: cachePlan?.volatileTokens ?? 0,
+        prefixTooSmall: cachePlan?.providerStrategy?.prefixTooSmall,
+        breakReasons: breakReasons.map((r) => r.type),
+        invalidationRisk: cachePlan?.invalidationRisk ?? 'low',
+        cachePlan,
+      })
+    }
+
+    // §33.2 四层口径:reported 才计命中率;estimated 单列(不入分母)
+    const reported = rounds.filter((r) => r.usageSource === 'reported')
+    const reportedInput = reported.reduce((sum, r) => sum + (r.inputTokens as number), 0)
+    const reportedCached = reported.reduce((sum, r) => sum + (r.cachedTokens as number), 0)
+    const allInput = rounds.reduce((sum, r) => sum + (r.inputTokens as number), 0)
+    const allCached = rounds.reduce((sum, r) => sum + (r.cachedTokens as number), 0)
+    const allFresh = allInput - allCached
+    // 成本估算:本地口径(input+output token 计,§2.2);ratios 供前端曲线
+    const costEstimate = {
+      baselineInputTokens: allInput,
+      cachedInputTokens: allCached,
+      freshInputTokens: allFresh,
+      reportedHitRatio: reportedInput === 0 ? undefined : reportedCached / reportedInput,
+      overallHitRatio: allInput === 0 ? undefined : allCached / allInput,
+    }
+    // CacheBreak 事件(§33.3):breakReasons 非空轮 + 其轮次/原因清单
+    const cacheBreaks = rounds
+      .filter((r) => (r.breakReasons as string[]).length > 0)
+      .map((r) => ({
+        round: r.round as number,
+        runId: r.runId as string,
+        reasons: r.breakReasons as string[],
+        stablePrefixTokens: r.stablePrefixTokens as number,
+      }))
+    // S20 验收③:Simulator 消费真实编译产物 → 理论缓存率/成本削减/Killer(输出对齐金样)
+    const simulatorRounds = rounds.map((r) => ({
+      round: r.round as number,
+      plan: r.cachePlan as import('@whispertavern/contracts').CachePlan,
+      stablePrefixHashes: stableHashesByRun.get(r.runId as string) ?? {},
+      actualCachedTokens: r.usageSource === 'reported' ? (r.cachedTokens as number) : undefined,
+      totalInputTokens: r.inputTokens as number,
+    }))
+    const simulator = simulateCachePlan(simulatorRounds)
+
+    return ok(c, requestId, {
+      rounds,
+      summary: { costEstimate, cacheBreaks },
+      simulator: {
+        theoreticalHitRatio: simulator.theoreticalHitRatio,
+        actualHitRatio: simulator.actualHitRatio,
+        baselineInputTokens: simulator.baselineInputTokens,
+        cachedInputTokens: simulator.cachedInputTokens,
+        inputCostReduction: simulator.inputCostReduction,
+        topCacheKillers: simulator.topCacheKillers,
+      },
+    })
   })
 
   // 还账 #15:Sanitized Debug Export(默认 sanitized;密钥经 PV5 redact;bundle 可回放)

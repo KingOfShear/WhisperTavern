@@ -74,6 +74,13 @@ describe('FakeProviderAdapter(形状契约)', () => {
     expect(usage?.usage.outputTokens).toBeGreaterThan(0)
   })
 
+  it('S19:cachedInputTokens 注入 → usage.cachedInputTokens 透传(模拟 API 缓存命中)', async () => {
+    const events = await collect(new FakeProviderAdapter([{ text: 'x', cachedInputTokens: 88 }]), baseRequest)
+    const [usage] = eventsOf(events, 'usage')
+    expect(usage?.usage.cachedInputTokens).toBe(88)
+    expect(usage?.usage.source).toBe('reported')
+  })
+
   it('多轮脚本按 stream() 调用顺序消费', async () => {
     const adapter = new FakeProviderAdapter([{ text: 'first' }, { text: 'second' }])
     const firstRun = await collect(adapter, baseRequest)

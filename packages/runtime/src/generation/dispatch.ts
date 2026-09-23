@@ -243,7 +243,7 @@ export function buildGenerationRequest(
       return [{ role: 'user', content }]
     },
   )
-  return {
+  const request: ProviderChatRequest = {
     snapshotId: snapshot.id,
     model: snapshot.model,
     messages,
@@ -252,6 +252,12 @@ export function buildGenerationRequest(
     signal: input.signal,
     metadata: { runId: input.runId },
   }
+  // §16 翻译指令透传(S19):快照无 providerStrategy(P0 兼容)→ 不挂该键,adapter 无动作。
+  // 快照为 DeepReadonly;cast 仅解除 readonly 标记,值不做任何改写(adapter 只读消费)。
+  if (snapshot.cachePlan.providerStrategy !== undefined) {
+    request.cachePlan = snapshot.cachePlan.providerStrategy as ProviderChatRequest['cachePlan']
+  }
+  return request
 }
 
 /** 不变量 1:请求必挂 snapshotId 且该快照必须存在(§5.5,违反 = 不发请求) */

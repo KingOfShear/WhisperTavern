@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   ApiEnvelope,
   ChatSnapshotSummaryDto,
+  ChatTelemetryDto,
   DebugExportBundleDto,
   DebugExportPolicyDto,
   MessageWithVariantsDto,
@@ -118,6 +119,9 @@ export const api = {
   /** §38 Prompt Diff:相邻两轮对比(a = 上一轮,b = 当前轮) */
   getDiff: (snapshotAId: string, snapshotBId: string) =>
     apiRequest<PromptDiffDto>(`/api/v2/prompt-snapshots/${snapshotAId}/diff/${snapshotBId}`),
+
+  /** §33 遥测与缓存诊断(S20):命中率曲线 + 成本 + CacheBreak + Simulator */
+  getTelemetry: (chatId: string) => apiRequest<ChatTelemetryDto>(`/api/v2/chats/${chatId}/telemetry`),
 
   /** §60 debug 导出(还账 #15):默认 sanitized;full 需显式声明 */
   exportDebugBundle: (body: { resourceType: 'snapshot'; resourceId: string; policy?: DebugExportPolicyDto }) =>

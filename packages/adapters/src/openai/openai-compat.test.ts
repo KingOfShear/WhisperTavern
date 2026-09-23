@@ -303,6 +303,32 @@ describe('openai-compat:capabilities(§15,还账 #2 定稿)', () => {
   })
 })
 
+describe('openai-compat:S19 §16 automatic-prefix 家族无动作(前缀稳定性由 Compiler 契约保证)', () => {
+  it('deepseek-chat 收到 cachePlan → wire body 与无 cachePlan 逐字节一致,不注入任何缓存字段', async () => {
+    async function captureBody(req: ProviderChatRequest): Promise<Record<string, unknown>> {
+      let captured: { init: RequestInit } | undefined
+      const a = adapter(async (_url, init) => {
+        captured = { init }
+        return sseResponse([chunk('x'), usageFrame({ prompt_tokens: 3, completion_tokens: 1 })])
+      })
+      await collect(a, req)
+      return JSON.parse(String(captured?.init.body)) as Record<string, unknown>
+    }
+    const withPlan = await captureBody({
+      ...baseRequest(),
+      cachePlan: {
+        version: 1,
+        breakpoints: [{ afterSegmentId: 'h', afterPartIndex: 0, reason: 'automatic' }],
+        stableZoneTokens: 2048,
+      },
+    })
+    const baseline = await captureBody(baseRequest())
+    expect(JSON.stringify(withPlan)).toBe(JSON.stringify(baseline))
+    expect(JSON.stringify(withPlan)).not.toContain('cache_control')
+    expect(JSON.stringify(withPlan)).not.toContain('cached')
+  })
+})
+
 // —— 工具 ——
 function eventsOf<T extends ProviderStreamEvent['type']>(
   events: readonly ProviderStreamEvent[],
