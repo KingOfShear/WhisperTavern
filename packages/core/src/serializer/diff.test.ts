@@ -178,4 +178,63 @@ describe('core/serializer diff(api-spec §38)', () => {
     expect(s1.contentHash).toBe(projectSegment(baseSegments[0]!).contentHash)
     expect(s1.contentHash).not.toBe(s2.contentHash)
   })
+
+  /**
+   * S20 修:S14 版漏过滤 `enabled`,把"被预算裁掉的段"判成 same 并计入 cached——
+   * 但 §91 Disabled Segment 不参与 Serialization(serializer/hash 都跳过它),
+   * 它在字节流里等同于不存在,必须算 removed 且**不得**计入命中。
+   */
+  it('被裁段(enabled=false)当轮消失 → removed 且不计入 cached,可被定位为分歧', () => {
+    const a = snapshotOf(baseSegments, 'a6')
+    const b = snapshotOf(
+      baseSegments.map((s) => (s.id === 'chat:1:message:983' ? segment({ ...s, enabled: false }) : s)),
+      'b6',
+    )
+    const diff = diffSnapshots(a, b)
+    // 被裁段不再是 same(旧实现会判 same 并计入 cached)
+    expect(diff.segments.find((d) => d.segmentId === 'chat:1:message:983')?.kind).toBe('removed')
+    // 命中只算真正两轮都发送的段
+    const sentTokens = (s: PromptSegment[]): number =>
+      s.filter((x) => x.enabled).reduce((sum, x) => sum + x.tokenCount, 0)
+    const sameTokens = diff.segments
+      .filter((d) => d.kind === 'same')
+      .reduce((sum, d) => sum + (d.after?.tokenCount ?? 0), 0)
+    expect(diff.tokenDelta.cached).toBe(sameTokens)
+    // 关键回归:被裁段(4 tok)不得再计入命中——旧实现会得到 IR 全量(11)而非仅发送段(7)
+    expect(diff.tokenDelta.cached).toBe(sentTokens(b.ir.segments))
+    expect(diff.tokenDelta.cached).toBeLessThan(b.ir.segments.reduce((sum, s) => sum + s.tokenCount, 0))
+    // input = 发送侧总 token 差(disabled 段不计入,与 serializer 实际发送一致):7 − 11 = −4
+    expect(diff.tokenDelta.input).toBe(sentTokens(b.ir.segments) - sentTokens(a.ir.segments))
+    expect(diff.firstDivergence?.segmentId).toBe('chat:1:message:983')
+  })
+
+  it('被裁段可归因:removed 段用 before 投影归类(裁剪/A 侧删除不再归不出原因)', () => {
+    const wbEntry = segment({
+      id: 'worldbook:wbA:entry1',
+      source: { type: 'worldbook', worldbookId: 'wbA', entryId: 'entry1' },
+      role: 'system',
+      content: '条目正文',
+      cachePlacement: { zone: 'stableWB' },
+      stability: 'session',
+      order: 1,
+      tokenCount: 8,
+    })
+    const a = snapshotOf([baseSegments[0]!, wbEntry], 'a7')
+    const b = snapshotOf([baseSegments[0]!, { ...wbEntry, enabled: false }], 'b7')
+    const diff = diffSnapshots(a, b)
+    expect(diff.segments.find((d) => d.segmentId === 'worldbook:wbA:entry1')?.kind).toBe('removed')
+    expect(diff.firstDivergence?.segmentId).toBe('worldbook:wbA:entry1')
+    // 归因来自消失段自身(旧实现在 removed 时 breakSegment 为 undefined → cacheBreak 丢失)
+    expect(diff.cacheBreak?.type).toBe('WORLD_BOOK_CONTENT_CHANGED')
+    expect(diff.cacheBreak?.entryId).toBe('entry1')
+  })
+
+  it('两轮都 disabled 的段不参与 diff(不冒充 same/cached)', () => {
+    const a = snapshotOf([baseSegments[0]!, { ...baseSegments[2]!, enabled: false }], 'a8')
+    const b = snapshotOf([baseSegments[0]!, { ...baseSegments[2]!, enabled: false }], 'b8')
+    const diff = diffSnapshots(a, b)
+    expect(diff.segments.map((d) => d.segmentId)).toEqual([baseSegments[0]!.id])
+    expect(diff.tokenDelta.cached).toBe(baseSegments[0]!.tokenCount)
+    expect(diff.tokenDelta.fresh).toBe(0)
+  })
 })

@@ -1091,6 +1091,8 @@ type PromptDiff = {
 
 【2026-09-22 修订(S20/WP2.5 补齐 byteOffset,Breaking: N)】`firstDivergence.byteOffset` 由 P0 省略转为**必填**:changed 段取其两侧 `content` 公共前缀的 **UTF-8 字节数**(多字节字符下字节偏移 ≠ 字符下标,而缓存前缀是字节前缀,故必须按字节);added/removed 记 0(整段缺失即分歧起点)。消费方 = 缓存二分工具第二层「下钻分屏字节级 diff」的定位锚点(ui-design §4.5)。纯增量字段,既有消费方读 `segmentId` 不受影响。
 
+【2026-09-22 修订(S20/WP2.5 修正 diff 输入域,Breaking: N)】**diff 只比"实际发送"的段**(`enabled` 为真的段)。§91 Disabled Segment 不参与 Serialization(`serializer/snapshot.ts` 与 `hash.ts` 均跳过 disabled 段),故被 §49 Budget Manager 裁掉的段在字节流里**等同于不存在**:它既是前缀分歧点(按 `removed` 记,`before` 投影保留),也**绝不能计入 `tokenDelta.cached`**。`tokenDelta.input` 同理只累计发送侧 token。修订缘由:S14 版未过滤 `enabled`,曾把"被裁的段"判成 `same` 并计入命中——这既高估命中率,又让 technical-plan §8 要点 4 要求的「被裁的条目」这一类 CacheBreak 源无法被二分工具定位。另:`removed` 段的 `cacheBreak` 归因改用其 `before` 投影的来源族(此前 `removed` 无 `after` 会导致归因丢失)。
+
 ---
 
 # 39. CachePlan
@@ -1200,7 +1202,7 @@ type CacheBreakDiagnosis = {
 }
 ```
 
-【2026-09-22 修订(S20/WP2.5 落地)】本节由骨架转为**已实现契约**(apps/server `GET /api/v2/runs/:id/cache-break`);它就是缓存**二分工具**(ui-design §4.5 两层形态)的服务端面:对同一 chat 内「上一轮快照 vs 本轮快照」跑 `diffSnapshots`(S14 构建器),用段哈希链定位**首个分歧段**。落地语义:上一轮 = 同 chat 中 `createdAt` 早于本轮、且时间最近的快照;无前置快照 → `broken: false`(首轮无缓存可毁)。`firstDivergence` 在骨架之上补 **`byteOffset`**(该段 `content` 内首个分歧字节的 UTF-8 偏移,added/removed 记 0)——供下钻分屏视图精确锚点;`sourceId` 取自分歧段 `source` 的 messageId/entryId/presetId/assetId 之一;`reason` = S14 归因族(MESSAGE_EDITED / WORLD_BOOK_CONTENT_CHANGED / WORLD_BOOK_NEW_ENTRY / WORLD_BOOK_RETIREMENT / WORLD_BOOK_DEACTIVATED / MACRO_VOLATILE / PRESET_CHANGED / PERSONA_CHANGED / CHARACTER_CHANGED / MANUAL_INVALIDATION)。`affectedTokens` = 首分歧段起的**整个后缀** token 和(字节前缀断裂后后续段全部重发);`suggestions` 按归因给可执行下一步(只给方向,不自动改写——红线:不用 Prompt 修架构问题)。
+【2026-09-22 修订(S20/WP2.5 落地)】本节由骨架转为**已实现契约**(apps/server `GET /api/v2/runs/:id/cache-break`);它就是缓存**二分工具**(ui-design §4.5 两层形态)的服务端面:对同一 chat 内「上一轮快照 vs 本轮快照」跑 `diffSnapshots`(S14 构建器),用段哈希链定位**首个分歧段**。落地语义:上一轮 = 同 chat 中 `createdAt` 早于本轮、且时间最近的快照;无前置快照 → `broken: false`(首轮无缓存可毁)。`firstDivergence` 在骨架之上补 **`byteOffset`**(该段 `content` 内首个分歧字节的 UTF-8 偏移,added/removed 记 0)——供下钻分屏视图精确锚点;`sourceId` 取自分歧段 `source` 的 messageId/entryId/presetId/assetId 之一;`reason` = S14 归因族(MESSAGE_EDITED / WORLD_BOOK_CONTENT_CHANGED / WORLD_BOOK_NEW_ENTRY / WORLD_BOOK_RETIREMENT / WORLD_BOOK_DEACTIVATED / MACRO_VOLATILE / PRESET_CHANGED / PERSONA_CHANGED / CHARACTER_CHANGED / MANUAL_INVALIDATION)。`affectedTokens` = 首分歧段起的**整个后缀** token 和(字节前缀断裂后后续段全部重发);`suggestions` 按归因给可执行下一步(只给方向,不自动改写——红线:不用 Prompt 修架构问题)。**裁剪归因**:若首分歧段在当前快照中 `enabled=false`(被 §49 Budget Manager 裁掉),响应在 `firstDivergence` 上附 `trimReason: 'BUDGET_TRIM'`(`reason` 借 `MANUAL_INVALIDATION` 的自由 `reason` 字段承载)——**compiler-spec §58 的 CacheBreakReason 目前没有裁剪类原因码**,此处不静默改标成"内容变更",是否新增一等原因码待定(见 §38 修订口径)。
 
 ---
 

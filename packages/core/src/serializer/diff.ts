@@ -9,6 +9,10 @@ import type { DeepReadonly } from '../ir/segment'
  * - 对齐键 = **段 ID**(compiler-spec §9 稳定语义 ID 是 diff 可对齐的前提);
  * - 内容一致性 = 段框架哈希((id,role,content) netstring,§57 口径)——role 变化
  *   同样算 changed,因为它改变序列化字节;
+ * - **只比"实际发送"的段**(`enabled` 为真的段)——§91 Disabled Segment 不参与
+ *   Serialization(serializer/snapshot.ts 与 hash.ts 均跳过),故被预算裁掉的段
+ *   在字节流里等同于不存在:既是前缀分歧点(removed),也**绝不能计入 cached**。
+ *   (此处曾漏过滤 enabled,导致裁剪段被判 same 且 token 记入命中——S20 修)
  * - 序:先 A 侧发送序(removed/changed/same 在原位),再 B 侧新增段(发送序);
  *   firstDivergence = 该序下第一个非 same 段(removed 也破坏字节前缀,算分歧),
  *   并给出该段 content 内**首个分歧字节的 UTF-8 偏移**(S20/WP2.5 二分工具定位锚点);
@@ -69,10 +73,13 @@ export function projectSegment(segment: DeepReadonly<PromptSegment>): SegmentPro
 }
 
 export function diffSnapshots(a: DeepReadonly<PromptSnapshot>, b: DeepReadonly<PromptSnapshot>): SnapshotDiffResult {
-  const bById = new Map(b.ir.segments.map((s) => [s.id, s]))
+  // 只比实际发送的段(§91 Disabled Segment 不参与 Serialization):被裁段 = 未发送 = 既非 same 也不可计入 cached
+  const sentA = a.ir.segments.filter((s) => s.enabled)
+  const sentB = b.ir.segments.filter((s) => s.enabled)
+  const bById = new Map(sentB.map((s) => [s.id, s]))
 
   const segments: SegmentDiff[] = []
-  for (const segA of a.ir.segments) {
+  for (const segA of sentA) {
     const segB = bById.get(segA.id)
     if (segB === undefined) {
       segments.push({ kind: 'removed', segmentId: segA.id, before: projectSegment(segA) })
@@ -86,8 +93,8 @@ export function diffSnapshots(a: DeepReadonly<PromptSnapshot>, b: DeepReadonly<P
         : { kind: 'changed', segmentId: segA.id, before, after },
     )
   }
-  const seen = new Set(a.ir.segments.map((s) => s.id))
-  for (const segB of b.ir.segments) {
+  const seen = new Set(sentA.map((s) => s.id))
+  for (const segB of sentB) {
     if (!seen.has(segB.id)) {
       segments.push({ kind: 'added', segmentId: segB.id, after: projectSegment(segB) })
     }
@@ -102,13 +109,16 @@ export function diffSnapshots(a: DeepReadonly<PromptSnapshot>, b: DeepReadonly<P
     else if (d.kind === 'added') added += d.after?.tokenCount ?? 0
     else if (d.kind === 'changed') changedAfter += d.after?.tokenCount ?? 0
   }
-  const totalA = a.ir.segments.reduce((sum, s) => sum + s.tokenCount, 0)
-  const totalB = b.ir.segments.reduce((sum, s) => sum + s.tokenCount, 0)
+  const totalA = sentA.reduce((sum, s) => sum + s.tokenCount, 0)
+  const totalB = sentB.reduce((sum, s) => sum + s.tokenCount, 0)
 
+  // removed 段没有 after:归因要落到"消失的那个段"的 before 投影上,否则裁剪/A 侧删除永远归不出原因
   const breakSegment =
-    firstChanged?.after !== undefined ? bById.get(firstChanged.after.id) : undefined
+    firstChanged === undefined
+      ? undefined
+      : bById.get(firstChanged.segmentId) ?? sentA.find((s) => s.id === firstChanged.segmentId)
   // 首个分歧字节(S20):changed 取两段 content 的公共前缀字节数;added/removed 整段缺失记 0
-  const aById = new Map(a.ir.segments.map((s) => [s.id, s]))
+  const aById = new Map(sentA.map((s) => [s.id, s]))
   let byteOffset = 0
   if (firstChanged !== undefined) {
     const segA = aById.get(firstChanged.segmentId)

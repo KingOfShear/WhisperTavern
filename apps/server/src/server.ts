@@ -942,7 +942,9 @@ export function createApp(deps: ServerDeps): CreatedApp {
               : 'assetId' in source
                 ? source.assetId
                 : undefined
-    const reason = diff.cacheBreak?.type ?? 'MANUAL_INVALIDATION'
+    // §58 无 BUDGET_TRIM 原因码,裁剪归因借 MANUAL_INVALIDATION 的自由 reason 字段如实标注(不静默改标成内容变更)
+    const trimmed = segment !== undefined && !segment.enabled
+    const reason = trimmed ? 'MANUAL_INVALIDATION' : (diff.cacheBreak?.type ?? 'MANUAL_INVALIDATION')
     return ok(c, requestId, {
       broken: true,
       firstDivergence: {
@@ -953,9 +955,11 @@ export function createApp(deps: ServerDeps): CreatedApp {
         byteOffset: diff.firstDivergence.byteOffset,
         sourceId,
         reason,
+        /** 裁剪归因(§49 Budget Manager 把该段标记 enabled=false:它已不在发送字节流中) */
+        ...(trimmed ? { trimReason: 'BUDGET_TRIM' as const } : {}),
       },
       affectedTokens,
-      suggestions: cacheBreakSuggestions(reason),
+      suggestions: cacheBreakSuggestions(reason, trimmed),
     })
   })
 
@@ -1460,7 +1464,10 @@ function nowIso(): string {
  * §42 CacheBreakDiagnosis.suggestions —— 按失效归因给可执行下一步(§58 归因 + §15.1 分区语义)。
  * 只给"为什么断+往哪调"的方向,不给自动改写(红线:不用 Prompt 修架构问题)。
  */
-function cacheBreakSuggestions(reason: string): string[] {
+function cacheBreakSuggestions(reason: string, trimmed = false): string[] {
+  if (trimmed) {
+    return ['该段被预算裁剪移出发送窗口(§49 Budget Manager,enabled=false)→ 它已不在字节流中;检查 world_info_budget 配额或上下文窗口是否过紧']
+  }
   switch (reason) {
     case 'MESSAGE_EDITED':
       return ['历史消息被编辑 → 其后全部前缀失效;把易改内容留在 tail,或用 swipe 生成新变体而非改写历史']

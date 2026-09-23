@@ -294,6 +294,8 @@ export type CacheBreakDiagnosisDto = {
     byteOffset: number
     sourceId?: string
     reason: string
+    /** 裁剪归因:该段被 §49 Budget Manager 标记 enabled=false,S20 显式标注(§58 暂无 BUDGET_TRIM 原因码) */
+    trimReason?: 'BUDGET_TRIM'
   }
   affectedTokens: number
   suggestions: string[]
