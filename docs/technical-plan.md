@@ -348,6 +348,21 @@
    - `waiting` 状态必须有对应的 durable 事件。
    实现方式：在 fake provider 的调用入口埋断言，任何一条测试路径绕过 Compiler 自己拼 prompt 都会立刻红。这条是防架构腐化的廉价保险——长项目里"某个新路径图省事直接拼字符串"是最常见的腐化起点。
 6. **工程纪律 D1–D5 的代码审查清单（2026-09 补）**：总设计 §5.5 五条纪律（正交结果独立上报 / 公共契约两边都守 / 异步状态不是同步状态 / Dispose 到达静默态 / 派发器吃掉订阅者异常）应固化为 PR review checklist。它们对应的都是生命周期、并发、teardown 代码里的真实缺陷类别。
+7. **本机跑测试的正确姿势（2026-09-26 补,S22 踩坑实录）**：
+   - **一律经 pnpm 脚本跑**（`pnpm test` / `pnpm -r test`），不要手动指定 `node` 去调 `vitest.mjs`。
+     原因：本机 PATH 上 **managed node 22.22.2（ABI 127）排在 system node 24.19.0（ABI 137）之前**，
+     pnpm 脚本经 PATH 解析 `node` → 用 22；而 `pnpm install` 装 `better-sqlite3` 的 prebuild 时同样按 PATH → ABI 127。
+     两者一致 → 正常。手动指定 node 24 去跑 → 报 `NODE_MODULE_VERSION 127 vs 137` → 整套 runtime/server 测试全红
+     （看起来像代码崩了，其实是环境不匹配）。
+   - **不变量**：跑测试的 node 与编译 native 模块的 node **必须是同一个**。旧说法"本项目测试必须用 node 24"
+     不成立——真正的不变量是 ABI 一致，而不是某个具体版本。
+   - **加迁移后别硬编码版本号**：断言"已应用到最新"用 `MIGRATIONS` 派生的 `LATEST_SCHEMA_VERSION`，
+     架构守卫 **D4** 会拦硬编码（该坑在 S22 一次性咬了 `migrate.test.ts` 与 `apps/server/src/e2e.test.ts` 两处）。
+   - **长命令放后台**：`pnpm install` 这类可能跑几分钟的命令若被前台超时打断，会停在"删了旧的、没建好新的"
+     最坏状态；且 `pnpm install` **只信 `.modules.yaml`、不校验已存在目录的内容完整性**——目录坏掉后它报
+     "Already up to date" 而不修，必须让目标目录真的消失才会重装。
+   - **重活的单个用例要给显式超时**：默认 5s 在全量并行下会被放大（实测 200 轮确定性回放 1–2s → 6.8s），
+     表现为无信息的 `STACK_TRACE_ERROR`。加 `}, 60_000)` 而不是缩小 workload。
 
 ## 9. 路线图
 

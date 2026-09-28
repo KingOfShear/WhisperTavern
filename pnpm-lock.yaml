@@ -29,9 +29,15 @@ importers:
 
   apps/server:
     dependencies:
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.17(hono@4.13.7)
       '@whispertavern/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
+      '@whispertavern/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@whispertavern/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -44,9 +50,6 @@ importers:
       '@whispertavern/st-compat':
         specifier: workspace:*
         version: link:../../packages/st-compat
-      '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.17(hono@4.13.7)
       drizzle-orm:
         specifier: ^0.44.0
         version: 0.44.0(@types/better-sqlite3@7.6.0)(better-sqlite3@12.11.1)
@@ -130,6 +133,19 @@ importers:
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@7.1.0)(tsx@4.23.13)
 
   packages/agent:
+    dependencies:
+      '@whispertavern/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@whispertavern/core':
+        specifier: workspace:*
+        version: link:../core
+      '@whispertavern/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      drizzle-orm:
+        specifier: ^0.44.0
+        version: 0.44.0(@types/better-sqlite3@7.6.0)(better-sqlite3@12.11.1)
     devDependencies:
       typescript:
         specifier: ^5.9.0
@@ -169,12 +185,12 @@ importers:
 
   packages/core:
     dependencies:
-      '@whispertavern/contracts':
-        specifier: workspace:*
-        version: link:../contracts
       '@noble/hashes':
         specifier: ^1.7.0
         version: 1.7.0
+      '@whispertavern/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -201,15 +217,15 @@ importers:
         specifier: ^0.44.0
         version: 0.44.0(@types/better-sqlite3@7.6.0)(better-sqlite3@12.11.1)
     devDependencies:
-      '@whispertavern/adapters':
-        specifier: workspace:*
-        version: link:../adapters
       '@types/better-sqlite3':
         specifier: ^7.6.0
         version: 7.6.0
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@whispertavern/adapters':
+        specifier: workspace:*
+        version: link:../adapters
       typescript:
         specifier: ^5.9.0
         version: 5.9.2

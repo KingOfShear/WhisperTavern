@@ -199,6 +199,12 @@ P0 Chat 面恒为流式（非流式仅保留给内部批处理工具，不走本
 
 # 10. 工具调用归一（P3）
 
+【2026-09 S24 落地注】本节与 §6 的 P3 面已部分落地（packages/contracts `provider.ts`）：
+- `ProviderToolSchema{name, description, inputSchema}` + `ProviderChatRequest.tools` ✓（请求侧）;
+- `ProviderMessageSchema` 增 `role:'tool'{toolCallId, content, isError?}` ✓；assistant 可选 `blocks`（text/thinking+signature/tool_call）✓（形状就位，**真实 adapter 的 blocks 翻译随真实 Provider 接入补**，fake/scripted 路径用纯文本）；
+- **增量聚合在 Runtime**（runtime `dispatch.ts` 按 index 聚合 `tool_call_delta` → `DispatchResult.toolCalls`，§36.3 model order）✓；
+- **快照证据链口径**：toolCallId 是会话内关联 ID，真相源 = `tool_calls` 表；快照序列化 parts 不携带 ID，不变量 2（model-visible-recorded）比较 role/content/blocks；wire 上缺失关联 ID 的 tool 消息由 Runtime 按序合成占位 ID（`tool_part_N`）——真实 adapter 翻译时从 tool_calls 表取真 ID。
+
 - schema 翻译：统一 `ProviderToolSpec{name, description, jsonSchema}` → OpenAI `functions` / Anthropic `tools[].input_schema` / Gemini `functionDeclarations`。
 - 增量聚合：adapter 产出 `tool_call_delta`；**聚合为完整调用是 Runtime 的事**（对齐 agent-runtime §36.1–36.3：并行工具结果按 model order 回灌，聚合顺序同理按 index/model order，不按完成顺序）。
 - id 规则：OpenAI `call_*`、Anthropic `toolu_*` 原样保留；provider 不发 id 时 adapter 生成稳定 id（`tc_{index}`），并在契约测试锁定。

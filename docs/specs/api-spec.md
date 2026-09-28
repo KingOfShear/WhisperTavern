@@ -1,6 +1,6 @@
 # WhisperTavern V2 API Specification
 
-> **Version:** 2.4（2026-09-22：S20/WP2.5——§38 Prompt Diff `firstDivergence.byteOffset` 由省略转为必填（UTF-8 字节偏移，Breaking: N，纯增量/无既有消费方读取该字段）；§41 Cache Telemetry、§42 Cache Break Diagnosis、§43/§44 Cache Simulation 三节由骨架转为已实现契约（`GET /api/v2/chats/:id/cache/telemetry`、`GET /api/v2/runs/:id/cache-break`、`POST /api/v2/cache/simulate`，自 §153 P2 提前至 P2 先行落地）；2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
+> **Version:** 2.6（2026-09-27：S28/WP3.6——§154 P3 Agent API 由 P0 预留的骨架转为已实现契约（`GET/POST /agents`、`POST /agents/:id/runs`、`GET /agent-runs/:id`、cancel/pause/resume/delegate/handoff、`GET /tools`、`GET /skills`，§61–§73/§75–§79 同步转实现注）；任务 3 观测面追加 `GET /agent-runs/:id/timeline`（§121）/ `GET /agent-runs/:id/cost`（§122）/ `GET /agents/:id/inspector`（§124）三只读端点（源 = 既有执行层表，零新存储）；§70 AgentBudget 补 Agent Tree 四护栏字段 `maxDepth/maxChildren/maxTotalAgents/maxRuntimeMs`（对齐 agent-runtime-spec §39，还账 #17）；§8 补 `AGENT_RECURSION_LIMIT`。Breaking: N——全部为新增端点与可选字段，未触碰既有 2.5 契约）；2.5（2026-09-26：S21/WP2.6——§43/§44 的 `scenarios` 由"回显未支持"转为**确定性回放**（零 Provider 调用；响应补 `appliedScenarios`/`trimmedSegments`/`kpi`；`unsupportedScenarios` 只余未识别名；scenarios 分支 rounds 上限放宽至 1000。Breaking: N——新增字段与行为分支，未声明 scenarios 时行为与 2.4 逐字节一致））；2.4（2026-09-22：S20/WP2.5——§38 Prompt Diff `firstDivergence.byteOffset` 由省略转为必填（UTF-8 字节偏移，Breaking: N，纯增量/无既有消费方读取该字段）；§41 Cache Telemetry、§42 Cache Break Diagnosis、§43/§44 Cache Simulation 三节由骨架转为已实现契约（`GET /api/v2/chats/:id/cache/telemetry`、`GET /api/v2/runs/:id/cache-break`、`POST /api/v2/cache/simulate`，自 §153 P2 提前至 P2 先行落地）；2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
 > **Status:** Implementation Specification  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **HTTP/SSE API 模块详细规格**  
 > **Protocol:** HTTP/1.1 + SSE  
@@ -258,6 +258,7 @@ AGENT_PERMISSION_DENIED
 AGENT_BUDGET_EXCEEDED
 AGENT_TIMEOUT
 AGENT_FAILED
+AGENT_RECURSION_LIMIT    // S28(还账 #17):spawn 超 Agent Tree 护栏(§154 delegate/handoff 消费)
 
 TOOL_NOT_FOUND
 TOOL_PERMISSION_DENIED
@@ -1267,7 +1268,9 @@ type CacheSimulationResult = {
 }
 ```
 
-【2026-09-22 修订(S20/WP2.5 落地)】§43+§44 由骨架转为**已实现契约**(apps/server `POST /api/v2/cache/simulate`)。落地语义:**零 API 成本**——只消费该 chat **已编译快照**序列 + 已落库 usage(不调 Provider,不虚构数据);`rounds` 为窗口大小(缺省 50,上限 200),只聚合最近 N 轮(窗口首轮无前置基线,理论承接自窗口第 2 轮起算)。响应 `rounds[]` 逐轮补 `theoreticalCachedTokens`(= 本轮 plan 计可承接 token,首轮/分歧轮为 0),`prefixHash` = 该轮 serialized 全量哈希。`aggregate.expectedCacheRatio` = §20 理论缓存率(plan 计);`totalInvalidatedTokens` = 发生 CacheBreak 的各轮中**未能承接的稳定前缀 token 之和**。响应另附 `simulator`(逐轮理论/实际两套口径 + topCacheKillers + inputCostReduction)与 `unsupportedScenarios`——**§43 的 `scenarios`(世界书触发/编辑/宏/swipe/分支/摘要/预算/群聊)属确定性回放,由 S21(WP2.6 1000 轮模拟门禁)交付**;S20 只回放真实快照序列,请求里出现的场景名原样回显在 `unsupportedScenarios` 中,不静默忽略。
+【2026-09-22 修订(S20/WP2.5 落地)】§43+§44 由骨架转为**已实现契约**(apps/server `POST /api/v2/cache/simulate`)。落地语义:**零 API 成本**——只消费该 chat **已编译快照**序列 + 已落库 usage(不调 Provider,不虚构数据);`rounds` 为窗口大小(缺省 50,上限 200),只聚合最近 N 轮(窗口首轮无前置基线,理论承接自窗口第 2 轮起算)。响应 `rounds[]` 逐轮补 `theoreticalCachedTokens`(= 本轮 plan 计可承接 token,首轮/分歧轮为 0),`prefixHash` = 该轮 serialized 全量哈希。`aggregate.expectedCacheRatio` = §20 理论缓存率(plan 计);`totalInvalidatedTokens` = 发生 CacheBreak 的各轮中**未能承接的稳定前缀 token 之和**。响应另附 `simulator`(逐轮理论/实际两套口径 + topCacheKillers + inputCostReduction)与 `unsupportedScenarios`。
+
+【2026-09-26 修订(S21/WP2.6 落地;本节 Breaking: N)】§43 的 `scenarios` 由"回显未支持"转为**已实现**:请求里出现**已识别**场景族(§43 列出的八个名字)时,本接口走**确定性回放**分支——以合成轮次脚本喂**真实 Compiler**(零 Provider 调用、零 DB 写入),`rounds` 即回放长度(该分支上限放宽至 1000,非 scenarios 分支仍为 200);响应在 §44 形状之上补 `rounds[].appliedScenarios[]`/`rounds[].trimmedSegments`、`kpi{hitRatio, costReduction, unexpectedBreakTotal}`(§2.2 **端到端**承接口径,与 `simulator.theoreticalHitRatio` 的"连续稳定前缀"口径是**两套量**,不得互相冒充)。`unsupportedScenarios` 此后只承载**未识别**的场景名(已识别的八个不再出现在其中)。未声明 `scenarios`(或只含未识别名)时,行为与 S20 完全一致——仍只回放该 chat 的真实快照序列。回放引擎与两道 CI 硬门禁共用同一实现(packages/core `cache-scenarios.ts`;承接口径唯一真源 `prefix-carry.ts`),见 p2-plan §8 落地记录。
 
 ---
 
@@ -1917,6 +1920,16 @@ type AgentBudget = {
 
   maxInvocationsPerRun: number   // 【2026-09 修订】补齐，对齐总设计 §21.6 / agent-runtime-spec
   resultBudgetTokens: number     // 子代理结果预算
+
+  // 【2026-09-27 修订】(S28/WP3.6 还账 #17)Agent Tree 递归护栏,与 agent-runtime-spec §39
+  // RunBudget 四字段对齐(§93 Scheduler.assertCanSpawn 消费);缺省 = 不限制
+  maxDepth?: number
+
+  maxChildren?: number
+
+  maxTotalAgents?: number
+
+  maxRuntimeMs?: number
 }
 ```
 
@@ -3958,6 +3971,12 @@ POST /agent-runs/:id/handoff
 GET /tools
 GET /skills
 ```
+
+【2026-09-27 修订(S28/WP3.6)】§10 S28 任务 2 落地 12 条路由(上表 + 契约测试 12/12 绿);
+任务 3 观测面追加三只读端点 —— `GET /agent-runs/:id/timeline`(§121 时序,源 =
+execution_operations/step_runs/attempts,零新存储)、`GET /agent-runs/:id/cost`(§122
+RunCost 汇总,源 = attempts/step_runs 的 usage)、`GET /agents/:id/inspector`(§124
+Agent Inspector 读面,Definition + Runtime State + Tool Calls + Artifacts + Budget)。
 
 ---
 

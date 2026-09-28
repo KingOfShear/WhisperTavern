@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@whispertavern/adapters": "workspace:*",
+    "@whispertavern/agent": "workspace:*",
     "@whispertavern/contracts": "workspace:*",
     "@whispertavern/core": "workspace:*",
     "@whispertavern/runtime": "workspace:*",

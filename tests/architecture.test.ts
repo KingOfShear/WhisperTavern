@@ -52,6 +52,27 @@ function collectSourceFiles(): string[] {
 
 const SOURCE_FILES = collectSourceFiles()
 
+/** 收集测试文件(packages/apps/tests 三处的 *.test.ts)——D 组的扫描面 */
+function collectTestFiles(): string[] {
+  const out: string[] = []
+  const SKIP = new Set(['node_modules', 'dist', 'coverage'])
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name)
+      if (e.isDirectory()) {
+        if (!SKIP.has(e.name)) walk(p)
+      } else if (e.name.endsWith('.test.ts')) {
+        out.push(relative(REPO_ROOT, p).replace(/\\/g, '/'))
+      }
+    }
+  }
+  for (const root of ['packages', 'apps', 'tests']) {
+    const abs = join(REPO_ROOT, root)
+    if (existsSync(abs)) walk(abs)
+  }
+  return out
+}
+
 /** §5.4 权威事件表 → Map<事件名, 分档> */
 function parseSpecEventCatalog(): Map<string, string> {
   const md = readText('docs/technical-design.md')
@@ -203,6 +224,33 @@ describe('B 依赖方向（AGENTS §3 纪律 6 单向依赖）', () => {
       .flatMap((p) => p.internalDeps.filter((d) => byName.get(d)?.dir.startsWith('apps/')).map((d) => `${p.name} → ${d}`))
     expect(violations).toEqual([])
   })
+
+  /**
+   * B4 编排层是终点（§38 决策 45,方案 A）。
+   *
+   * 这条是 B3 的镜像:B3 防"包反向依赖应用",B4 防"Agent 逻辑被塞回下层"和
+   * "下层反向引用编排层"。没有它,`packages/agent` 会慢慢退化成"多加一个依赖而已",
+   * 而分层一旦破口就再也回不去——所以必须在它还是空壳时就焊死。
+   */
+  it('B4 编排层是终点:contracts / core / runtime 不得依赖 agent,且 agent 的依赖白名单固定', () => {
+    const ORCHESTRATOR = '@whispertavern/agent'
+    const LOWER_LAYERS = ['@whispertavern/contracts', '@whispertavern/core', '@whispertavern/runtime']
+    const backRefs = LOWER_LAYERS.flatMap((name) => {
+      const pkg = byName.get(name)
+      if (pkg === undefined) return [`${name} 不在 workspace（包名改了？）`]
+      return pkg.internalDeps.includes(ORCHESTRATOR) ? [`${name} → ${ORCHESTRATOR}`] : []
+    })
+    expect(backRefs, `下层反向依赖编排层：${backRefs.join(', ')}`).toEqual([])
+
+    const agent = byName.get(ORCHESTRATOR)
+    expect(agent, '未找到 packages/agent（依赖方向裁决的前提）').toBeDefined()
+    const allowed = new Set(LOWER_LAYERS)
+    const strays = (agent?.internalDeps ?? []).filter((d) => !allowed.has(d))
+    expect(strays, `agent 依赖越出编排层许可集（新增需先改决策 45）：${strays.join(', ')}`).toEqual([])
+    // 决策 45 第 4 条:骨架必须真的声明 contracts / core / runtime,否则 S23+ 无法在包内落码
+    const missing = LOWER_LAYERS.filter((d) => !(agent?.internalDeps ?? []).includes(d))
+    expect(missing, `agent 未声明依赖：${missing.join(', ')}`).toEqual([])
+  })
 })
 
 describe('C 代码风格底线（AGENTS §3 纪律 6：显式类型，禁 any 出口）', () => {
@@ -215,7 +263,12 @@ describe('C 代码风格底线（AGENTS §3 纪律 6：显式类型，禁 any �
           const trimmed = line.trim()
           if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return
           // 只查代码部分：行内注释里的 "any" 是说明文字，不是类型逃逸
-          const codePart = line.split('//')[0]
+          let codePart = line.split('//')[0]
+          // S25 精化:①字符串字面量里的 "any"(受限 DSL 的 all/any/not 组合器)不是类型;
+          // ②属性访问 .any 与对象键 any: 同理。剩余位置的裸 any 才是类型逃逸。
+          codePart = codePart.replace(/'[^']*'|"[^"]*"/g, "''")
+          codePart = codePart.replace(/\.\s*any\b/g, '.member')
+          codePart = codePart.replace(/\bany\s*:/g, 'key:')
           if (/\bany\b/.test(codePart)) hits.push(`${file}:${i + 1} ${trimmed.slice(0, 60)}`)
         })
     }
@@ -234,6 +287,68 @@ describe('D 测试门禁完整性（防新包漏接 CI）', () => {
     const root = readText('vitest.config.ts')
     expect(root).toContain("'packages/*/vitest.config.ts'")
     expect(root).toContain("'apps/*/vitest.config.ts'")
+  })
+
+  /**
+   * S21(WP2.6):两道缓存硬门禁是 P2 出场的机器凭证——文件被删/被掏空/千轮窗口被悄悄缩小,
+   * 都必须在 CI 里变红(它们本身没有"被谁 import"的引用关系,只有这条能拦住删除)。
+   */
+  it('D3 缓存稳定性门禁必须存在且未被掏空(千轮窗口不许缩)', () => {
+    const gates = ['packages/core/src/compiler/cache-scenarios.test.ts', 'apps/server/src/cache-stability.test.ts']
+    const missing = gates.filter((f) => !existsSync(join(REPO_ROOT, f)))
+    expect(missing, `缓存门禁文件缺失: ${missing.join(', ')}`).toEqual([])
+    for (const f of gates) {
+      expect(readText(f).includes('expect('), `${f} 无任何断言,门禁形同虚设`).toBe(true)
+    }
+    expect(readText('packages/core/src/compiler/cache-scenarios.test.ts')).toContain('rounds: 1000')
+  })
+
+  /**
+   * D4 迁移版本号不得硬编码(2026-09-26,S22 加 v8 时被同一类假失败咬了两次)。
+   *
+   * 版本是可派生的(`LATEST_SCHEMA_VERSION`),写死就是纪律 6 说的 magic number;
+   * 而"加一条迁移 → 另一个文件莫名变红"是最没有信息量的失败,还会掩盖真问题。
+   */
+  it('D4 断言"已应用到最新"时必须派生版本号,不得写死', () => {
+    const testFiles = collectTestFiles()
+    expect(testFiles.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    // 命中形态:`currentVersion(...)).toBe(8)` / `appliedMigrations...toEqual({ from: 0, to: 8 })`
+    const re = /(currentVersion|appliedMigrations)[^\n]*?(\.toBe\(\s*\d|to:\s*\d)/
+    for (const file of testFiles) {
+      readText(file)
+        .split('\n')
+        .forEach((line, i) => {
+          if (re.test(line.split('//')[0] ?? '')) offenders.push(`${file}:${i + 1} ${line.trim().slice(0, 80)}`)
+        })
+    }
+    expect(
+      offenders,
+      `硬编码迁移版本号(改用 LATEST_SCHEMA_VERSION):\n${offenders.join('\n')}`,
+    ).toEqual([])
+  })
+
+  /**
+   * D5 S28(WP3.6):恢复/重放确定性门禁(agent-runtime-spec §173 Replay/Recovery 组的机器凭证)。
+   *
+   * 与 D3 同构——`s27-recovery.test.ts` 是 P3 出场的三条硬凭证(Test 5 Resume / Test 6
+   * Crash Recovery / Test 10 Deterministic Replay)所在;文件被删/被掏空,CI 必须红。
+   * 锚点:
+   * - 崩溃恢复断言(§97:Zombie 清零 + planRecovery);
+   * - X14 逐字节一致(Replay 轮 serialized.parts 与源 Run 逐字节);
+   * - Replay 模式不写新 tool_calls(§146 安全性)。
+   * 若门禁被拆分到多文件,更新本哨兵的文件清单与锚点即可(不新造平行门禁)。
+   */
+  it('D5 P3 恢复/重放确定性门禁必须存在且未被掏空(X14 逐字节 + §97 恢复)', () => {
+    const GATE = 'packages/agent/src/runtime/s27-recovery.test.ts'
+    expect(existsSync(join(REPO_ROOT, GATE)), `P3 确定性门禁文件缺失: ${GATE}`).toBe(true)
+    const src = readText(GATE)
+    expect(src.includes('expect('), `${GATE} 无任何断言,门禁形同虚设`).toBe(true)
+    expect(src, `${GATE} 缺 X14 逐字节一致断言`).toContain('JSON.stringify(partsReplay)')
+    expect(src, `${GATE} 缺崩溃恢复(Zombie 清零)断言`).toContain('zombie.n')
+    expect(src, `${GATE} 缺 Replay 不写新 tool_calls(§146)`).toContain('replayToolRows.n')
+    // 门禁必须挂在 vitest projects(packages/agent 是其归属包)——防它被移到不被跑的位置
+    expect(readText('packages/agent/vitest.config.ts')).toContain("'src/**/*.test.ts'")
   })
 })
 

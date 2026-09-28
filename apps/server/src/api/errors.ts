@@ -25,6 +25,8 @@ export const API_ERROR_CODES = [
   'PROVIDER_TIMEOUT',
   'PROVIDER_BAD_RESPONSE',
   'GENERATION_NOT_FOUND',
+  'AGENT_NOT_FOUND', // S28(§154):Definition/Agent Run 不存在(api-spec §8;与 GENERATION_NOT_FOUND 同档 404)
+  'AGENT_RECURSION_LIMIT', // S28(还账 #17):spawn 超 Agent Tree 护栏(api-spec §8)
   'IDEMPOTENCY_CONFLICT',
 ] as const
 
@@ -46,6 +48,7 @@ export function httpStatusFor(code: string): number {
       return 400
     case 'NOT_FOUND':
     case 'GENERATION_NOT_FOUND':
+    case 'AGENT_NOT_FOUND': // §154 /agents 与 /agent-runs 的 404 档(与 GENERATION_NOT_FOUND 同档)
     case 'PROVIDER_NOT_FOUND':
     case 'WORLDBOOK_NOT_FOUND':
     case 'PRESET_NOT_FOUND':
@@ -53,6 +56,7 @@ export function httpStatusFor(code: string): number {
       return 404
     case 'CONFLICT':
     case 'IDEMPOTENCY_CONFLICT':
+    case 'AGENT_RECURSION_LIMIT': // §154 delegate/handoff 超护栏 → 与 IDEMPOTENCY 同档 409
       return 409
     case 'PROMPT_COMPILE_FAILED':
     case 'PROMPT_BUDGET_EXCEEDED':

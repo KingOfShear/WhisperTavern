@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { LATEST_SCHEMA_VERSION } from '@whispertavern/runtime'
 import type { CreatedApp } from './server'
 import { cleanupHarnesses, makeE2eHarness } from './harness'
 
@@ -132,7 +133,7 @@ describe('S8 端到端(§4.10 DoD 自动化面)', () => {
     // 重启恢复:关闭后重开同一库文件
     store.close()
     const reopened = harness.open()
-    expect(reopened.store.appliedMigrations.to).toBe(7)
+    expect(reopened.store.appliedMigrations.to).toBe(LATEST_SCHEMA_VERSION)
 
     const messages = (await (await reopened.app.request(`/api/v2/chats/${chatId}/messages`)).json()) as {
       data: { role: string; content: string }[]
@@ -143,7 +144,8 @@ describe('S8 端到端(§4.10 DoD 自动化面)', () => {
       status: string
       snapshot_id: string
     }[]
-    expect(runsRows[0]?.status).toBe('completed')
+    // §4.3 ExecutionStatus 口径(S23 统一):正常完成 = succeeded(P0 曾写 'completed')
+    expect(runsRows[0]?.status).toBe('succeeded')
     const snapshotId = runsRows[0]?.snapshot_id ?? ''
 
     // usage 入库且 source 分对(§17.3:estimated 不入命中率分母,字段先分对)

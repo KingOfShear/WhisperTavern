@@ -33,7 +33,7 @@ export {
   pendingVersions,
   MigrationError,
 } from './db/migrate'
-export { MIGRATIONS, type Migration } from './db/migrations'
+export { MIGRATIONS, LATEST_SCHEMA_VERSION, type Migration } from './db/migrations'
 export * from './db/schema'
 export {
   activateMessage,
@@ -63,6 +63,7 @@ export {
   SnapshotRegistry,
   type DispatchInput,
   type DispatchResult,
+  type DispatchToolCall,
   type GenerationRecord,
   type GenerationSink,
 } from './generation/dispatch'
@@ -73,6 +74,7 @@ export {
 } from './secrets/secret-store'
 export {
   startRun,
+  prepareIteration,
   buildContributions,
   loadActiveChain,
   SERVER_COMPILER_VERSION,
@@ -80,8 +82,63 @@ export {
   type StartRunInput,
   type StartedRun,
   type StartRunResult,
+  type IterationPrep,
+  type PrepareIterationResult,
 } from './generation/run'
 export {
   buildRuntimeVariables,
   type BuildRuntimeVariablesInput,
 } from './generation/variables'
+export {
+  AGENT_STATUSES,
+  assertTransition,
+  canTransition,
+  ExecutionStatusViolation,
+  EXECUTION_STATUSES,
+  EXECUTION_STATUS_SPEC_NOTE,
+  isTerminalStatus,
+  LEGACY_EXECUTION_STATUS_ALIAS,
+  normalizeExecutionStatus,
+  TERMINAL_AGENT_STATUSES,
+  TERMINAL_EXECUTION_STATUSES,
+  type AgentStatus,
+  type ExecutionStatus,
+} from './execution/status'
+export {
+  appendAttempt,
+  appendOperation,
+  appendStepRun,
+  APPROVAL_OUTCOMES,
+  completeOperation,
+  createExecutionRun,
+  decideApproval,
+  ExecutionReferenceError,
+  ExecutionSequenceConflict,
+  heartbeatRun,
+  loadExecutionTree,
+  loadRun,
+  recordArtifact,
+  recordCheckpoint,
+  recordToolCall,
+  requestApproval,
+  transitionAttempt,
+  transitionRun,
+  transitionStepRun,
+  type AppendAttemptInput,
+  type AppendOperationInput,
+  type AppendStepRunInput,
+  type ApprovalOutcome,
+  type CreateExecutionRunInput,
+  type ExecutionTree,
+} from './execution/store'
+export {
+  classifyRecovery,
+  DEFAULT_RECOVERY_TIMEOUT_MS,
+  isZombie,
+  markRunInterrupted,
+  recoveryTargetStatus,
+  scanForZombieRuns,
+  type RecoveryAction,
+  type RecoveryVerdict,
+  type ZombieRunReport,
+} from './execution/recovery'

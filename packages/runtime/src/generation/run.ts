@@ -19,7 +19,7 @@ import { buildWorldbookContributions, type WorldbookMode } from './worldbook'
 import { buildPresetContributions } from './preset'
 import { buildPersonaContributions } from './persona'
 import { buildRuntimeVariables } from './variables'
-import type { Chat, Message } from '@whispertavern/contracts'
+import type { Chat, Message, ProviderTool } from '@whispertavern/contracts'
 import { dispatchGeneration, SnapshotRegistry, type DispatchResult } from './dispatch'
 import type { EventBus } from '../events/bus'
 import type { WhisperTavernDb } from '../db/database'
@@ -71,6 +71,16 @@ export interface StartedRun {
   generationId: string
   messageId: string
   snapshotId: string
+  /**
+   * Context Resolution 的产物(编译前的贡献集合,已含 layout 提示)。
+   *
+   * 【S23 补】供 agent 层做 §152–§155 的 provenance / 审计与 §37 Turn 记账——
+   * 属 §38 决策 45 第 3 条允许的"补更细的生成原语导出",**不改任何既有语义**。
+   * 世界书激活**有副作用**(运行时态 + 审计落库),故调用方必须复用这一份,
+   * 不得为取 provenance 而自行再解析一次(会重复激活)。
+   * 最终排序 / 分区仍由 compile() 决定(§153:解析不负责 Layout)。
+   */
+  contributions: readonly PromptContribution[]
   /** 异步完成句柄(§143:调用方不 await;取消/状态查询走 registry) */
   completion: Promise<DispatchResult>
 }
@@ -126,6 +136,13 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   const persona = buildPersonaContributions({ store, chatId: input.chatId })
   const preset = buildPresetContributions({ store, chatId: input.chatId })
 
+  const contributions: PromptContribution[] = [
+    ...buildContributions(chat.value, chain.value),
+    ...persona.contributions,
+    ...preset.contributions,
+    ...worldbook.contributions,
+  ]
+
   const outcome = compile({
     chatId: input.chatId,
     snapshotId,
@@ -138,12 +155,7 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
     // S19 §5:adapter 声明的 cacheType → providerStrategy.prefixTooSmall 阈值判定
     providerCacheType: input.adapter.capabilities(input.model).cacheType,
     mode: 'preview',
-    contributions: [
-      ...buildContributions(chat.value, chain.value),
-      ...persona.contributions,
-      ...preset.contributions,
-      ...worldbook.contributions,
-    ],
+    contributions,
     variables,
     ...(last !== undefined ? { lastMessage: { id: last.id, role: last.role, content: last.content } } : {}),
     // S18 §58:跨轮失效事件(runtime 从世界书分区诊断注入;MESSAGE_EDITED 等变体类型
@@ -168,13 +180,17 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   store.db.insert(runs).values({
     id: runId,
     chatId: input.chatId,
-    status: 'streaming',
+    // §4.3 ExecutionStatus 口径(S23 统一):run 在跑 = running。
+    // P0–P2 曾写 'streaming',与新口径不同名;存量行由 LEGACY_EXECUTION_STATUS_ALIAS
+    // 在读侧归一,migration v9 已把库内旧值回填(runtime/execution/status.ts)。
+    status: 'running',
     provider: input.providerId,
     model: input.model,
     snapshotId: snapshot.id,
     messageId,
     createdAt: now,
     updatedAt: now,
+    lastHeartbeatAt: now,
   }).run()
   store.db.insert(promptSnapshots).values({
     id: snapshot.id,
@@ -202,26 +218,11 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   })
 
   const completion = dispatchGeneration(
-    {
-      adapter: input.adapter,
-      bus,
-      snapshots,
-      sink: (record) => {
-        store.db
-          .insert(generations)
-          .values(
-            // providerId 覆写为 providers 行主键(dispatch 带的是 adapter 归一 id;
-            // generations.provider_id 的 FK 指向 providers 表,database-schema §51)
-            recordToRow({ ...record, providerId: input.providerId }) as typeof generations.$inferInsert,
-          )
-          .run()
-        if (record.usageSource !== undefined) deps.onUsageRecorded?.()
-      },
-    },
+    { adapter: input.adapter, bus, snapshots, sink: generationSink(deps, input.providerId) },
     { runId, chatId: input.chatId, snapshot, sampling: input.sampling, signal: input.signal, now },
   )
 
-  // 完成侧(异步):回复入树(role=character,RP 语义)+ run 状态收尾(§25 GenerationState)。
+  // 完成侧(异步):回复入树(role=character,RP 语义)+ run 状态收尾(§4.3 ExecutionStatus)。
   // swipe 填充语义(§20/§22):completed 时把正文写入预建变体壳(messages 内容补全,
   // 壳本来就是占位事实,不违反"编辑=新变体"——那是针对已有正文消息的规则),
   // leaf 已在壳上(createVariant 移过),并广播 chat.updated(action=variant_filled)。
@@ -258,24 +259,31 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
       store.db
         .update(runs)
         .set({
-          status: result.status === 'completed' ? 'completed' : result.status === 'cancelled' ? 'cancelled' : 'failed',
+          // §4.3 ExecutionStatus 口径(S23 统一):正常完成 = succeeded(P0 曾写 'completed')
+          status: result.status === 'completed' ? 'succeeded' : result.status === 'cancelled' ? 'cancelled' : 'failed',
           error: result.error === undefined ? undefined : JSON.stringify(result.error),
           updatedAt: doneAt,
+          completedAt: doneAt,
+          lastHeartbeatAt: doneAt,
         })
         .where(eq(runs.id, runId))
         .run()
       return result
     })
     .catch((error: unknown) => {
+      const failedAt = new Date().toISOString() as Timestamp
       store.db
         .update(runs)
-        .set({ status: 'failed', error: String(error).slice(0, 500), updatedAt: new Date().toISOString() as Timestamp })
+        .set({ status: 'failed', error: String(error).slice(0, 500), updatedAt: failedAt, completedAt: failedAt })
         .where(eq(runs.id, runId))
         .run()
       throw error
     })
 
-  return { ok: true, value: { runId, generationId, messageId, snapshotId: snapshot.id, completion: trackedCompletion } }
+  return {
+    ok: true,
+    value: { runId, generationId, messageId, snapshotId: snapshot.id, contributions, completion: trackedCompletion },
+  }
 }
 
 /** 活跃链(根 → 叶);空链返回空数组(§24:先有消息才能生成)。已删消息不进历史(§19 软删) */
@@ -290,6 +298,186 @@ export function loadActiveChain(store: WhisperTavernDb, leafId: string | undefin
     chain.push(loaded.value)
   }
   return { ok: true, value: chain }
+}
+
+/**
+ * S24(§36 工具循环):为**已存在的 Run**准备一轮"编译 → 快照 → dispatch"。
+ *
+ * 与 startRun 的三点差异(为什么不是同一个函数):
+ * 1. **不建 runs 行** —— Run 由调用方(S23 的执行层)创建,循环逐轮复用同一 runId;
+ * 2. **不要求链尾是 user** —— 第 2+ 轮的链尾是 tool 结果消息(§10);
+ * 3. dispatch **同步可 await** —— 循环拥有消息写入与 Run 状态收尾的时序,
+ *    startRun 的 fire-and-forget 完成侧(自动写回复 + 状态收尾)不适用。
+ *
+ * `recurringContributions`:persona/preset/worldbook 贡献只在**首轮**计算并透传回来
+ * 复用——①世界书激活有副作用(运行时态 + 审计落库),同 run 内重算会重复记账;
+ * ②循环内这些段不变,复用 = 缓存前缀稳定(§36.3 的立论)。
+ * base chat 贡献每轮重算(历史在长:assistant/tool 消息逐轮入树)。
+ */
+export interface IterationPrep {
+  runId: string
+  snapshotId: SnapshotId
+  contributions: readonly PromptContribution[]
+  /** 透传给下一轮复用的 persona/preset/worldbook 贡献(见上) */
+  recurringContributions: readonly PromptContribution[]
+  /** 同步可 await 的一轮 dispatch(generations 落库 + usage 事件在内部完成) */
+  dispatch: () => Promise<DispatchResult>
+}
+
+export type PrepareIterationResult = Result<IterationPrep, ApplicationError>
+
+export function prepareIteration(
+  deps: RunDeps,
+  input: {
+    runId: string
+    chatId: ChatId
+    adapter: ProviderAdapter
+    providerId: string
+    model: string
+    sampling?: ProviderChatRequest['sampling']
+    signal?: AbortSignal
+    now: Timestamp
+    recurringContributions?: readonly PromptContribution[]
+    /** S24:暴露给模型的工具清单(进 serialized.tools;§31) */
+    tools?: readonly ProviderTool[]
+    /**
+     * S26:贡献过滤器(Agent Runtime 的 Context Policy 落点,§19 分工——
+     * Agent Runtime 决定"哪些内容进 Context";Layout 仍归 Compiler)。
+     * 依赖方向保持 runtime ← agent:runtime 只认函数,不认 agent 层类型。
+     */
+    filterContributions?: (contributions: PromptContribution[]) => PromptContribution[]
+    /** S26 §106:工具副作用产生的缓存失效原因(空缺省 = 无失效;进 compile 重算 CachePlan) */
+    cacheInvalidations?: import('@whispertavern/contracts').CacheBreakReason[]
+  },
+): PrepareIterationResult {
+  const { store, bus, snapshots } = deps
+  const now = input.now
+
+  const chat = loadChat(store, input.chatId)
+  if (!chat.ok) return chat
+  const chain = loadActiveChain(store, activeLeafId(store, input.chatId))
+  if (!chain.ok) return chain
+
+  const snapshotId = uuidv7() as SnapshotId
+  const variables = buildRuntimeVariables({ store, chat: chat.value })
+  const mode = resolveWorldbookMode(store, chat.value.presetId)
+
+  const recurring =
+    input.recurringContributions ??
+    (() => {
+      const worldbook = buildWorldbookContributions({
+        store,
+        chatId: input.chatId,
+        sequence: chat.value.messageSequence,
+        messages: chain.value.map((m) => ({ id: m.id, role: m.role, content: m.content })),
+        runId: input.runId,
+        now,
+        variables,
+        mode,
+      })
+      const persona = buildPersonaContributions({ store, chatId: input.chatId })
+      const preset = buildPresetContributions({ store, chatId: input.chatId })
+      return [...persona.contributions, ...preset.contributions, ...worldbook.contributions] as const
+    })()
+
+  const contributions: PromptContribution[] = [...buildContributions(chat.value, chain.value), ...recurring]
+
+  const outcome = compile({
+    chatId: input.chatId,
+    snapshotId,
+    provider: input.providerId,
+    model: input.model,
+    compilerVersion: SERVER_COMPILER_VERSION,
+    now,
+    maxContextTokens: input.adapter.capabilities(input.model).maxContextTokens,
+    maxOutputTokens: input.adapter.capabilities(input.model).maxOutputTokens,
+    providerCacheType: input.adapter.capabilities(input.model).cacheType,
+    mode: 'preview',
+    contributions,
+    variables,
+    ...(chain.value.at(-1) !== undefined
+      ? {
+          lastMessage: {
+            id: chain.value.at(-1)!.id,
+            role: chain.value.at(-1)!.role,
+            content: chain.value.at(-1)!.content,
+          },
+        }
+      : {}),
+    // 循环内 worldbook 诊断已随首轮落审计;复用轮默认不注入失效事件(前缀稳定),
+    // 但工具上报的世界书变更(S26 §106)会作为显式失效原因传进来 → CachePlan 重算
+    cacheInvalidations: input.cacheInvalidations ?? [],
+  })
+  if (!outcome.ok) {
+    const budgetLike = outcome.error.code === 'PROMPT_CONTEXT_TOO_LARGE'
+    return {
+      ok: false,
+      error: {
+        code: budgetLike ? 'PROMPT_BUDGET_EXCEEDED' : 'PROMPT_COMPILE_FAILED',
+        message: outcome.error.message,
+        retryable: false,
+        details: { diagnostics: outcome.error.diagnostics },
+      },
+    }
+  }
+  // S24:工具清单进 serialized(catchall 键透传;buildGenerationRequest 读 `serialized.tools`
+  // 挂上 wire)。挂账:tools 不参与 serialized.hash——工具清单哈希随 S27 Replay 口径统一。
+  const snapshotWithTools =
+    input.tools !== undefined && input.tools.length > 0
+      ? ({ ...outcome.value.snapshot, serialized: { ...outcome.value.snapshot.serialized, tools: [...input.tools] } } as typeof outcome.value.snapshot)
+      : outcome.value.snapshot
+  const snapshot = snapshotWithTools
+  snapshots.register(snapshot)
+  store.db.insert(promptSnapshots).values({
+    id: snapshot.id,
+    chatId: input.chatId,
+    runId: input.runId,
+    provider: snapshot.provider,
+    model: snapshot.model,
+    compilerVersion: snapshot.compilerVersion,
+    ir: JSON.stringify(snapshot.ir),
+    cachePlan: JSON.stringify(snapshot.cachePlan),
+    serialized: JSON.stringify(snapshot.serialized),
+    hashes: JSON.stringify(snapshot.hashes),
+    diagnostics: JSON.stringify(snapshot.diagnostics),
+    createdAt: snapshot.createdAt,
+  }).run()
+  bus.publish({
+    type: 'prompt.snapshot.created',
+    runId: input.runId,
+    aggregateType: 'snapshot',
+    aggregateId: snapshot.id,
+    timestamp: now,
+    payload: { snapshotId: snapshot.id, chatId: input.chatId },
+  })
+
+  const dispatch = (): Promise<DispatchResult> =>
+    dispatchGeneration(
+      { adapter: input.adapter, bus, snapshots, sink: generationSink(deps, input.providerId) },
+      { runId: input.runId, chatId: input.chatId, snapshot, sampling: input.sampling, signal: input.signal, now },
+    )
+
+  return {
+    ok: true,
+    value: {
+      runId: input.runId,
+      snapshotId: snapshot.id,
+      contributions,
+      recurringContributions: recurring,
+      dispatch,
+    },
+  }
+}
+
+/** generations 落库 sink(startRun 与 prepareIteration 共用;FK 见 §51) */
+function generationSink(deps: RunDeps, providerId: string) {
+  return (record: Parameters<typeof recordToRow>[0]): void => {
+    deps.store.db
+      .insert(generations)
+      .values(recordToRow({ ...record, providerId }) as typeof generations.$inferInsert)
+      .run()
+    if (record.usageSource !== undefined) deps.onUsageRecorded?.()
+  }
 }
 
 /** Context Resolution(chat 状态 → 段,compiler-spec §3):P0 口径,见模块头 */

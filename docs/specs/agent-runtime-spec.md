@@ -1,6 +1,6 @@
 # WhisperTavern V2 — Agent Runtime Specification
 
-> 版本：V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
+> 版本：V2.2（2026-09-27：S28/WP3.6——§39 RunBudget 补 Agent Tree 四护栏字段、§93 Scheduler 补 `assertCanSpawn`、§100 补 `AGENT_RECURSION_LIMIT`（还账 #17，见 §39/§93 修订注）；§125 Debug 模式补实现注（五项能力 P3 已具备,Debug 读面 = §121 Run Timeline,见 §125 注））；V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
 > 状态：Draft（已与总设计对齐，待 P3 实施验证）
 > 文档层级：[technical-design.md](../technical-design.md) 之下的 **Agent Runtime 模块详细规格**，与 `prompt-compiler-spec.md`、`database-schema.md` 同级
 > 依赖：`database-schema.md`、`prompt-compiler-spec.md`
@@ -333,6 +333,20 @@ type ExecutionStatus =
 - **Attempt / Step Run**：同一状态基底；`waiting` 表示等待 tool / child / approval / 外部事件（§116）。
 - `AgentStatus`（§9）保留为 Agent Instance 的**聚合状态**（由当前 Run / Attempt 归约），与 ExecutionStatus 不合并。
 
+> 【2026-09-26 补、S22/WP3.1a 落地】上方枚举**漏列 `interrupted`**——§96（`running → recovery scan → unknown / interrupted`）、§97（心跳超时 → `interrupted`）、§98（`InternalRunStatus`）与 database-schema §34（`runs.status` 取值表）四处都要求它存在，且 §34 明示它是"进程崩溃 / 心跳超时后的**待恢复态**"。故补齐为：
+>
+> ```ts
+> type ExecutionStatus =
+>   | 'created' | 'queued' | 'running' | 'waiting'
+>   | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
+>   | 'paused' | 'resuming' | 'skipped'
+>   | 'interrupted'          // 补:§96/§97 的待恢复态,非终态
+> ```
+>
+> 两点必须写清：**① `interrupted` 不是终态**——它是"等恢复决策"的位置，出边为 `resuming / running / paused / failed / cancelled`；**② 终态封闭**为 `succeeded / failed / cancelled / timed_out / skipped`，无出边（§11 的 `completed → running`、`cancelled → running`、`failed → completed` 三条禁止由此成立）。落地实现见 `packages/runtime/src/execution/status.ts`（含该集合与转换表，架构守卫不覆盖此条，由单测守）。
+>
+> 另记一处**已知词汇漂移**（不属本节，留痕待 S23 处理）：P0–P2 期间 `runs.status` 实际写的是 `streaming` / `completed`，与本节的 `running` / `succeeded` 不同名；S22 已在 `execution/status.ts` 给出别名归一表，**存量行回填归 S23「Agent 执行生命周期」**（跨模块语义变更，不在持久化底座会话内静默改写）。
+
 ---
 
 # 4.4 Step Identity、Step Run Identity 与 Step Revision
@@ -530,9 +544,15 @@ type AgentStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
+  | 'interrupted'   // 【2026-09 补】database-schema §29 的 agent_runtime_states.status 取值表列了它，
+                    // 且 §97 要求"心跳超时 → interrupted"——§9 原枚举漏列,此处收编(纯补漏)
 ```
 
 状态转换必须受 State Machine 约束。
+
+> **【2026-09 调和注】`AgentStatus` 是 Agent Instance 的聚合态**(§4.3 末条:由当前
+> Run / Attempt 归约),不是"一次性生命周期"——`completed` / `failed` / `cancelled`
+> 是"刚结束那次 Run 的结果"的**瞬态**,Run 收尾即复位为 `idle`(见 §10 注)。
 
 ---
 
@@ -573,7 +593,19 @@ paused → cancelled
 
 waiting → running
 waiting → cancelled
+
+【2026-09 补,§29 收编】interrupted → { running | cancelled | failed }(§96/§97 恢复)
+
+【2026-09 补,聚合复位】{ running | waiting | paused | interrupted | completed |
+failed | cancelled } → idle
 ```
+
+> **【2026-09 调和注】为什么必须有"→ idle":** §29 的 `UNIQUE(chat_id, agent_id)`
+> 只允许每个 (chat, agent) 一行 Instance,而 §11 又禁止 `completed → running`。
+> 两者相撞的唯一自洽解是:**Run 收尾后聚合态复位为 `idle`,下一次触发走
+> `idle → queued → running`(新 Run)**。这样 §11 的禁止逐条仍然成立——
+> `completed → running` 这条边永远不存在。§4.3 末条为此提供依据:AgentStatus
+> 是"由当前 Run / Attempt 归约"的聚合态;没有在跑的 Run 时,聚合结果就是 `idle`。
 
 ---
 
@@ -1455,6 +1487,8 @@ interface AgentTurn {
     | 'cancelled'
     | 'budget_exceeded'
     | 'context_overflow'   // 见 §49.1
+    | 'failed'          // 【2026-09 补】Run 最终判死时关闭(瞬时失败不关 Turn 见 §37.1 三;
+                          // 不补此值则 agent.turn.started 将永久悬空,审计上无配对)
 }
 ```
 
@@ -1512,10 +1546,23 @@ interface RunBudget {
   maxCost?: number
 
   maxExecutionTimeMs?: number
+
+  /* S28(WP3.6)还账 #17 Agent Tree 递归护栏 —— 子代理整树预算(§93 Scheduler 消费)：
+     超出即拒绝 spawn(AGENT_RECURSION_LIMIT)。四字段与总设计 §21.6 / api-spec §70
+     AgentBudget 对齐;缺省 = 不限制(单聊默认无子树),仅 delegate/handoff 显式授权时生效。 */
+  maxDepth?: number
+
+  maxChildren?: number
+
+  maxTotalAgents?: number
+
+  maxRuntimeMs?: number
 }
 ```
 
 【2026-09 收编注】`RunBudget` 与 §38 的 `RuntimePolicy` 都定义了 `maxTurns / maxToolCalls`，二者关系为：**`RuntimePolicy` 是 AgentDefinition 上的默认值，`RunBudget` 是本次 Run 的生效值**（可由 `AgentRunInput.budget` 覆盖）。实现时以 RunBudget 为唯一执行判据，避免两处判定不一致。
+
+【2026-09-27 修订(S28/WP3.6 还账 #17)】`RunBudget` 补四字段承载 **Agent Tree 递归护栏**：`maxDepth`(A→B→A 的嵌套深度上限)、`maxChildren`(某 Run 的直接子代理数上限)、`maxTotalAgents`(整棵 Run Tree 的累计 Agent 数上限)、`maxRuntimeMs`(自根 Run 起的整树累计耗时上限)。判定点唯一 = **§93 Scheduler 的 `assertCanSpawn`**(spawn 前统一拦截)，不散落到各 delegate 路径；超限返回 `AGENT_RECURSION_LIMIT`(错误码见 §100)。
 
 Prompt Compiler 的 Context Budget 与 Agent Runtime Budget 不同。
 
@@ -2480,7 +2527,8 @@ interface OutputPolicy {
     | 'silent'
     | 'custom'
 
-  role?: 'assistant' | 'user' | 'tool'
+  role?: 'assistant' | 'user' | 'tool' | 'character' // S26 调和注:扩 'character'——本项目消息树
+  // 里 character 是 RP 一等角色(contracts chat.ts §3,不与 assistant 合并),Breaking:N
 
   authorId?: string
 }
@@ -2949,8 +2997,17 @@ interface RuntimeScheduler {
   pause(runId: string): Promise<void>
 
   resume(runId: string): Promise<void>
+
+  /* S28(WP3.6)还账 #17:spawn 前统一拦截。parentRunId 非空时,沿 Run Tree 向上累计
+     depth / 直接子数 / 整树 Agent 数 / 自根累计耗时,任一超过 RunBudget 四护栏字段即拒绝,
+     返回 AGENT_RECURSION_LIMIT(§39/§100)。无 parentRunId(根 Run)恒放行。 */
+  assertCanSpawn(parentRunId: string | null, budget: AgentBudget): Promise<void>
 }
 ```
+
+> 【2026-09-27 修订】Tree Guard 的**唯一判定点**在此(S28 落地):delegate §71 / handoff §73 / spawn
+> 类操作必须先过 `assertCanSpawn` 再建 Run。判定依据 = Run Tree 现况 + RunBudget 四护栏字段
+> (§39),不引用 AgentDefinition(Definition 只给默认,同预算口径 §39 收编注)。
 
 ---
 
@@ -3069,6 +3126,30 @@ interrupted
 
 ---
 
+## 97.1 重启恢复逐状态矩阵(还账 #11,S27 落地)
+
+每个执行状态在"进程崩溃 → 重启 → Recovery 扫描"后的行为表(`recoveryTimeoutMs` 内的
+心跳视为存活,不进 Recovery):
+
+| 重启前状态 | Recovery 扫描后 | 后续动作 | 依据 |
+|---|---|---|---|
+| created / queued | **原样保留** | Scheduler 重新派发(未开始执行,无副作用) | §4.3 主干 |
+| running | **interrupted**(心跳超时) | planRecovery:有检查点 → resume;无 → retry;非幂等未决 → 对账 | §96 |
+| waiting | **interrupted**(心跳超时) | 同 running(等 tool / approval / 子 Run) | §96/§116 |
+| paused | **原样保留**(有意暂停,非崩溃) | resume(runId) 直接可恢复 | §51 |
+| resuming | **interrupted**(心跳超时) | 同 running(恢复过程中再崩) | §96 |
+| interrupted | **原样保留** | 已被上次扫描标记,等待用户/策略裁决 | §96 |
+| succeeded / failed / cancelled / timed_out / skipped | **原样保留** | 终态无出边(§11),Recovery 不碰 | §11/§12 |
+
+**non-idempotent 对账(§50)**:崩溃时 `tool_calls.status=running` 的行按幂等分类分流——
+`none/idempotent` → 标记 `orphaned`(允许重执行);`non_idempotent`(含未声明,缺省保守)
+→ 阻塞,须调用方显式 `allowNonIdempotent` 确认外部状态后标记 `reconciled`;绝不静默重执行。
+
+**实现锚点**:`packages/agent/src/runtime/recovery.ts`(scanInterruptedRuns / planRecovery /
+reconcileToolCalls)+ `resume.ts`(resumeRun,§55 兼容性比对 runs.dependencyManifest)。
+
+---
+
 # 98. Run Status 扩展
 
 建议内部支持：
@@ -3144,6 +3225,8 @@ RUN_PAUSED
 
 RESUME_INCOMPATIBLE
 RUN_RECOVERY_FAILED
+
+AGENT_RECURSION_LIMIT
 
 WORKFLOW_INVALID
 WORKFLOW_CYCLE_DETECTED
@@ -3881,6 +3964,16 @@ interface DebugOptions {
   deterministic: boolean
 }
 ```
+
+【2026-09-27 实现注(S28/WP3.6 收官)】五项能力在本 P3 已全部具备,不再设独立开关:
+- `recordEvents` / `recordSnapshots` / `recordToolArguments`:S23(快照每轮落库)、S24(tool_calls 落账)、
+  S26(批准审计)起**恒开**——Replay(§143–§146)与 Recovery(§96/§97)依赖这些落账,加了开关只会
+  破坏确定性;
+- `deterministic` = §11 横切纪律 X14 的既有要求(固定 now/种子/录制回放),非可选项;
+- `recordRawProviderResponse`:Provider 原始响应不进常驻表(与 `execution_operations` 的
+  provider_request 明细区分),Replay 的逐字节一致以录制(§144)承担。
+**Debug 读面** = §121 Run Timeline(api-spec §154 的 `GET /agent-runs/:id/timeline`,源为
+attempts/step_runs 时序),需要更细设施级明细时启用 `execution_operations` 写入(S22 §4.5)。
 
 敏感信息仍必须遵守：
 

@@ -83,10 +83,28 @@ export interface DispatchInput {
   now: Timestamp
 }
 
+export interface DispatchToolCall {
+  /** 模型给这次调用分配的 id(§10 按 index 聚合后的成品) */
+  id: string
+  name: string
+  /** 原始 JSON 文本(argsFragment 依序拼接;解析归调用方,解析失败不 here 崩) */
+  arguments: string
+}
+
 export interface DispatchResult {
   generationId: string
   text: string
   reasoning: string
+  /**
+   * S24(§10 按 index 聚合):finishReason='tool_use' 时非空 —— 模型请求的工具调用,
+   * 顺序即 model order(§36.3 回灌顺序的锚)。
+   */
+  toolCalls?: DispatchToolCall[]
+  /**
+   * S24(PV8):reasoning 分块 + Anthropic thinking 签名;工具循环下一请求须把签名块
+   * 原样回传(缺签名 = INVALID_REQUEST,provider-adapter-spec §11)。
+   */
+  reasoningBlocks?: { text: string; signature?: string }[]
   finishReason?: string
   usage?: ProviderUsage
   status: 'completed' | 'cancelled' | 'failed'
@@ -137,6 +155,11 @@ export async function dispatchGeneration(
   const generationId = uuidv7()
   let text = ''
   let reasoning = ''
+  // §10:tool_call_delta 按 index 聚合(id/name 先到先用,argsFragment 依序拼接)
+  const toolCallParts = new Map<number, { id: string; name: string; args: string[] }>()
+  // PV8:reasoning 分块;signature 属于"当前思考块"(紧随其 thinking 文本之后到达)
+  const reasoningBlocks: { text: string; signature?: string }[] = []
+  let currentBlock: { text: string; signature?: string } | undefined
   let usage: ProviderUsage | undefined
   let finishReason: string | undefined
   let failure: { code: string; message: string } | undefined
@@ -144,8 +167,22 @@ export async function dispatchGeneration(
 
   const collect = (event: ProviderStreamEvent): void => {
     if (event.type === 'text_delta') text += event.text
-    else if (event.type === 'reasoning_delta') reasoning += event.text
-    else if (event.type === 'usage') usage = event.usage
+    else if (event.type === 'reasoning_delta') {
+      reasoning += event.text
+      if (currentBlock === undefined) {
+        currentBlock = { text: event.text }
+        reasoningBlocks.push(currentBlock)
+      } else {
+        currentBlock.text += event.text
+      }
+      if (event.signature !== undefined) currentBlock.signature = event.signature
+    } else if (event.type === 'tool_call_delta') {
+      const part = toolCallParts.get(event.index) ?? { id: event.id ?? '', name: event.name ?? '', args: [] }
+      if (event.id !== undefined && part.id === '') part.id = event.id
+      if (event.name !== undefined && part.name === '') part.name = event.name
+      if (event.argsFragment !== undefined) part.args.push(event.argsFragment)
+      toolCallParts.set(event.index, part)
+    } else if (event.type === 'usage') usage = event.usage
     else if (event.type === 'finish') finishReason = event.reason
     else if (event.type === 'error') {
       failure = { code: event.error.code, message: event.error.detail ?? event.error.code }
@@ -174,6 +211,15 @@ export async function dispatchGeneration(
   }
 
   const latencyMs = Date.now() - startedAt
+  const toolCalls: DispatchToolCall[] | undefined =
+    toolCallParts.size === 0
+      ? undefined
+      : [...toolCallParts.keys()]
+          .sort((a, b) => a - b)
+          .map((index) => {
+            const part = toolCallParts.get(index)!
+            return { id: part.id, name: part.name, arguments: part.args.join('') }
+          })
   const record: GenerationRecord = {
     id: generationId,
     runId: input.runId,
@@ -224,7 +270,17 @@ export async function dispatchGeneration(
     })
   }
 
-  return { generationId, text, reasoning, finishReason, usage, status, error: failure }
+  return {
+    generationId,
+    text,
+    reasoning,
+    ...(toolCalls === undefined ? {} : { toolCalls }),
+    ...(reasoningBlocks.length === 0 ? {} : { reasoningBlocks }),
+    finishReason,
+    usage,
+    status,
+    error: failure,
+  }
 }
 
 /** 从快照组装请求——请求内容的唯一合法来源(不允许调用方注入 messages) */
@@ -232,14 +288,30 @@ export function buildGenerationRequest(
   snapshot: DeepReadonly<PromptSnapshot>,
   input: Pick<DispatchInput, 'sampling' | 'signal' | 'runId'>,
 ): ProviderChatRequest {
-  // P0:tool 角色消息随 P3 工具流收编,构造时跳过(invariant 2 的期望投影同口径)
+  // S24:tool 角色消息收编(§6/§10)——parts 经 catchall 透传 toolCallId/isError/blocks。
+  // assistant 的 blocks(思考签名块/工具调用)一并投影;无 blocks 时仍为纯文本。
   const messages: ProviderMessage[] = snapshot.serialized.parts.flatMap(
     (part): ProviderMessage[] => {
       const role = part.role ?? 'user'
       const content = part.content ?? ''
       if (role === 'system') return [{ role: 'system', content }]
-      if (role === 'assistant') return [{ role: 'assistant', content }]
-      if (role === 'tool') return []
+      if (role === 'assistant') {
+        const blocks = (part as { blocks?: unknown }).blocks
+        return [
+          {
+            role: 'assistant',
+            content,
+            ...(Array.isArray(blocks) && blocks.length > 0 ? { blocks: blocks as Extract<ProviderMessage, { role: 'assistant' }>['blocks'] } : {}),
+          },
+        ]
+      }
+      if (role === 'tool') {
+        // parts 不带关联 ID(会话内元数据,真相源 = tool_calls 表);缺 ID 时按序合成
+        // 占位关联号——模型可见的**正文**仍是快照里的那份(不变量 2 的锚)。
+        const extra = part as { toolCallId?: unknown }
+        const toolCallId = typeof extra.toolCallId === 'string' && extra.toolCallId !== '' ? extra.toolCallId : `tool_part_${snapshot.serialized.parts.indexOf(part)}`
+        return [{ role: 'tool', toolCallId, content }]
+      }
       return [{ role: 'user', content }]
     },
   )
@@ -251,6 +323,11 @@ export function buildGenerationRequest(
     stream: true,
     signal: input.signal,
     metadata: { runId: input.runId },
+  }
+  // S24:快照携带的工具清单透传(段 catchall;无则不挂键)
+  const tools = (snapshot.serialized as { tools?: unknown }).tools
+  if (Array.isArray(tools) && tools.length > 0) {
+    request.tools = tools as ProviderChatRequest['tools']
   }
   // §16 翻译指令透传(S19):快照无 providerStrategy(P0 兼容)→ 不挂该键,adapter 无动作。
   // 快照为 DeepReadonly;cast 仅解除 readonly 标记,值不做任何改写(adapter 只读消费)。
@@ -270,24 +347,38 @@ export function assertSnapshotRegistered(
   }
 }
 
-/** 不变量 2:模型可见即已记录——请求 messages 必须能从快照序列化逐条重建(§5.5) */
+/** 不变量 2:模型可见即已记录——请求 messages 必须能从快照序列化逐条重建(§5.5)。
+ * S24:比较键含 role/content/blocks;**toolCallId 不参与**——它是会话内关联 ID,
+ * 一致性由 tool_calls 表承载(快照证据链锁"模型可见的正文"),parts 无 ID 列。 */
 export function assertRequestMatchesSnapshot(
   request: ProviderChatRequest,
   snapshot: DeepReadonly<PromptSnapshot>,
 ): void {
-  const expected = snapshot.serialized.parts.map((p) => `${p.role ?? 'user'}\u0000${p.content ?? ''}`)
-  const actual = request.messages.map((m) => `${m.role}\u0000${m.content}`)
+  const partKey = (p: { role?: unknown; content?: unknown; blocks?: unknown }): string =>
+    [p.role ?? 'user', p.content ?? '', p.blocks === undefined ? '' : JSON.stringify(p.blocks)].join('\u0000')
+  const messageKey = (m: ProviderMessage): string =>
+    [m.role, m.content, m.role === 'assistant' && m.blocks !== undefined ? JSON.stringify(m.blocks) : ''].join('\u0000')
+  const expected = snapshot.serialized.parts.map(partKey)
+  const actual = request.messages.map(messageKey)
   if (expected.join('\u0001') !== actual.join('\u0001')) {
     throw new InvariantViolation('model-visible-recorded', '请求 messages 与快照序列化不一致')
   }
 }
 
-/** 不变量 3:元数据不进模型可见前缀——messages 只许 role/content,遥测只走 metadata 字段 */
+/** 不变量 3:元数据不进模型可见前缀——遥测只走 metadata 字段(§5.5)。
+ * S24 放宽(§6 P3 工具流):assistant 允许 blocks;tool 允许 toolCallId/isError。
+ * 除此之外的任何键仍然违规——遥测/运行时数据混进模型可见内容立即红。 */
 export function assertNoMetadataOnWire(request: ProviderChatRequest): void {
+  const allowed: Record<ProviderMessage['role'], readonly string[]> = {
+    system: ['role', 'content'],
+    user: ['role', 'content'],
+    assistant: ['role', 'content', 'blocks'],
+    tool: ['role', 'toolCallId', 'content', 'isError'],
+  }
   for (const message of request.messages) {
-    const keys = Object.keys(message)
-    if (keys.some((k) => k !== 'role' && k !== 'content')) {
-      throw new InvariantViolation('metadata-off-wire', `message 出现非 role/content 键: ${keys.join(',')}`)
+    const extra = Object.keys(message).filter((k) => !allowed[message.role].includes(k))
+    if (extra.length > 0) {
+      throw new InvariantViolation('metadata-off-wire', `message 出现非语义键: ${extra.join(',')}`)
     }
   }
   if (request.metadata !== undefined && request.messages.some((m) => JSON.stringify(m).includes('"metadata"'))) {

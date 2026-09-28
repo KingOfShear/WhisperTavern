@@ -160,8 +160,10 @@ export function applyBudget(input: BudgetInput): BudgetResult {
   }
 
   // 最终 included 按原始 IR 序输出(保留物理序;§49 序只决定"谁被裁",不重排)
+  // 令牌表化:原 segments.find-in-reduce 为 O(n²),长对话下与 cacheplan 同属热点(S21 千轮门禁实测)
+  const tokenById = new Map(segments.map((s) => [s.id, s.tokenCount]))
   const finalIncluded = segments.filter((s) => included.has(s.id)).map((s) => s.id)
-  const totalTokens = finalIncluded.reduce((sum, id) => sum + (segments.find((s) => s.id === id)?.tokenCount ?? 0), 0)
+  const totalTokens = finalIncluded.reduce((sum, id) => sum + (tokenById.get(id) ?? 0), 0)
 
   return {
     included: finalIncluded,

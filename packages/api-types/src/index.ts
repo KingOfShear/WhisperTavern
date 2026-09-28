@@ -347,3 +347,112 @@ export type CreateProviderRequest = {
 
 // ===== capabilities 透传(§15;Inspector/设置页展示用)=====
 export type CapabilitiesDto = ProviderCapabilities
+
+// ===== P3 Agent API(§154;Dto 按 §62/§64/§66/§76/§79 线格式投影)=====
+
+/** §62 Agent Definition 投影(§154 GET/POST /agents) */
+export type AgentDefinitionDto = {
+  id: string
+  version: number
+  name: string
+  description?: string
+  type: string
+  instructions: string
+  contextPolicy: Record<string, unknown>
+  memoryPolicy: Record<string, unknown>
+  toolPolicy: Record<string, unknown>
+  modelPolicy: Record<string, unknown>
+  runtimePolicy: {
+    maxTurns: number
+    maxToolCalls: number
+    maxExecutionTimeMs: number
+  } & Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
+export type CreateAgentRequest = {
+  name: string
+  description?: string
+  type?: string
+  instructions?: string
+  contextPolicy?: Record<string, unknown>
+  memoryPolicy?: Record<string, unknown>
+  toolPolicy?: Record<string, unknown>
+  modelPolicy?: Record<string, unknown>
+  runtimePolicy?: AgentDefinitionDto['runtimePolicy']
+  metadata?: Record<string, unknown>
+}
+
+/** §64 启动 Agent Run(POST /agents/{agentId}/runs) */
+export type AgentRunRequest = {
+  input: string
+  chatId?: string
+  parentRunId?: string
+  context?: Record<string, unknown>
+  /** §70 AgentBudget 子树(§39 四护栏字段在 delegate/handoff 消费) */
+  budget?: Partial<{
+    maxTurns: number
+    maxToolCalls: number
+    maxExecutionTimeMs: number
+    maxDepth: number
+    maxChildren: number
+    maxTotalAgents: number
+    maxRuntimeMs: number
+  }>
+}
+
+export type AgentRunStartDto = {
+  runId: string
+  chatId: string
+  agentId: string
+  status: string
+}
+
+/** §66 Agent Run 状态(§65 AgentRunState 的 §4.3 投影) */
+export type AgentRunStateDto = {
+  runId: string
+  chatId: string
+  agentId: string
+  agentVersion: number
+  status: string
+  mode: string
+  provider?: string
+  model?: string
+  parentRunId?: string
+  createdAt: string
+  updatedAt: string
+  error?: string
+}
+
+/** §76 ToolDefinition 投影(§154 GET /tools) */
+export type ToolDefinitionDto = {
+  id: string
+  name: string
+  description: string
+  inputSchema: unknown
+  permission: string
+  source: 'core' | 'plugin'
+}
+
+/** §79 Skill 投影(§154 GET /skills) */
+export type SkillDefinitionDto = {
+  id: string
+  name: string
+  description?: string
+}
+
+/** §71 Delegate(POST /agent-runs/{runId}/delegate) */
+export type DelegateRequest = {
+  agentId: string
+  task: string
+  context?: Record<string, unknown>
+  budget?: AgentRunRequest['budget']
+}
+
+/** §73 Handoff(POST /agent-runs/{runId}/handoff) */
+export type HandoffRequest = {
+  targetAgentId: string
+  reason: string
+  findings?: string
+  artifacts?: string[]
+}

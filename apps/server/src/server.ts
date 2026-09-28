@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { and, desc, eq, gt, isNull, lt, ne } from 'drizzle-orm'
 import { uuidv7 } from '@whispertavern/runtime'
 import { AnthropicAdapter, FakeProviderAdapter, GeminiAdapter, OpenAICompatAdapter } from '@whispertavern/adapters'
-import { compile, diffSnapshots, projectSegment, simulateCachePlan } from '@whispertavern/core'
+import { compile, diffSnapshots, isCacheScenarioName, projectSegment, replayCacheScenarios, simulateCachePlan } from '@whispertavern/core'
 import {
   importCard,
   importWorldbook,
@@ -38,6 +38,23 @@ import {
   type RuntimeEvent,
 } from '@whispertavern/runtime'
 import {
+  attempts as attemptsTable,
+} from '@whispertavern/runtime'
+import {
+  AGENT_TYPES,
+  assertCanSpawn,
+  createAgentDefinition,
+  listAgentDefinitions,
+  loadAgentDefinition,
+  resumeRun,
+  runAgent as runAgentOrchestrator,
+  ToolRegistry,
+  type AgentRunDeps,
+  type ToolDefinition,
+} from '@whispertavern/agent'
+import {
+  agentRuntimeStates,
+  artifacts as artifactsTable,
   chats as chatsTable,
   characterVersions,
   characters as charactersTable,
@@ -51,6 +68,8 @@ import {
   promptSnapshots,
   providers as providersTable,
   runs as runsTable,
+  stepRuns as stepRunsTable,
+  toolCalls as toolCallsTable,
   worldbookEntries,
   worldbookEntryVersions,
   worldbooks as worldbooksTable,
@@ -70,7 +89,7 @@ import type { ServerDeps } from './api/types'
  */
 
 type AppEnv = { Variables: { requestId: string } }
-type JsonStatus = 200 | 201 | 400 | 404 | 409 | 422 | 500
+type JsonStatus = 200 | 201 | 202 | 400 | 404 | 409 | 422 | 500
 
 interface Ctx {
   header(name: string, value: string): void
@@ -88,6 +107,15 @@ export interface CreatedApp {
 export function createApp(deps: ServerDeps): CreatedApp {
   const app = new Hono<AppEnv>()
   const registry = new RunStreamRegistry(deps.bus)
+  /** S28 §154:空注册表兜底(GET /tools 读面);持有者可注入已注册工具 */
+  const tools = deps.tools ?? new ToolRegistry({ store: deps.store, bus: deps.bus, persistApprovalAudit: () => undefined })
+  const agentRunDeps = (): AgentRunDeps => ({
+    store: deps.store,
+    bus: deps.bus,
+    snapshots: deps.snapshots,
+    registry: tools,
+    onUsageRecorded: () => deps.bus.flush(),
+  })
 
   // —— Request ID(api-spec §5):客户端建议携带,服务器兜底生成,响应回显 ——
   app.use('/api/v2/*', async (c, next) => {
@@ -972,6 +1000,42 @@ export function createApp(deps: ServerDeps): CreatedApp {
     const chat = loadChat(deps.store, chatId as ChatId)
     if (!chat.ok) return runtimeError(c, requestId, chat.error)
     const requestedRounds = body.rounds
+    const requestedScenarios = Array.isArray(body.scenarios) ? body.scenarios.filter((s) => typeof s === 'string') : []
+    const supportedScenarios = requestedScenarios.filter(isCacheScenarioName)
+    const unknownScenarios = requestedScenarios.filter((s) => !isCacheScenarioName(s))
+
+    // S21(WP2.6)§43 scenarios:声明场景族 → 确定性回放(合成轮次脚本喂真实 compile,零 Provider 调用)。
+    // 与下面的 S20 路径是**两种数据来源**:S20 只回放该 chat 已编译快照,不虚构轮次。
+    if (supportedScenarios.length > 0) {
+      const cap = Math.min(typeof requestedRounds === 'number' && requestedRounds > 0 ? Math.floor(requestedRounds) : 50, 1000)
+      const replay = replayCacheScenarios({ rounds: cap, scenarios: supportedScenarios })
+      return ok(c, requestId, {
+        rounds: replay.rounds.map((r) => ({
+          round: r.round,
+          stableTokens: r.stableTokens,
+          freshTokens: r.freshTokens,
+          volatileTokens: r.volatileTokens,
+          prefixHash: r.prefixHash,
+          theoreticalCachedTokens: r.cachedTokens,
+          cacheBreak: r.declaredBreaks[0] ?? r.unexpectedBreaks[0],
+          appliedScenarios: r.applied,
+          trimmedSegments: r.trimmedSegments,
+        })),
+        aggregate: {
+          expectedCacheRatio: replay.hitRatio,
+          totalInvalidatedTokens: replay.rounds.reduce((sum, r) => sum + (r.planInputTokens - r.cachedTokens), 0),
+        },
+        // §2.2 端到端 KPI + 未声明失效计数(两道 CI 门禁的同一口径,便于人在面板上复算)
+        kpi: {
+          hitRatio: replay.hitRatio,
+          costReduction: replay.costReduction,
+          unexpectedBreakTotal: replay.unexpectedBreakTotal,
+        },
+        simulator: replay.simulator,
+        unsupportedScenarios: unknownScenarios,
+      })
+    }
+
     const limit =
       typeof requestedRounds === 'number' && Number.isFinite(requestedRounds) && requestedRounds > 0
         ? Math.min(Math.floor(requestedRounds), 200)
@@ -983,7 +1047,6 @@ export function createApp(deps: ServerDeps): CreatedApp {
       theoreticalCachedTokens: number
       cacheBreak: boolean
     }[]
-    const scenarios = Array.isArray(body.scenarios) ? body.scenarios.filter((s) => typeof s === 'string') : []
     return ok(c, requestId, {
       // §44 CacheSimulationResult
       rounds: telemetry.rounds.map((r) => {
@@ -1006,9 +1069,9 @@ export function createApp(deps: ServerDeps): CreatedApp {
           .reduce((sum, s) => sum + (s.theoreticalStableTokens - s.theoreticalCachedTokens), 0),
       },
       simulator: telemetry.simulator,
-      // §43 scenarios(世界书触发/编辑/宏/swipe/分支/摘要/预算/群聊)属**确定性回放**,
-      // 由 S21 WP2.6 的 1000 轮模拟门禁交付;S20 只回放已有真实快照序列,不虚构场景。
-      unsupportedScenarios: scenarios,
+      // S20 路径只回放该 chat 已有真实快照;未识别的场景名原样回显(不静默忽略)。
+      // 已识别的场景族走上面的 S21 确定性回放分支,不会落到这里。
+      unsupportedScenarios: unknownScenarios,
     })
   })
 
@@ -1441,6 +1504,505 @@ export function createApp(deps: ServerDeps): CreatedApp {
     return ok(c, requestId, { id, name, version: 1 }, 201)
   })
 
+  // ===== P3 Agent API(§154;S28/WP3.6 落地)=====
+
+  /** §64 建 Run:provider 解析顺序 = body.providerId/model → agent.modelPolicy → chat 绑定 */
+  function resolveAgentProvider(
+    agentModelPolicy: Record<string, unknown>,
+    chat: Chat | undefined,
+    body: Record<string, unknown>,
+  ): { providerId: string; model: string; adapter: ProviderAdapter } | { error: { code: string; message: string } } {
+    const fromPolicy = (typeof agentModelPolicy.provider === 'string' ? agentModelPolicy.provider : undefined)
+    const fromPolicyModel = (typeof agentModelPolicy.model === 'string' ? agentModelPolicy.model : undefined)
+    const providerId = (typeof body.providerId === 'string' ? body.providerId : undefined)
+      ?? fromPolicy
+      ?? (chat?.modelProvider as string | undefined)
+    const model = (typeof body.model === 'string' ? body.model : undefined)
+      ?? fromPolicyModel
+      ?? (chat?.modelName as string | undefined)
+    if (providerId === undefined || model === undefined) {
+      return { error: { code: 'VALIDATION_ERROR', message: 'agent 未声明 modelPolicy.provider/model,且请求未覆盖' } }
+    }
+    const row = deps.store.db.select().from(providersTable).where(eq(providersTable.id, providerId)).get()
+    if (row === undefined) {
+      return { error: { code: 'PROVIDER_NOT_FOUND', message: `provider 不存在: ${providerId}` } }
+    }
+    const config = JSON.parse(row.config) as Record<string, unknown>
+    const secretRef = typeof config.secretRef === 'string' ? config.secretRef : undefined
+    const apiKey = secretRef === undefined ? undefined : deps.secretStore.get(secretRef)
+    try {
+      return { providerId, model, adapter: buildAdapter(row.type, config, apiKey) }
+    } catch (error) {
+      return { error: { code: 'VALIDATION_ERROR', message: String((error as Error).message) } }
+    }
+  }
+
+  /** §62/§63 GET /agents:Definition 列表(未软删;createdAt 升序) */
+  app.get('/api/v2/agents', (c) => {
+    const requestId = requestIdOf(c)
+    return ok(c, requestId, listAgentDefinitions(deps.store))
+  })
+
+  /** §63 POST /agents:建 Definition(name 必填;type 缺省 custom) */
+  app.post('/api/v2/agents', async (c) => {
+    const requestId = requestIdOf(c)
+    const body = await jsonBody(c)
+    const name = typeof body.name === 'string' ? body.name : ''
+    if (name === '') return fail(c, requestId, 'VALIDATION_ERROR', 'name 必填')
+    const requestedType = typeof body.type === 'string' ? body.type : 'custom'
+    if (!AGENT_TYPES.includes(requestedType as never)) {
+      return fail(c, requestId, 'VALIDATION_ERROR', `未知 agent type: ${requestedType}(${AGENT_TYPES.join('/')})`)
+    }
+    const definition = createAgentDefinition(deps.store, {
+      name,
+      description: typeof body.description === 'string' ? body.description : undefined,
+      type: requestedType as never,
+      instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+      contextPolicy: isRecord(body.contextPolicy) ? body.contextPolicy : undefined,
+      memoryPolicy: isRecord(body.memoryPolicy) ? body.memoryPolicy : undefined,
+      toolPolicy: isRecord(body.toolPolicy) ? body.toolPolicy : undefined,
+      modelPolicy: isRecord(body.modelPolicy) ? body.modelPolicy : undefined,
+      runtimePolicy: isRecord(body.runtimePolicy)
+        ? {
+            maxTurns: num(body.runtimePolicy.maxTurns, 8),
+            maxToolCalls: num(body.runtimePolicy.maxToolCalls, 20),
+            maxExecutionTimeMs: num(body.runtimePolicy.maxExecutionTimeMs, 10 * 60_000),
+          }
+        : undefined,
+      metadata: isRecord(body.metadata) ? body.metadata : undefined,
+      now: nowIso(),
+    })
+    deps.bus.publish({ type: 'agent.created', aggregateType: 'agent', aggregateId: definition.id, runId: undefined, timestamp: nowIso(), payload: { agentId: definition.id } })
+    return ok(c, requestId, definition, 201)
+  })
+
+  /**
+   * §64 POST /agents/:id/runs:启动 Agent Run(长任务原则 §143:先 track 再异步跑)。
+   * 请求体 {input, chatId?, parentRunId?, context?, budget?}。input 作为 user 消息
+   * 入树(runAgent 从活跃链读取),provider 解析见 resolveAgentProvider。
+   */
+  app.post('/api/v2/agents/:id/runs', async (c) => {
+    const requestId = requestIdOf(c)
+    const agentId = c.req.param('id')
+    const definition = loadAgentDefinition(deps.store, agentId as never)
+    if (definition === undefined) {
+      return fail(c, requestId, 'AGENT_NOT_FOUND', `agent 不存在: ${agentId}`)
+    }
+    const body = await jsonBody(c)
+    const inputText = typeof body.input === 'string' ? body.input : ''
+    if (inputText === '') return fail(c, requestId, 'VALIDATION_ERROR', 'input 必填')
+
+    // chatId:缺省 = 新建一个以 agent 命名的 chat(§64 chatId 可选)
+    let chatId = typeof body.chatId === 'string' ? body.chatId : undefined
+    if (chatId === undefined) {
+      const created = createChat(deps.store, deps.bus, { title: `agent:${definition.name}`, now: nowIso() })
+      if (!created.ok) return runtimeError(c, requestId, created.error)
+      chatId = created.value.id
+    } else {
+      const chat = loadChat(deps.store, chatId as ChatId)
+      if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    }
+    const chat = loadChat(deps.store, chatId as ChatId)
+
+    const resolved = resolveAgentProvider(definition.modelPolicy, chat.ok ? chat.value : undefined, body)
+    if ('error' in resolved) return fail(c, requestId, resolved.error.code, resolved.error.message)
+
+    // input → user 消息入树(runAgent 从活跃链编译)
+    const message = createMessage(deps.store, deps.bus, {
+      chatId: chatId as ChatId,
+      role: 'user',
+      content: inputText,
+      now: nowIso(),
+    })
+    if (!message.ok) return runtimeError(c, requestId, message.error)
+
+    // 长任务:先 track(不错过首事件)再异步跑;AbortController 供 cancel/pause 用
+    const controller = new AbortController()
+    const runId = uuidv7()
+    registry.track(runId, controller)
+
+    const parentRunId = typeof body.parentRunId === 'string' ? body.parentRunId : undefined
+    const guard = assertCanSpawn(deps.store, {
+      ...(parentRunId === undefined ? {} : { parentRunId: parentRunId as never }),
+      limits: budgetTreeLimits(body),
+      ...(isRecord(body.budget) ? {} : {}),
+    })
+    if (!guard.allowed) {
+      registry.abort(runId)
+      return fail(c, requestId, 'AGENT_RECURSION_LIMIT', guard.reason ?? 'Agent Tree 递归护栏拒绝 spawn', { status: 409 })
+    }
+
+    void runAgentOrchestrator(agentRunDeps(), {
+      chatId: chatId as ChatId,
+      agentId: agentId as never,
+      adapter: resolved.adapter,
+      providerId: resolved.providerId,
+      model: resolved.model,
+      signal: controller.signal,
+      runId: runId as never,
+      now: nowIso(),
+      budget: {
+        ...(isRecord(body.budget) ? {
+          ...(body.budget.maxTurns === undefined ? {} : { maxTurns: num(body.budget.maxTurns, 1) }),
+          ...(body.budget.maxToolCalls === undefined ? {} : { maxToolCalls: num(body.budget.maxToolCalls, 20) }),
+          ...(body.budget.maxExecutionTimeMs === undefined ? {} : { maxExecutionTimeMs: num(body.budget.maxExecutionTimeMs, 0) }),
+        } : {}),
+      },
+      ...(parentRunId === undefined ? {} : { parentRunId: parentRunId as never }),
+    })
+      .then((outcome) => {
+        if (!outcome.ok) {
+          deps.logger?.('error', `agent run 失败: ${runId}`, outcome.error.message)
+        } else if (outcome.value.status === 'failed') {
+          deps.logger?.('info', `agent run 完成但失败: ${runId}`, outcome.value.status)
+        }
+        registry.abort(runId) // 终止后清掉注册(懒淘汰兜底)
+      })
+      .catch((error) => {
+        deps.logger?.('error', `agent run 异常: ${runId}`, String(error))
+        registry.abort(runId)
+      })
+
+    return ok(c, requestId, {
+      runId,
+      chatId: chatId as string,
+      agentId,
+      status: 'running',
+    }, 202)
+  })
+
+  /** §66 GET /agent-runs/:id:Run 状态 + Attempt/Step 摘要(§65 AgentRunState 投影) */
+  app.get('/api/v2/agent-runs/:id', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'NOT_FOUND', `agent run 不存在: ${runId}`)
+    const attempts = deps.store.db.select().from(attemptsTable).where(eq(attemptsTable.runId, runId)).orderBy(attemptsTable.attemptNo).all()
+    return ok(c, requestId, {
+      runId: run.id,
+      chatId: run.chatId,
+      agentId: run.agentId,
+      agentVersion: run.agentVersion,
+      status: run.status,
+      mode: run.mode ?? 'live',
+      provider: run.provider,
+      model: run.model,
+      parentRunId: run.parentRunId,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+      error: run.error,
+      attempts: attempts.map((a) => ({
+        attemptNo: a.attemptNo,
+        status: a.status,
+        error: a.error,
+        startedAt: a.startedAt,
+        completedAt: a.completedAt,
+      })),
+    })
+  })
+
+  // ===== S28 任务 3 观测面(agent-runtime-spec §121/§122/§124;零新存储,只读投影既有执行层)=====
+
+  /**
+   * §121 Run Timeline:按时间序把 Run 的执行足迹展开成可读时序
+   * (operations 设施级明细 + step_runs 步骤 + attempts 尝试;源均为既有表)。
+   */
+  app.get('/api/v2/agent-runs/:id/timeline', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${runId}`)
+    const attempts = deps.store.db.select().from(attemptsTable).where(eq(attemptsTable.runId, runId)).orderBy(attemptsTable.attemptNo).all()
+    const stepRuns = attempts.flatMap((a) =>
+      deps.store.db.select().from(stepRunsTable).where(eq(stepRunsTable.attemptId, a.id)).orderBy(stepRunsTable.runNo).all(),
+    )
+    const entries = ([] as { at: string; kind: string; label: string }[])
+      .concat(
+        attempts.map((a) => ({ at: a.startedAt, kind: 'attempt', label: `Attempt ${a.attemptNo} ${a.status}` })),
+        attempts.filter((a) => a.completedAt !== null).map((a) => ({ at: a.completedAt!, kind: 'attempt', label: `Attempt ${a.attemptNo} done` })),
+        stepRuns.map((s) => ({ at: s.startedAt, kind: 'step', label: `Step ${s.stepId} #${s.runNo} ${s.status}` })),
+      )
+    const timeline = entries.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+    return ok(c, requestId, timeline)
+  })
+
+  /**
+   * §122 Cost Tracking:Run 的 Attempt/Step 逐级 usage(provider 上报 token 计数)汇总。
+   * toolCost 属 Workflow 面(execution_operations 的 tool_request),Run 面只给 token 账。
+   */
+  app.get('/api/v2/agent-runs/:id/cost', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${runId}`)
+    const attempts = deps.store.db.select().from(attemptsTable).where(eq(attemptsTable.runId, runId)).orderBy(attemptsTable.attemptNo).all()
+    const sum = (rows: { usage: string | null }[], key: string): number =>
+      rows.reduce((acc, r) => {
+        if (r.usage === null) return acc
+        const parsed = JSON.parse(r.usage) as Record<string, unknown>
+        const v = parsed[key]
+        return typeof v === 'number' ? acc + v : acc
+      }, 0)
+    const attemptsUsage = attempts.filter((a) => a.usage !== null)
+    return ok(c, requestId, {
+      runId,
+      inputTokens: sum(attemptsUsage, 'inputTokens'),
+      outputTokens: sum(attemptsUsage, 'outputTokens'),
+      cachedTokens: sum(attemptsUsage, 'cachedTokens'),
+      providerCost: null,
+      toolCost: null,
+      totalCost: null,
+      attempts: attempts.length,
+    })
+  })
+
+  /**
+   * §124 Agent Inspector:Definition + Runtime State + 当前 Run + Tool Calls + Artifacts
+   * (Budget 取 Definition.runtimePolicy;Context 让给 §123 Prompt Inspector 链路)。
+   */
+  app.get('/api/v2/agents/:id/inspector', (c) => {
+    const requestId = requestIdOf(c)
+    const agentId = c.req.param('id')
+    const definition = loadAgentDefinition(deps.store, agentId as never)
+    if (definition === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent 不存在: ${agentId}`)
+    const states = deps.store.db.select().from(agentRuntimeStates).where(eq(agentRuntimeStates.agentId, agentId)).all()
+    const toolCalls = deps.store.db
+      .select()
+      .from(toolCallsTable)
+      .where(eq(toolCallsTable.runId, agentId))
+      .all()
+      .slice(0, 50)
+    const artifacts = deps.store.db
+      .select()
+      .from(artifactsTable)
+      .where(isNull(artifactsTable.runId))
+      .all()
+      .slice(0, 50)
+    const inspector = {
+      agent: { id: definition.id, version: definition.version, name: definition.name, type: definition.type, runtimePolicy: definition.runtimePolicy },
+      states: states.map((s) => ({
+        chatId: s.chatId,
+        agentId: s.agentId,
+        agentVersion: s.agentVersion,
+        status: s.status,
+        currentRunId: s.currentRunId,
+        lastHeartbeatAt: s.lastHeartbeatAt,
+        state: JSON.parse(s.state),
+      })),
+      currentRun: states.find((s) => s.currentRunId !== null)?.currentRunId,
+      toolCalls: toolCalls.map((tc) => ({
+        id: tc.id,
+        toolName: tc.toolName,
+        status: tc.status,
+        error: tc.error,
+        startedAt: tc.startedAt,
+        completedAt: tc.completedAt,
+      })),
+      artifacts: artifacts.map((a) => ({
+        id: a.id,
+        type: a.type,
+        name: a.name,
+        frozen: a.frozen,
+        createdAt: a.createdAt,
+      })),
+    }
+    return ok(c, requestId, inspector)
+  })
+
+  /** §66 取消:活跃 run 走 registry.abort;已终态幂等返回当前状态 */
+  app.post('/api/v2/agent-runs/:id/cancel', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    if (registry.abort(runId)) return ok(c, requestId, { cancelled: true })
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${runId}`)
+    return ok(c, requestId, { cancelled: false, status: run.status })
+  })
+
+  /** §66 暂停:仅对**活跃流式** run 生效(经 abort 相同机制;已终态幂等返回状态) */
+  app.post('/api/v2/agent-runs/:id/pause', (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${runId}`)
+    if (run.status !== 'running') return ok(c, requestId, { paused: false, status: run.status })
+    return fail(c, requestId, 'VALIDATION_ERROR', '暂停仅支持已接入 pauseToken 的活跃 run(§51);本轮经 cancel/resume 走')
+  })
+
+  /** §66 恢复:S27 §51–§55 resumeRun(兼容性校验 + 对账 + 新 Attempt 续跑) */
+  app.post('/api/v2/agent-runs/:id/resume', async (c) => {
+    const requestId = requestIdOf(c)
+    const runId = c.req.param('id')
+    const run = deps.store.db.select().from(runsTable).where(eq(runsTable.id, runId)).get()
+    if (run === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${runId}`)
+    const agentId = run.agentId as unknown as string
+    const definition = loadAgentDefinition(deps.store, agentId as never)
+    if (definition === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent 不存在: ${agentId}`)
+    const chat = loadChat(deps.store, run.chatId as ChatId)
+    const resolved = resolveAgentProvider(definition.modelPolicy, chat.ok ? chat.value : undefined, await jsonBody(c))
+    if ('error' in resolved) return fail(c, requestId, resolved.error.code, resolved.error.message)
+    const result = await resumeRun(agentRunDeps(), {
+      runId: runId as never,
+      chatId: run.chatId as ChatId,
+      agentId: agentId as never,
+      adapter: resolved.adapter,
+      providerId: resolved.providerId,
+      model: resolved.model,
+      now: nowIso(),
+    })
+    if (!result.ok) return runtimeError(c, requestId, result.error)
+    return ok(c, requestId, { runId, status: result.value.status })
+  })
+
+  /**
+   * §71 delegate:以 :id 为父 spawn 子 Run(§93 assertCanSpawn 先行,超护栏 409)。
+   * 子 Run 复用父 Run 的 chat;input = task。
+   */
+  app.post('/api/v2/agent-runs/:id/delegate', async (c) => {
+    const requestId = requestIdOf(c)
+    const parentRunId = c.req.param('id')
+    const parent = deps.store.db.select().from(runsTable).where(eq(runsTable.id, parentRunId)).get()
+    if (parent === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${parentRunId}`)
+    const body = await jsonBody(c)
+    const childAgentId = typeof body.agentId === 'string' ? body.agentId : ''
+    const task = typeof body.task === 'string' ? body.task : ''
+    if (childAgentId === '' || task === '') return fail(c, requestId, 'VALIDATION_ERROR', 'agentId 与 task 必填')
+
+    const guard = assertCanSpawn(deps.store, {
+      parentRunId: parentRunId as never,
+      limits: budgetTreeLimits(body),
+    })
+    if (!guard.allowed) {
+      return fail(c, requestId, 'AGENT_RECURSION_LIMIT', guard.reason ?? 'Agent Tree 递归护栏拒绝 spawn', { status: 409 })
+    }
+
+    const definition = loadAgentDefinition(deps.store, childAgentId as never)
+    if (definition === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent 不存在: ${childAgentId}`)
+    const chat = loadChat(deps.store, parent.chatId as ChatId)
+    const resolved = resolveAgentProvider(definition.modelPolicy, chat.ok ? chat.value : undefined, body)
+    if ('error' in resolved) return fail(c, requestId, resolved.error.code, resolved.error.message)
+
+    const message = createMessage(deps.store, deps.bus, {
+      chatId: parent.chatId as ChatId,
+      role: 'user',
+      content: task,
+      now: nowIso(),
+    })
+    if (!message.ok) return runtimeError(c, requestId, message.error)
+
+    const controller = new AbortController()
+    const childRunId = uuidv7()
+    registry.track(childRunId, controller)
+    void runAgentOrchestrator(agentRunDeps(), {
+      chatId: parent.chatId as ChatId,
+      agentId: childAgentId as never,
+      adapter: resolved.adapter,
+      providerId: resolved.providerId,
+      model: resolved.model,
+      signal: controller.signal,
+      runId: childRunId as never,
+      parentRunId: parentRunId as never,
+      now: nowIso(),
+      budget: {
+        ...(isRecord(body.budget) ? {
+          ...(body.budget.maxTurns === undefined ? {} : { maxTurns: num(body.budget.maxTurns, 1) }),
+          ...(body.budget.maxToolCalls === undefined ? {} : { maxToolCalls: num(body.budget.maxToolCalls, 20) }),
+        } : {}),
+      },
+    })
+      .then(() => registry.abort(childRunId))
+      .catch((error) => {
+        deps.logger?.('error', `agent run 异常: ${childRunId}`, String(error))
+        registry.abort(childRunId)
+      })
+    return ok(c, requestId, { childRunId }, 202)
+  })
+
+  /**
+   * §73 handoff:以 :id 为父把手伸给 targetAgent(§93 护栏先行)。
+   * Handoff 不复制全 Context(§73:只传 handoff payload + allowed context);
+   * 此处把 reason/findings 作为新 user 消息入树(目标 Agent 从活跃链读到)。
+   */
+  app.post('/api/v2/agent-runs/:id/handoff', async (c) => {
+    const requestId = requestIdOf(c)
+    const parentRunId = c.req.param('id')
+    const parent = deps.store.db.select().from(runsTable).where(eq(runsTable.id, parentRunId)).get()
+    if (parent === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent run 不存在: ${parentRunId}`)
+    const body = await jsonBody(c)
+    const targetAgentId = typeof body.targetAgentId === 'string' ? body.targetAgentId : ''
+    const reason = typeof body.reason === 'string' ? body.reason : ''
+    if (targetAgentId === '' || reason === '') return fail(c, requestId, 'VALIDATION_ERROR', 'targetAgentId 与 reason 必填')
+
+    const guard = assertCanSpawn(deps.store, {
+      parentRunId: parentRunId as never,
+      limits: budgetTreeLimits(body),
+    })
+    if (!guard.allowed) {
+      return fail(c, requestId, 'AGENT_RECURSION_LIMIT', guard.reason ?? 'Agent Tree 递归护栏拒绝 spawn', { status: 409 })
+    }
+
+    const definition = loadAgentDefinition(deps.store, targetAgentId as never)
+    if (definition === undefined) return fail(c, requestId, 'AGENT_NOT_FOUND', `agent 不存在: ${targetAgentId}`)
+    const chat = loadChat(deps.store, parent.chatId as ChatId)
+    const resolved = resolveAgentProvider(definition.modelPolicy, chat.ok ? chat.value : undefined, body)
+    if ('error' in resolved) return fail(c, requestId, resolved.error.code, resolved.error.message)
+
+    const findings = typeof body.findings === 'string' ? body.findings : ''
+    const handoffTask = `[handoff ${reason}]${findings !== '' ? `\n${findings}` : ''}`
+    const message = createMessage(deps.store, deps.bus, {
+      chatId: parent.chatId as ChatId,
+      role: 'user',
+      content: handoffTask,
+      now: nowIso(),
+    })
+    if (!message.ok) return runtimeError(c, requestId, message.error)
+
+    const controller = new AbortController()
+    const targetRunId = uuidv7()
+    registry.track(targetRunId, controller)
+    void runAgentOrchestrator(agentRunDeps(), {
+      chatId: parent.chatId as ChatId,
+      agentId: targetAgentId as never,
+      adapter: resolved.adapter,
+      providerId: resolved.providerId,
+      model: resolved.model,
+      signal: controller.signal,
+      runId: targetRunId as never,
+      parentRunId: parentRunId as never,
+      now: nowIso(),
+    })
+      .then(() => registry.abort(targetRunId))
+      .catch((error) => {
+        deps.logger?.('error', `agent run 异常: ${targetRunId}`, String(error))
+        registry.abort(targetRunId)
+      })
+    return ok(c, requestId, { targetRunId }, 202)
+  })
+
+  /** §75/§76 GET /tools:注册面投影(agentId/capability 过滤留 P4;P5 插件工具面) */
+  app.get('/api/v2/tools', (c) => {
+    const requestId = requestIdOf(c)
+    const capability = c.req.query('capability')
+    const all = tools.list()
+    const projected = all
+      .filter((t) => capability === undefined || capability === null || t.permissions.some((p) => p === capability))
+      .map((t: ToolDefinition) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+        permission: t.permissions[0] ?? '',
+        source: 'core' as const,
+      }))
+    return ok(c, requestId, projected)
+  })
+
+  /** §79 GET /skills:S28 技能目录仍为空(仅 .gitkeep);注册面随 P4 引入 */
+  app.get('/api/v2/skills', (c) => {
+    const requestId = requestIdOf(c)
+    return ok(c, requestId, [])
+  })
+
   // —— 全局错误兜底(api-spec §7 信封;D2:对外只暴露一种归一化形式)——
   app.onError((error, c) => {
     const requestId = c.get('requestId') ?? `req_${uuidv7()}`
@@ -1458,6 +2020,28 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+/** §154 请求体保守读取:对象形才收(其余按缺省),杜绝字符串/数组混进 Record */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+/** §154 数值读取:非有限正数则取缺省 */
+function num(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback
+}
+
+/** §39/§70 树护栏字段(§93 assertCanSpawn 消费);非薄记录直接跳过 */
+function budgetTreeLimits(body: Record<string, unknown>): { maxDepth?: number; maxChildren?: number; maxTotalAgents?: number; maxRuntimeMs?: number } {
+  if (!isRecord(body.budget)) return {}
+  const b = body.budget
+  const limits: { maxDepth?: number; maxChildren?: number; maxTotalAgents?: number; maxRuntimeMs?: number } = {}
+  if (typeof b.maxDepth === 'number') limits.maxDepth = b.maxDepth
+  if (typeof b.maxChildren === 'number') limits.maxChildren = b.maxChildren
+  if (typeof b.maxTotalAgents === 'number') limits.maxTotalAgents = b.maxTotalAgents
+  if (typeof b.maxRuntimeMs === 'number') limits.maxRuntimeMs = b.maxRuntimeMs
+  return limits
 }
 
 /**

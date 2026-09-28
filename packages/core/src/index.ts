@@ -70,6 +70,20 @@ export {
   type CacheSimulatorReport,
 } from './compiler/cache-simulator'
 export {
+  CACHEABLE_ZONES,
+  computePrefixCarry,
+  type PrefixCarry,
+} from './compiler/prefix-carry'
+export {
+  CACHE_SCENARIOS,
+  isCacheScenarioName,
+  replayCacheScenarios,
+  type CacheScenarioName,
+  type CacheScenarioReplayInput,
+  type CacheScenarioReplayReport,
+  type CacheScenarioRoundResult,
+} from './compiler/cache-scenarios'
+export {
   activateWorldbook,
   type WorldbookActivationInput,
   type WorldbookActivationOutput,

@@ -424,6 +424,234 @@ const V7_CACHE_FIRST_SEEN = /* sql */ `
 ALTER TABLE worldbook_runtime_entries ADD COLUMN first_seen_msg INTEGER;
 `
 
+/**
+ * v8(P3/WP3.1a)执行层持久化底座(agent-runtime-spec §4.1–4.6 / §96 / §97 / §161;
+ * database-schema §27–§29 / §34.1–34.3 / §35 / §36–§36.2)。
+ *
+ * 覆盖 §161「必须持久化」清单的 P3 子集:Run(扩展)/ Step Run / Agent Runtime State /
+ * Tool Call / Checkpoint / Approval(Workflow Runtime State 归 S25 的 v9)。
+ *
+ * 口径:
+ * - runs 的执行列在此追加——该表 P0 注释即已声明"agent 执行列随 P3 扩展",
+ *   属既定计划内的实现,非新架构决策。`attempt` 列降为**聚合 attemptNo**,
+ *   Attempt 实体归独立表(R-P3-3 / 裁决 C3)。
+ * - 四层执行层级切**独立表**(attempts / step_runs / execution_operations):
+ *   Run 定义"做什么"、Attempt"这次怎么做"、Step Run"哪一步做了一次"、
+ *   Operation"底层调用发生了什么"。Retry 一律新建记录,历史不可变(§4.1.1)。
+ * - `agent_runtime_states.status` 是 **AgentStatus 聚合态**,不与 ExecutionStatus 合并(§4.3)。
+ */
+const V8_P3_EXECUTION = /* sql */ `
+-- §27 Agent Definition(Runtime Entity,不只是"一段 Prompt")
+CREATE TABLE agents (
+    id                  TEXT PRIMARY KEY,
+    owner_id            TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    description         TEXT,
+    agent_type          TEXT NOT NULL,
+    instructions        TEXT,
+    config              TEXT NOT NULL DEFAULT '{}',
+    tool_policy         TEXT NOT NULL DEFAULT '{}',
+    memory_policy       TEXT NOT NULL DEFAULT '{}',
+    context_policy      TEXT NOT NULL DEFAULT '{}',
+    version             INTEGER NOT NULL DEFAULT 1,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    deleted_at          TEXT
+);
+
+-- §28 Agent Version(Definition 版本快照;§163 热重载钉住基准)
+CREATE TABLE agent_versions (
+    id                  TEXT PRIMARY KEY,
+    agent_id            TEXT NOT NULL REFERENCES agents(id),
+    version             INTEGER NOT NULL,
+    snapshot            TEXT NOT NULL,
+    content_hash        TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    UNIQUE(agent_id, version)
+);
+
+-- §29 Agent Runtime State(= Agent Instance,§7);status = AgentStatus 聚合态
+CREATE TABLE agent_runtime_states (
+    id                  TEXT PRIMARY KEY,
+    chat_id             TEXT NOT NULL,
+    agent_id            TEXT NOT NULL,
+    agent_version       INTEGER,
+    state               TEXT NOT NULL DEFAULT '{}',
+    status              TEXT NOT NULL DEFAULT 'idle',
+    current_run_id      TEXT,
+    last_heartbeat_at   TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+    UNIQUE(chat_id, agent_id)
+);
+
+CREATE INDEX idx_agent_runtime_states_chat ON agent_runtime_states(chat_id);
+
+-- §34.1 Attempt(完整执行环境);历史不可变,Retry 建新 attempt_no
+CREATE TABLE attempts (
+    id                  TEXT PRIMARY KEY,
+    run_id              TEXT NOT NULL REFERENCES runs(id),
+    attempt_no          INTEGER NOT NULL,
+    status              TEXT NOT NULL,
+    parent_attempt_id   TEXT,
+    reason              TEXT,
+    runtime_snapshot    TEXT NOT NULL DEFAULT '{}',
+    checkpoint_id       TEXT,
+    provider            TEXT,
+    model               TEXT,
+    prompt_snapshot_id  TEXT,
+    usage               TEXT,
+    error               TEXT,
+    started_at          TEXT NOT NULL,
+    completed_at        TEXT,
+    timeout_at          TEXT,
+    UNIQUE(run_id, attempt_no)
+);
+
+CREATE INDEX idx_attempts_run ON attempts(run_id);
+
+-- §34.2 Step Run(agent 级;Key 只能是 step_run_id,绝不能是 step_id)
+CREATE TABLE step_runs (
+    id                  TEXT PRIMARY KEY,
+    attempt_id          TEXT NOT NULL REFERENCES attempts(id),
+    step_id             TEXT NOT NULL,
+    step_revision       INTEGER NOT NULL,
+    run_no              INTEGER NOT NULL,
+    status              TEXT NOT NULL,
+    input               TEXT,
+    output              TEXT,
+    retry_of            TEXT,
+    checkpoint_id       TEXT,
+    prompt_snapshot_id  TEXT,
+    usage               TEXT,
+    error               TEXT,
+    started_at          TEXT NOT NULL,
+    completed_at        TEXT,
+    UNIQUE(attempt_id, step_id, run_no)
+);
+
+CREATE INDEX idx_step_runs_attempt ON step_runs(attempt_id);
+
+-- §34.3 Execution Operation(设施级重试明细;默认不记录)
+CREATE TABLE execution_operations (
+    id                  TEXT PRIMARY KEY,
+    step_run_id         TEXT,
+    type                TEXT NOT NULL,
+    attempt_no          INTEGER NOT NULL,
+    status              TEXT NOT NULL,
+    latency_ms          INTEGER,
+    error               TEXT,
+    started_at          TEXT NOT NULL,
+    completed_at        TEXT
+);
+
+CREATE INDEX idx_execution_operations_step ON execution_operations(step_run_id);
+
+-- §35 Tool Call
+CREATE TABLE tool_calls (
+    id                  TEXT PRIMARY KEY,
+    run_id              TEXT NOT NULL,
+    tool_name           TEXT NOT NULL,
+    arguments           TEXT NOT NULL DEFAULT '{}',
+    result              TEXT,
+    status              TEXT NOT NULL,
+    error               TEXT,
+    started_at          TEXT,
+    completed_at        TEXT
+);
+
+CREATE INDEX idx_tool_calls_run ON tool_calls(run_id);
+
+-- §36 Artifact(frozen = 内容不再变化,但不改变缓存分区,裁决 C2)
+CREATE TABLE artifacts (
+    id                  TEXT PRIMARY KEY,
+    chat_id             TEXT,
+    run_id              TEXT,
+    type                TEXT NOT NULL,
+    name                TEXT,
+    content             TEXT,
+    data                TEXT,
+    content_hash        TEXT,
+    frozen              INTEGER NOT NULL DEFAULT 0,
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    created_at          TEXT NOT NULL
+);
+
+CREATE INDEX idx_artifacts_run ON artifacts(run_id);
+
+-- §36.1 Runtime Checkpoint(Resume 恢复点;≠ cache_checkpoints)
+CREATE TABLE runtime_checkpoints (
+    id                  TEXT PRIMARY KEY,
+    run_id              TEXT NOT NULL,
+    turn_index          INTEGER NOT NULL,
+    reason              TEXT NOT NULL,
+    state_hash          TEXT NOT NULL,
+    agent_state         TEXT NOT NULL DEFAULT '{}',
+    variables           TEXT NOT NULL DEFAULT '{}',
+    tool_state          TEXT NOT NULL DEFAULT '{}',
+    context_state       TEXT NOT NULL DEFAULT '{}',
+    prompt_snapshot_id  TEXT,
+    created_at          TEXT NOT NULL
+);
+
+CREATE INDEX idx_runtime_checkpoints_run ON runtime_checkpoints(run_id);
+
+-- §36.2 Approval(Waiting 必须持久化;status 表配对进度,结论在 outcome 四值)
+CREATE TABLE approvals (
+    id                      TEXT PRIMARY KEY,
+    run_id                  TEXT NOT NULL,
+    tool_call_id            TEXT,
+    action                  TEXT NOT NULL,
+    description             TEXT,
+    risk                    TEXT NOT NULL,
+    requested_permissions   TEXT NOT NULL DEFAULT '[]',
+    status                  TEXT NOT NULL,
+    outcome                 TEXT,
+    reason                  TEXT,
+    policy_at_request       TEXT,
+    decided_at              TEXT,
+    expires_at              TEXT,
+    created_at              TEXT NOT NULL
+);
+
+CREATE INDEX idx_approvals_run ON approvals(run_id);
+
+-- §34 runs 执行列扩展(P0 注释已声明"agent 执行列随 P3 扩展")
+-- attempt 列已存在,自本版降为聚合 attemptNo(实体归 attempts 表)
+ALTER TABLE runs ADD COLUMN agent_id TEXT;
+ALTER TABLE runs ADD COLUMN agent_version INTEGER;
+ALTER TABLE runs ADD COLUMN workflow_run_id TEXT;
+ALTER TABLE runs ADD COLUMN workflow_step_run_id TEXT;
+ALTER TABLE runs ADD COLUMN parent_run_id TEXT;
+ALTER TABLE runs ADD COLUMN origin_run_id TEXT;
+ALTER TABLE runs ADD COLUMN trigger_message_id TEXT;
+ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'live';
+ALTER TABLE runs ADD COLUMN input_state TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE runs ADD COLUMN output_state TEXT;
+ALTER TABLE runs ADD COLUMN budget_usage TEXT;
+ALTER TABLE runs ADD COLUMN dependency_manifest TEXT;
+ALTER TABLE runs ADD COLUMN last_heartbeat_at TEXT;
+ALTER TABLE runs ADD COLUMN completed_at TEXT;
+
+CREATE INDEX idx_runs_status ON runs(status);
+`
+
+/**
+ * v9(S23/WP3.1b)`runs.status` 词汇归一:把 P0–P2 的 `streaming` / `completed`
+ * 回填为 §4.3 `ExecutionStatus` 口径的 `running` / `succeeded`。
+ *
+ * 背景:同一列曾有两套词——P0 生成路径写 `streaming`/`completed`,而 agent-runtime-spec
+ * §4.3 的 ExecutionStatus 用 `running`/`succeeded`。S22 已在读侧给出别名
+ * (`LEGACY_EXECUTION_STATUS_ALIAS`),本版把库内旧值一次性归位,使"库与代码一致"
+ * 不再依赖读侧兜底(p3-plan §13 指定的 S23 首个动作)。
+ *
+ * 只动 `runs`;**`generations.status` 的 `completed` 属 §25 GenerationState,另一套词汇**。
+ */
+const V9_RUN_STATUS_VOCABULARY = /* sql */ `
+UPDATE runs SET status = 'running'   WHERE status = 'streaming';
+UPDATE runs SET status = 'succeeded' WHERE status = 'completed';
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -467,4 +695,25 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: V7_CACHE_FIRST_SEEN,
     checksum: sha256Hex(V7_CACHE_FIRST_SEEN),
   },
+  {
+    version: 8,
+    name: 'p3-execution-core',
+    sql: V8_P3_EXECUTION,
+    checksum: sha256Hex(V8_P3_EXECUTION),
+  },
+  {
+    version: 9,
+    name: 'p3-run-status-vocabulary',
+    sql: V9_RUN_STATUS_VOCABULARY,
+    checksum: sha256Hex(V9_RUN_STATUS_VOCABULARY),
+  },
 ]
+
+/**
+ * 当前(最新)迁移版本 = `MIGRATIONS` 末项的 version。
+ *
+ * 存在的理由:断言"已应用到最新"时**不许硬编码版本号**——加 v8 时同一类硬编码曾在
+ * `migrate.test.ts` 与 `apps/server/src/e2e.test.ts` 各制造一次假失败(2026-09-26)。
+ * 版本是可派生的,写死就是纪律 6 说的 magic number。架构守卫 **D4** 会拦。
+ */
+export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]!.version

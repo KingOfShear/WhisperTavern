@@ -66,17 +66,28 @@ export function buildCachePlan(input: BuildCachePlanInput): DeepReadonly<CachePl
       break // 连续前缀契约:首个非稳定段即截断
     }
   }
-  const stablePrefixTokens = segments
-    .filter((s) => stablePrefixSegments.includes(s.id))
-    .reduce((sum, s) => sum + s.tokenCount, 0)
-
-  const freshSegments = segments.filter((s) => s.cachePlacement.zone === 'freshWB').map((s) => s.id)
-  const freshTokens = segments.filter((s) => s.cachePlacement.zone === 'freshWB').reduce((sum, s) => sum + s.tokenCount, 0)
-
-  const volatileSegments = segments.filter((s) => !stablePrefixSegments.includes(s.id) && !freshSegments.includes(s.id)).map((s) => s.id)
-  const volatileTokens = segments
-    .filter((s) => volatileSegments.includes(s.id))
-    .reduce((sum, s) => sum + s.tokenCount, 0)
+  // 集合化分类(O(n)):原 includes-in-filter 写法是 O(n²),在 S21 千轮门禁(长对话 2000+ 段)
+  // 实测为单轮 1200 万次字符串比较的头号耗时源。等价改写,语义与分区口径逐字不变。
+  const stablePrefixSet = new Set(stablePrefixSegments)
+  const freshSegments: string[] = []
+  const freshSet = new Set<string>()
+  let freshTokens = 0
+  for (const s of segments) {
+    if (s.cachePlacement.zone !== 'freshWB') continue
+    freshSegments.push(s.id)
+    freshSet.add(s.id)
+    freshTokens += s.tokenCount
+  }
+  let stablePrefixTokens = 0
+  const volatileSegments: string[] = []
+  let volatileTokens = 0
+  for (const s of segments) {
+    if (stablePrefixSet.has(s.id)) stablePrefixTokens += s.tokenCount
+    if (!stablePrefixSet.has(s.id) && !freshSet.has(s.id)) {
+      volatileSegments.push(s.id)
+      volatileTokens += s.tokenCount
+    }
+  }
 
   // —— checkpoints:automatic 断点(§55)——
   const checkpoints: CacheCheckpoint[] = []

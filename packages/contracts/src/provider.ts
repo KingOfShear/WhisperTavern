@@ -54,9 +54,41 @@ export type ProviderError = z.infer<typeof ProviderErrorSchema>
 export const ProviderMessageSchema = z.discriminatedUnion('role', [
   z.object({ role: z.literal('system'), content: z.string() }),
   z.object({ role: z.literal('user'), content: z.string() }),
-  z.object({ role: z.literal('assistant'), content: z.string() }),
+  /**
+   * S24(§6 草案/§10/§11):assistant 可选携带 blocks —— thinking 签名块(PV8:工具循环
+   * 原样回传,缺签名 = INVALID_REQUEST)、text、tool_call。`content` 仍是纯文本投影
+   * (无 blocks 时的唯一载荷;与 blocks 并存时 content = blocks 中 text 的拼接)。
+   */
+  z.object({
+    role: z.literal('assistant'),
+    content: z.string(),
+    blocks: z
+      .array(
+        z.discriminatedUnion('type', [
+          z.object({ type: z.literal('text'), text: z.string() }),
+          z.object({ type: z.literal('thinking'), text: z.string(), signature: z.string().optional() }),
+          z.object({ type: z.literal('tool_call'), id: z.string(), name: z.string(), arguments: z.string() }),
+        ]),
+      )
+      .optional(),
+  }),
+  /** S24 工具结果回灌(§10/§35):toolCallId 关联模型发起的那次调用;isError = §35 denied/error */
+  z.object({
+    role: z.literal('tool'),
+    toolCallId: z.string(),
+    content: z.string(),
+    isError: z.boolean().optional(),
+  }),
 ])
 export type ProviderMessage = z.infer<typeof ProviderMessageSchema>
+
+/** S24:工具定义的 wire 形状(agent-runtime-spec §31 ToolDefinition 的投影;inputSchema = JSON Schema 透传) */
+export const ProviderToolSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  inputSchema: z.unknown(),
+})
+export type ProviderTool = z.infer<typeof ProviderToolSchema>
 
 /** usage 归一形状唯一权威 = 总设计 §18.3 / provider-adapter-spec §17.1 */
 export const ProviderUsageSchema = z.object({
@@ -127,6 +159,8 @@ export const ProviderChatRequestPayloadSchema = z.object({
   /** §16 缓存翻译指令(core 产出 ProviderStrategy,与快照同形状;adapter 只翻译);
    *  automatic-prefix/context-cache/none 家族不消费(无 wire 标记) */
   cachePlan: ProviderStrategySchema.optional(),
+  /** S24 工具流:本次请求暴露给模型的工具清单(agent-runtime §31;capabilities.tools=false 时不得携带) */
+  tools: z.array(ProviderToolSchema).optional(),
 })
 
 /**

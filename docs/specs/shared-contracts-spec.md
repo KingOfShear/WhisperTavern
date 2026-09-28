@@ -39,6 +39,8 @@ packages/contracts/src/{ core/ runtime/ conversation/ character/ world/ memory/
 
 ID：`UserId/SessionId/ConversationId/MessageId/TurnId/CharacterId/WorldId/MemoryId/ThreadId/RunId/AttemptId/StepRunId/PromptId/CandidateId/EvaluationId/SnapshotId/TraceId/DirectiveId`（均为 opaque 全局唯一、非语义，`user_123/char_001` 只作 slug/displayName）。
 
+**P3 增补（2026-09-26，S22/WP3.1a 落地）**：执行四层与 Agent 实体的 ID 一并纳入本清单——`AgentId / OperationId / ToolCallId / ArtifactId / CheckpointId / ApprovalId`（`AttemptId / StepRunId` 原已在册）。判据：它们是 `packages/runtime`（持久化与恢复骨架）与 `packages/agent`（编排层）**双向需要**的同一套 brand（agent-runtime-spec §4.1.2「ID 与 Sequence」），各包自造同义 brand 正是本节禁止的。**注意 C4 仍然有效**：ID 在册 ≠ 形状在册，Run / Attempt / Step Run 的**结构**仍归 agent-runtime-spec §4.1，本规格不重造。
+
 **Normalized Scale**：默认 `Score 0.0–1.0`，禁止模块各自 0–100 / −10–10（除非显式声明）。**Serialization Boundary**：契约必须 JSON-serializable（禁 Date/Map/Set/Function/ClassInstance/BigInt 跨模块）。**Unknown Boundary**：禁 `any`，允许 `unknown` 由具体模块 validation+narrowing。
 
 **Result/校验/生成**：Application Boundary 用 `Result<T,E>{ ok:true,value } | { ok:false,error }`，**禁 `throw` 作普通控制流**；`ApplicationError{ code, message, retryable, details? }`。外部输入（API/DB JSON/LLM Output/Plugin/Provider）一律过运行时 Schema 校验（Zod/Valibot/ArkType），**Schema → z.infer 得类型**（不是手写类型再手写 schema），保持同步。

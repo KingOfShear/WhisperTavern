@@ -185,13 +185,50 @@ R-P2-9  群聊缓存命名空间(worldbook-cache-design §6):世界书哈希缓�
 **验收**:两道硬门禁 CI 绿;P2 出场 KPI 预演(Simulator 报告命中率 ≥70%/成本削减 ≥60%)。
 **spec 锚点**:technical-plan §8.1;worldbook-cache-design §2.2(命中率来源)。
 
+**落地记录(S21 收口)**:
+
+```text
+两道门禁(全部走真实编译,fake provider 零 API 成本):
+  ① core  packages/core/src/compiler/cache-scenarios.test.ts
+     —— 确定性回放引擎 replayCacheScenarios:8 场景族按质数排程触发(世界书激活/编辑/宏/swipe/分支/
+     摘要/预算/群聊),合成轮次脚本喂**真实 compile()**(排序/分区/宏规则/预算/CachePlan 全走生产代码;
+     模块自持的模型只有"本轮新增 → 轮末毕业"一条 §2.1/§22 入册规则)。千轮断言:零未声明失效
+     (未声明判据 = 触发轮与**上轮**都无场景时出现原因码或可缓存区前缀分歧)。
+  ② server apps/server/src/cache-stability.test.ts
+     —— 100 轮真实管线(导入 → startRun → 快照落库,固定注入 now):稳轮 header+stableWB 序列化字节
+     逐字节前缀一致、history 段 ID 序追加式、每轮失效 token 记账(稳轮 < 30%);事件轮(激活×4 /
+     编辑 / 预算触发+恢复 / swipe)必须产生可归因变化。
+
+KPI 预演(§2.2 端到端口径,`prefix-carry.ts` 为唯一定义处):
+  狐神抚预设 + 地点书(12 条全 before_char)100 轮 → 命中率 ≥70% / 成本削减 ≥60% ✅
+  狐神抚预设 + Table 书(5 条全 @D 深度注入)20 轮 → **显著 < 70%**(反面对照):@D 按 §3.6 进
+  injection 区、位于 history 之后 → 永不进前缀缓存。**结论:命中率达标取决于资产布局**——
+  该事实已钉成可复跑断言,不再只是文档里的一句话。
+
+HTTP 面:POST /api/v2/cache/simulate 的 scenarios(§43)由"回显 unsupportedScenarios"转为
+  **确定性回放**(零 Provider 调用);未识别场景名原样回显。rounds 上限在 scenarios 分支放宽到 1000。
+清债:S20 遗留的"scenarios 回放"欠账在此勾销。
+
+**千轮门禁首跑抓出 3 处 O(n²) 真实性能坑(已修,语义零变化)**:
+  ① cacheplan.ts stablePrefix/fresh/volatile 分类用 includes-in-filter → Set 化;
+  ② budget.ts totalTokens 用 find-in-reduce → 令牌表化;
+  ③ hash.ts buildPrefixHash 用 `acc = concatBytes([acc, frame])` 逐段累积 → 字节上 O(n²),
+     长对话单轮数百 MB 拷贝;改为先收集框架再一次拼接(字节序列不变 → 哈希值不变)。
+     ③ 是千轮实测 222s 的头号来源;三处修完 222s → 2s。
+  —— 这正是 technical-plan §10"性能预算无界漂移"风险的对策兑现:门禁不只是正确性凭证,也是性能凭证。
+```
+
 # 9. 出场验收与挂账
 
 ```text
 出场(总设计 §36):CI 绿 + 真实 API 稳态命中率 ≥70% + 输入成本削减 ≥60%。
-借冒烟脚本 tests/smoke/real-provider-smoke.mjs(需用户自有 key)实测命中率/成本;
-P2 出场登记 §38 决策;implementation-plan §12 看板更新;AGENTS 当前状态更新。
-挂账:P1 注记的"budget percent+cap 超预算裁剪留 P2"(S18 解除);还账 #6(S19 勾销)。
+
+【S21 收口时的出场状态】__CI 侧已完成__:两道硬门禁绿 + typecheck 全包 0 + ESLint 绿 + 全量 404 测试绿,
+且 KPI **预演**在缓存友好真实资产上达标(≥70%/≥60%)。__真实 API 侧待作者实测__:借冒烟脚本
+tests/smoke/real-provider-smoke.mjs(需作者自有 key)量真实 provider 的 cached_tokens/prompt_tokens;
+**故本文件暂不归档,P2 出场待该实测结果登记 §38**。
+
+挂账:P1 注记的"budget percent+cap 超预算裁剪留 P2"(S18 解除);还账 #6(S19 勾销);§43 scenarios 回放(S21 勾销)。
 ```
 
 # 10. 横切纪律
@@ -215,7 +252,7 @@ X11 命中率/成本削减是产品级 KPI:任何"看起来快"的局部改动�
 | S18 | WP2.3 | ✅ | budget.ts(Budget Manager:裁剪序权威化/percent+cap/header protect/elastic 整体推出)+ cacheplan.ts(CachePlan v1,R-P0-4 退役)+ pipeline 接线(enabled 语义)+ run.ts cacheInvalidations;全量 345 测试(40 文件) |
 | S19 | WP2.4 | ✅ | 缓存标记翻译落地:contracts CacheTypeSchema/MIN_PREFIX_TOKENS/ProviderStrategySchema + ProviderChatRequest.cachePlan;core cacheplan 装配 providerStrategy(breakpoints 投影 afterPartIndex/stableZoneTokens/prefixTooSmall)+ run.ts 注入 providerCacheType;adapters translate.ts 纯函数 + anthropic wire 挂载(system 块形/user 挂载/assistant 丢弃/prefixTooSmall 抑制)+ openai/gemini 无动作断言 + fake cachedInputTokens 注入;runtime buildGenerationRequest 透传 cachePlan;金样断言升级(providerStrategy 随快照持久化);还账 #6 勾销(§23 开放点 1:隐式缓存默认,显式 cachedContent 暂缓);全量 362 测试(42 文件) |
 | S20 | WP2.5 | ✅ | 三节 spec 骨架转已实现契约(api-spec 2.4):§41 `GET /chats/:id/cache/telemetry`(逐轮**实际发送内容** sentParts/哈希锚点 + 命中率曲线 + aggregate 两口径并列 + 前缀过小 + from/to 窗)、§42 `GET /runs/:id/cache-break`(二分诊断:首分歧段 + **首个分歧字节 byteOffset** + 影响 token 后缀 + 按归因建议)、§43/§44 `POST /cache/simulate`(零 API 成本,窗口 rounds,scenarios 回显 unsupportedScenarios 留 S21);core simulateCachePlan 纯函数 9 单测 + diff `firstDivergingByteOffset` 3 单测;S20 金样(真实狐神抚预设+Table 书 3 轮报告,语义量归一化);web CacheTelemetry + CacheBinaryDiff(段级对齐条 → 下钻全屏分屏字节级 diff);**金样抓出并修复 2 处口径缺陷**(首轮误判 CacheBreak / plan 计与 provider 计混算致理论新鲜为负);全量 385 测试(44 文件,金样零漂移) |
-| S21 | WP2.6 | ☐ | |
+| S21 | WP2.6 | ✅ | 两道硬门禁落地:core `cache-scenarios.ts` 确定性回放引擎(8 场景族/合成轮次喂**真实 compile**/§2.2 端到端承接) + `cache-scenarios.test.ts` 千轮门禁(零未声明失效) + server `cache-stability.test.ts` 百轮真实管线门禁(header+stableWB 逐字节前缀稳定/history 追加式/失效 token 记账) + KPI 预演(真实资产:狐神抚预设+地点书 before_char → 命中率 ≥70%;Table 书全 @D 作反面对照 <70%);`POST /cache/simulate` scenarios 由回显转**确定性回放**(`unsupportedScenarios` 只余未识别名);§2.2 承接抽为唯一真源 `prefix-carry.ts`;架构守卫补 D3(门禁不许被删/千轮窗口不许缩)。**千轮门禁首跑即抓出 3 处 O(n²) 真实性能坑并修**(cacheplan 的 includes-in-filter / budget 的 find-in-reduce / hash 的 `buildPrefixHash` 逐段 concat——最后一处让千轮实测 222s→2s)。全量 404 测试(151 套件)绿,typecheck 全包 0,ESLint 绿,金样零漂移 |
 
 ---
 

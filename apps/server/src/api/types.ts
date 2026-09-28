@@ -1,4 +1,5 @@
 import type { WhisperTavernDb, EventBus, RuntimeEvent, SecretStore, SnapshotRegistry } from '@whispertavern/runtime'
+import type { ToolRegistry } from '@whispertavern/agent'
 
 /**
  * Server 依赖装配(总设计 §7:apps/server 纯传输层,无业务逻辑——本接口是
@@ -19,6 +20,11 @@ export interface ServerDeps {
   secretsDir: string
   /** 资产根目录(data/):cards/<slug>/ 与 worldbooks/ 落盘 */
   assetsDir: string
+  /**
+   * S28(WP3.6)§154 工具注册表(缺省 = 空注册表)。GET /tools 的读面(§75/§76);
+   * agent run 的 tools 清单也出自同一注册面(缺工具 = 模型收不到 tools 清单)。
+   */
+  tools?: ToolRegistry
 }
 
 /** api-spec §27 SSE 信封 */

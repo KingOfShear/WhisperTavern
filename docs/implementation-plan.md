@@ -1,7 +1,7 @@
 # WhisperTavern V2 — 实施计划总纲（Implementation Plan）
 
 > **文件：** `docs/implementation-plan.md`
-> **版本：** V2.5（2026-09-15：S13/WP1.4 完成进看板 + §10 #20 勾销（api-spec §48 拼写对齐 contracts，方案 A）；V2.4：2026-09-12：P0 DoD/看板收口——G2/G4 随指令安全特性撤下的引用清理，测试数改引 p1-plan §11；V2.3：2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 31/34）
+> **版本：** V2.9（2026-09-27：**P3 完成（S28/WP3.6 收官）进 §12 看板**——还账 #17 Agent Tree 递归护栏 + §154 Agent API 面 + 观测面 + CI 门禁 D5 + 出场登记；§38 决策 46；全量 507 测试 / 56 文件全绿 + typecheck 全包 0 + ESLint 0 + 守卫 19/19；§10 #17 勾销；p3-plan 归档）；V2.8（2026-09-26：**S22/WP3.1a 持久化底座完成进 §12 看板**——migration v8（10 表 + runs 十四列）+ runtime `execution/` 三模块 + §5.4 新增 23 条事件登记 + 架构守卫 B4；p3-plan §4 补落地实录、§13 看板 S22 ✅）；V2.7（2026-09-26：**P3 细化会话完成**——[p3-plan.md](./p3-plan.md) 落盘（S22–S28 会话切分 / R-P3-1–10 范围裁决 / 入场条件 + 首个待决项「Agent Runtime 落点方案 A/B」；出场 = agent-runtime-spec §173 七组 + §174 十场景）；§7 P3 WP 表补"会话"列并挂指针）；V2.6（2026-09-26：**P2 六个 WP（S16–S21）完成进 §12 看板**——WP2.6 CI 硬门禁收口（§38 决策 44），P2 完成（CI 侧），真实 API 出场待作者 key 实测）；V2.5（2026-09-15：S13/WP1.4 完成进看板 + §10 #20 勾销（api-spec §48 拼写对齐 contracts，方案 A）；V2.4：2026-09-12：P0 DoD/看板收口——G2/G4 随指令安全特性撤下的引用清理，测试数改引 p1-plan §11；V2.3：2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 31/34）
 > **状态：** Active（随执行滚动更新——WP 状态看板在 §12，每完成一个包即更新）
 > **文档层级：** [technical-design.md](./technical-design.md) 之下的**执行层文档**。与 AGENTS.md 的分工：AGENTS 管**会话纪律**（怎么读、怎么改、何时问），本文管**执行顺序**（做什么、先做哪个、做到什么程度算完）。
 > **决策锚点：** technical-design §38 **决策 31**。
@@ -175,15 +175,16 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 
 出场（§36）：CI 绿 + 真实 API 稳态命中率 ≥70% + 输入成本削减 ≥60%。
 
-# 7. P3 工作包分解（初版）
+# 7. P3 工作包分解（**已细化**——会话级明细见 [p3-plan.md](./p3-plan.md)，S22–S28；范围裁决 R-P3-1–10；**入场条件与首个待决项（Agent Runtime 落点方案 A/B）见其 §2**；出场 = agent-runtime-spec §173 七组 + §174 十场景）
 
-| WP | 内容 | 关键锚点 |
-|---|---|---|
-| WP3.1 | 执行四层 Run/Attempt/StepRun/Operation + 事件 durability 全量 | agent-runtime-spec §4 / §5.4 |
-| WP3.2 | Tool Runtime + 审批 fail-closed | agent-runtime §36/§115；provider-adapter §23 开放点 3（thinking 回传默认）在此定 |
-| WP3.3 | Workflow DAG + Director 三路径 | 总设计 §23 |
-| WP3.4 | Artifact 冻结/提升（提升 = 显式确认，不自动） | compiler-spec §87 |
-| WP3.5 | Resume/Replay + §174 十个必测场景 | agent-runtime §173/§174 |
+| WP | 内容 | 关键锚点 | 会话 |
+|---|---|---|---|
+| WP3.1 | 执行四层 Run/Attempt/StepRun/Operation + 事件 durability 全量 + Agent 定义/状态机/生命周期 | agent-runtime-spec §4 / §5–§16 / §5.4 | S22（持久化底座）/ S23（Agent 运行时） |
+| WP3.2 | Tool Runtime + 审批 fail-closed + 权限沙箱 | agent-runtime §31–§42/§88–§94/§115–§119；provider-adapter §23 开放点 3（thinking 回传默认）在此定 | S24 |
+| WP3.3 | Workflow DAG（引擎；HTTP 面留 P4）+ Director 三路径 | 总设计 §23；api-spec §154 vs §155 | S25 |
+| WP3.4 | Context Policy 族 + Artifact 冻结/提升（提升 = 显式确认，不自动） | compiler-spec §87；agent-runtime §18–§22/§71–§75 | S26 |
+| WP3.5 | Resume/Recovery/Replay + §174 十个必测场景 | agent-runtime §50–§58/§96–§98/§143–§151/§173/§174 | S27 |
+| 收官 | Agent Tree 护栏（还账 #17）+ §154 API 面 + 观测 + CI 门禁扩展 + 出场登记 | agent-runtime §39/§93/§121–§125 | S28 |
 
 # 8. P4 工作包分解（初版）
 
@@ -218,11 +219,12 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | 10 | evaluation-engine-spec 充实 | P5 | 各挂账 |
 | 11 | 重启恢复逐状态矩阵核对 + non-idempotent 工具对账（reconciliation）——§50/§51–55 已有幂等分类与 Resume 骨架，补"每状态重启后行为"表 | WP3.1 | agent-runtime-spec §50/§51–55 |
 | 12 | 工程性能预算三档（target / warning / hard-limit；compile 侧已有 compiler-spec §126，补 worldbook 匹配 / SQLite / UI / 检索） | WP2 细化 | compiler-spec §126 |
+| 12b | **补记（2026-09-26 S21）**：S21 千轮门禁已成为**事实上的性能门禁**——首跑即抓出 3 处 O(n²)（cacheplan `includes`-in-filter / budget `find`-in-reduce / hash `buildPrefixHash` 逐段 concat，末者 222s→2s 并已修）。**三档预算（target/warning/hard-limit）细化本身仍未做**，本项不勾销；后续若做，应把千轮门禁的耗时基线一并纳入 hard-limit。 | 未排期 | compiler-spec §126；p2-plan §8 落地记录 |
 | 13 | 升级/备份/回滚流程（backup → migration → validate → rollback） | WP5 | 总设计 §36 P5 |
 | 14 | **开源发布套件**：LICENSE 落盘（§38 决策 32）、SECURITY.md / CONTRIBUTING.md（引用 AGENTS 决策协议与纪律 5，不复写）/ CODE_OF_CONDUCT.md / Issue·PR 模板（architecture_proposal 对齐 §37 四问）/ 产品化 README；依赖许可证兼容性纪律（运行时依赖禁引入 GPL/AGPL） | 开源/推送公开仓库**前**（用户触发，不绑阶段 WP） | 2026-09-05 开源评审择优 |
 | 15 | ~~**Sanitized Debug Export / Reproduction Bundle**：RedactionPolicy（去用户聊天内容 / 匿名化 ID / 默认 sanitized 非 full；密钥沿用 PV5 redact），导出可 Replay~~ **✅ 2026-09-17 S14 勾销**:api-spec §161 + `POST /api/v2/debug/export`(默认 sanitized:user/assistant 正文占位、ID 匿名化 redact-N、idMap 恒空;full 显式;PV5 密钥两模式必 redact);验收=sanitized bundle 喂 FakeProviderAdapter 可回放(server 契约测试) | ~~WP1.5(Inspector v1)细化会话~~ | 总设计 §19/§32；provider-adapter §17.2 |
 | 16 | Plugin 信任分档（built-in / trusted / community / untrusted）补入 §29 权限模型——P0–P4 只按 §21.5 Capability 执行 | WP5 细化会话 | 总设计 §29/§21.5 |
-| 17 | **Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落 | P3 | §38 决策 36 增量①；agent-runtime-spec §39/§93 |
+| 17 | ~~**Agent Tree 递归护栏**：`maxDepth` / `maxChildren` / `maxTotalAgents` / `maxRuntime` 进 AgentBudget + Scheduler（不新造模块，纪律 5）+ 超限拒绝 spawn 的诊断码；spec 骨架先落~~ | ✅ 2026-09-27 S28 勾销 | §38 决策 36 增量①；agent-runtime-spec §39/§93/§100 + api-spec §70/§8（`AGENT_RECURSION_LIMIT`→409）+ `packages/agent/src/runtime/scheduler.ts`（`assertCanSpawn`，测试 6/6 绿）；§38 决策 46 |
 | 18 | **World State 全局态（规则版）**：地点/时间/物品/任务/派系/知识补表 + 规则化推演；**禁止额外 LLM 调用**（R1/C1）；按纪律 3 先落 roleplay-runtime-spec 扩展章节 + database-schema 补表 | P4 | §38 决策 36 增量③；roleplay-runtime-spec；database-schema |
 | 19 | Simulation Agent（LLM 世界推演）决策点：凭 P4 规则版实测（覆盖率/延迟/成本）决定是否引入 | P5 决策点 | §38 决策 36 暂缓项 |
 | 20 | ~~**世界书槽位/逻辑枚举三套拼写归一**~~ **✅ 2026-09-15 S13 开工前勾销(作者拍板方案 A)**:api-spec §48 修订对齐 contracts 单一真相源——`selectiveLogic` 取 `andAny/andAll/notAny/notAll`(对齐 `keyword_logic`)、`position` 取 `anTop/anBottom/depth/emTop/emBottom`(对齐 `WorldbookPositionSchema`);Breaking: N(§152 P0 范围未投产,无消费方) | ~~S13(WP1.4) 前~~ | api-spec §48;contracts placement;database-schema §13 |
@@ -260,8 +262,24 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | WP1.5 Inspector v1 + 导出 | ✅ | 2026-09-17 S14 完成（core diffSnapshots + §107 inspector/§38 diff/§36 快照列表/§161 debug export 四路由 + 还账 #15 勾销 + web PromptInspector 面板；全量 278 绿；详见 p1-plan §11） |
 | WP1.6 金样测试体系 | ✅ | 2026-09-22 S15 完成（金样套件：导入层 ImportReport 断言 + 字节 parts 基线 preset/Table + 卡四载体完整性/脱敏；**金样抓出并修复 3 处 st-compat 生态缺口**：position string 方言 / null 与 role 魔数 / prompt_order 分组形态；删除 4 个 X3 违例 probe；全量 293 绿 36 文件；**P1 出场完成**，归档 §38 决策 38；详见 p1-plan §11） |
 | **P1 完成** | ✅ | 2026-09-22 出场（§36）：DoD 八条全勾销（§4.11）+ 293 测试绿 + 报告产出。下一阶段 = P2（缓存层，最大差异化，B1 已解锁） |
+| WP2.1 Macro Engine | ✅ | 2026-09-22 S16 完成（macro/ 五文件 + pipeline 接线替换 R-P0-1；§38 决策 39；详见 p2-plan §11） |
+| WP2.2 stableWB/freshWB 分区 | ✅ | 2026-09-22 S17 完成（worldbook-cache 纯函数层 + physicalOrder append-only + migration v7；§38 决策 40） |
+| WP2.3 CachePlan + Budget + Elastic History | ✅ | 2026-09-22 S18 完成（budget/cacheplan + pipeline 接线；R-P0-4 退役；§38 决策 41） |
+| WP2.4 缓存标记翻译 | ✅ | 2026-09-22 S19 完成（providerStrategy + adapters translate + anthropic wire 挂载；还账 #6 勾销；§38 决策 42） |
+| WP2.5 遥测 + 二分诊断 + Cache Simulator | ✅ | 2026-09-22 S20 完成（api-spec §41–§44 转已实现契约 + core simulator + web 面板；金样抓出 2 处口径缺陷；§38 决策 43） |
+| WP2.6 CI 硬门禁 | ✅ | 2026-09-26 S21 完成（两道门禁：core 千轮确定性回放 + server 百轮真实管线；KPI 预演真资产达标 + Table 反面对照；§43 scenarios 转回放；**首跑抓出并修 3 处 O(n²) 性能坑**；全量 404 绿 151 套件；§38 决策 44；详见 p2-plan §11） |
+| **P2 完成（CI 侧）** | ✅ | 2026-09-26：六个 WP（S16–S21）全收口 + 门禁/typecheck/lint/金样全绿 + KPI 预演达标。**真实 API 出场待作者 key 实测**（`tests/smoke/real-provider-smoke.mjs`）——故 p2-plan 暂不归档。下一阶段 = P3（Agent 化对话） |
 
-（P1–P5 WP 在各阶段开工细化时进看板。）
+| WP3.1a 持久化底座 | ✅ | 2026-09-26 S22 完成（migration v8：10 表 + runs 十四列；`runtime/src/execution/{status,store,recovery}`；§5.4 新增 23 条事件登记；架构守卫 B4；33 条新单测；详见 p3-plan §4） |
+| WP3.1b Agent 运行时 | ✅ | 2026-09-26 S23 完成（`packages/agent/src/runtime/` 六模块 + migration v9（runs.status 回填）+ §174 Test 1/9 + agent 9/9；详见 p3-plan §5） |
+| WP3.2 Tool Runtime + 审批 + 权限 | ✅ | 2026-09-26 S24 完成（tools/ 四模块五段流水线 + prepareIteration 工具循环 + 审批四值 fail-closed + model order 回灌；§174 Test 2/3/4/8；agent 19/19；详见 p3-plan §6） |
+| WP3.3 Workflow DAG + Director | ✅ | 2026-09-26 S25 完成（workflow/ 四模块：波次并发 + 失败策略 + 有界环 + 账本 Resume + 受限 DSL + Director 三路径；§174 Test 7；workflow 15/15；详见 p3-plan §7） |
+| WP3.4 Context Policy + Artifact + Output | ✅ | 2026-09-26 S26 完成（context/policy + artifacts + output/commit + state/mutation + 缓存交互 §104–§106；S26 12/12、agent 46/46；详见 p3-plan §8） |
+| WP3.5 Resume / Recovery / Replay | ✅ | 2026-09-27 S27 完成（pauseToken + resumeRun + 崩溃恢复 §96/§97 + Replay §143–§146 逐字节一致；§174 Test 5/6/10；S27 5/5、agent 51/51；详见 p3-plan §9） |
+| WP3.6 P3 收官 | ✅ | 2026-09-27 S28 完成（还账 #17 Agent Tree 递归护栏 + §154 Agent API 面 12 路由 + 观测面 timeline/cost/inspector + CI 门禁 D5 + 出场登记；**全量 507 测试 / 56 文件全绿 + typecheck 全包 0 + ESLint 0 + 守卫 19/19**；§38 决策 46；详见 p3-plan §10–§13） |
+| **P3 完成** | ✅ | 2026-09-27 出场（§36）：agent-runtime-spec §173 七组全勾销 + §174 十场景全绿；单/多 Agent 的 Delegate / Cancel / Resume / 崩溃恢复可用（Retry Agent 自动编排与 Memory Runtime 明确挂账 P4）。下一阶段 = P4（并行解锁 B1） |
+
+（P4–P5 WP 在各阶段开工细化时进看板。）
 
 ---
 

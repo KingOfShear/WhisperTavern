@@ -127,18 +127,49 @@ export const migrations = sqliteTable('migrations', {
   appliedAt: text('applied_at').notNull(),
 })
 
-/** §34 Run(P0 子集:conversation 面;agent 执行列随 P3 扩展) */
+/**
+ * §34 Run —— P0 建 conversation 子集,P3(v8)补 agent 执行列(该表 P0 注释即已声明
+ * "agent 执行列随 P3 扩展",故为既定计划内的实现,不是新决策)。
+ *
+ * `attempt` 列自 P3 起**降为聚合 attemptNo**:Attempt 实体归 `attempts` 表(§34.1 /
+ * R-P3-3),本列只保留"当前跑到第几次"的读面,不承载执行环境。
+ * 用户触发的重试 = 新建 Run + `origin_run_id`(裁决 C3);Run 本体永不从终态回 running(§12)。
+ */
 export const runs = sqliteTable('runs', {
   id: text('id').primaryKey(),
   chatId: text('chat_id').notNull(),
+  /** ExecutionStatus(§4.3);P0 遗留取值 streaming/completed 见 execution/status.ts 别名表 */
   status: text('status').notNull(),
+  attempt: integer('attempt').notNull().default(1),
   provider: text('provider'),
   model: text('model'),
   snapshotId: text('snapshot_id'),
   messageId: text('message_id'),
   error: text('error'),
+  // ── P3 执行列(migration v8 追加)──
+  agentId: text('agent_id'),
+  /** Run 级版本钉住(§163 热重载:改 Definition 不影响在跑的 Run) */
+  agentVersion: integer('agent_version'),
+  workflowRunId: text('workflow_run_id'),
+  workflowStepRunId: text('workflow_step_run_id'),
+  /** 执行树 parentRunId(Director → Writer/Checker;§14/§15) */
+  parentRunId: text('parent_run_id'),
+  /** 用户重试新建 Run 时指向原 Run(裁决 C3) */
+  originRunId: text('origin_run_id'),
+  triggerMessageId: text('trigger_message_id'),
+  /** live | simulation | replay | debug(§147–§151) */
+  mode: text('mode').notNull().default('live'),
+  inputState: text('input_state').notNull().default('{}'),
+  outputState: text('output_state'),
+  /** BudgetUsage(§41);与 generations 的 usage 是聚合与明细的关系 */
+  budgetUsage: text('budget_usage'),
+  /** compiler/agent/workflow/tool 版本清单(§166)——Resume 兼容性判据 */
+  dependencyManifest: text('dependency_manifest'),
+  /** Zombie Run 检测(§97):超 recoveryTimeout 未心跳 → interrupted */
+  lastHeartbeatAt: text('last_heartbeat_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
+  completedAt: text('completed_at'),
 })
 
 /** §39 Prompt Snapshot(不可变,§40:禁止 UPDATE) */
@@ -374,3 +405,207 @@ export const chatWorldbooks = sqliteTable(
     pk: primaryKey({ columns: [table.chatId, table.worldbookId] }),
   }),
 )
+
+// ===== P3(WP3.1a)执行层持久化底座(§27–§29 / §34.1–34.3 / §35 / §36–36.2)=====
+
+/**
+ * §27 Agent Definition —— Runtime Entity,不只是"一段 Prompt"。
+ * `version` 是 Definition 版本;`agent_versions` 存版本快照(§28),二者关系与
+ * character/persona/preset 的 `X + X_versions` 范式一致。
+ */
+export const agents = sqliteTable('agents', {
+  id: text('id').primaryKey(),
+  ownerId: text('owner_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  /** character | director | writer | checker | editor | tool-agent | custom */
+  agentType: text('agent_type').notNull(),
+  instructions: text('instructions'),
+  config: text('config').notNull().default('{}'),
+  toolPolicy: text('tool_policy').notNull().default('{}'),
+  memoryPolicy: text('memory_policy').notNull().default('{}'),
+  contextPolicy: text('context_policy').notNull().default('{}'),
+  version: integer('version').notNull().default(1),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+/** §28 Agent Version —— Definition 版本快照(§163 热重载的钉住基准) */
+export const agentVersions = sqliteTable('agent_versions', {
+  id: text('id').primaryKey(),
+  agentId: text('agent_id').notNull(),
+  version: integer('version').notNull(),
+  snapshot: text('snapshot').notNull(),
+  contentHash: text('content_hash').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
+/**
+ * §29 Agent Runtime State = **Agent Instance**(§7):同一 Agent Definition 在多个
+ * Chat 中各持一份独立运行态,靠 `agent_version` 实现 §163 热重载。
+ *
+ * `status` 是 **AgentStatus 聚合态**(idle/queued/running/waiting/paused/interrupted/
+ * failed/completed/cancelled),由当前 Run/Attempt 归约而来,**不与 ExecutionStatus 合并**
+ * (§4.3 末条)。它还是**区间状态**,不得读成"某条消息跑完了"(§5.5 纪律 D3)。
+ */
+export const agentRuntimeStates = sqliteTable('agent_runtime_states', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  agentId: text('agent_id').notNull(),
+  agentVersion: integer('agent_version'),
+  state: text('state').notNull().default('{}'),
+  status: text('status').notNull().default('idle'),
+  currentRunId: text('current_run_id'),
+  lastHeartbeatAt: text('last_heartbeat_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+// UNIQUE(chat_id, agent_id) —— 由 migration v8 建表约束承载。
+
+/**
+ * §34.1 Attempt —— "这次怎么做"。持有完整执行环境(provider / model /
+ * runtime snapshot / checkpoint / usage / error);历史不可变,Retry 建新 attempt_no。
+ */
+export const attempts = sqliteTable('attempts', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull(),
+  attemptNo: integer('attempt_no').notNull(),
+  status: text('status').notNull(),
+  /** 从历史 checkpoint 派生分支时指向原 Attempt(§10.5) */
+  parentAttemptId: text('parent_attempt_id'),
+  reason: text('reason'),
+  /** Runtime Snapshot:一次 Attempt 钉死的执行环境判据(§4.6 / §166) */
+  runtimeSnapshot: text('runtime_snapshot').notNull().default('{}'),
+  checkpointId: text('checkpoint_id'),
+  provider: text('provider'),
+  model: text('model'),
+  promptSnapshotId: text('prompt_snapshot_id'),
+  usage: text('usage'),
+  error: text('error'),
+  startedAt: text('started_at').notNull(),
+  completedAt: text('completed_at'),
+  timeoutAt: text('timeout_at'),
+})
+
+/**
+ * §34.2 Step Run —— "哪一步实际做了一次"。主键是 stepRunId,**绝不能是 stepId**;
+ * `step_revision` 钉住该 Step 定义版本,终态后不可变(§4.4 Replay 依赖)。
+ */
+export const stepRuns = sqliteTable('step_runs', {
+  id: text('id').primaryKey(),
+  attemptId: text('attempt_id').notNull(),
+  stepId: text('step_id').notNull(),
+  stepRevision: integer('step_revision').notNull(),
+  /** 本 Step 第几次执行(Step Retry = 新 run_no,不新增 Attempt;§4.2) */
+  runNo: integer('run_no').notNull(),
+  status: text('status').notNull(),
+  input: text('input'),
+  output: text('output'),
+  /** Step Retry 时指向被取代的上一个 Step Run */
+  retryOf: text('retry_of'),
+  checkpointId: text('checkpoint_id'),
+  promptSnapshotId: text('prompt_snapshot_id'),
+  usage: text('usage'),
+  error: text('error'),
+  startedAt: text('started_at').notNull(),
+  completedAt: text('completed_at'),
+})
+
+/**
+ * §34.3 Execution Operation —— **设施级** IO / Provider / Tool 重试明细,
+ * 把"HTTP 重试"与"Agent Step Retry"显式分开。**默认不记录**,仅 Debug /
+ * simulation / replay 与排障开启(§4.5)。与 generations / tool_calls 是
+ * "底层重试明细 vs 上层语义事实"的关系,不重复记录后者本身。
+ */
+export const executionOperations = sqliteTable('execution_operations', {
+  id: text('id').primaryKey(),
+  stepRunId: text('step_run_id'),
+  /** provider_request | tool_request | network_request | storage | plugin_call */
+  type: text('type').notNull(),
+  attemptNo: integer('attempt_no').notNull(),
+  status: text('status').notNull(),
+  latencyMs: integer('latency_ms'),
+  error: text('error'),
+  startedAt: text('started_at').notNull(),
+  completedAt: text('completed_at'),
+})
+
+/** §35 Tool Call —— 一次工具调用(pending/running/completed/failed/cancelled) */
+export const toolCalls = sqliteTable('tool_calls', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull(),
+  toolName: text('tool_name').notNull(),
+  arguments: text('arguments').notNull().default('{}'),
+  result: text('result'),
+  status: text('status').notNull(),
+  error: text('error'),
+  startedAt: text('started_at'),
+  completedAt: text('completed_at'),
+})
+
+/**
+ * §36 Artifact —— 中间结果不塞进 Message。`frozen` 表内容不再变化,
+ * 但**不改变缓存分区**(裁决 C2):冻结产物一律进 injection / tail,
+ * 不提升进稳定前缀(compiler-spec §83)。
+ */
+export const artifacts = sqliteTable('artifacts', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id'),
+  runId: text('run_id'),
+  type: text('type').notNull(),
+  name: text('name'),
+  content: text('content'),
+  data: text('data'),
+  contentHash: text('content_hash'),
+  frozen: integer('frozen', { mode: 'boolean' }).notNull().default(false),
+  metadata: text('metadata').notNull().default('{}'),
+  createdAt: text('created_at').notNull(),
+})
+
+/**
+ * §36.1 Runtime Checkpoint —— Resume 的恢复点(§51–§55)。
+ * 与 `cache_checkpoints`(Provider 缓存标记)是**两个不同对象**,不合并。
+ * Run 结束后可清理;paused / interrupted 的 Run 其最后一个 Checkpoint 必须保留。
+ */
+export const runtimeCheckpoints = sqliteTable('runtime_checkpoints', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull(),
+  turnIndex: integer('turn_index').notNull(),
+  /** before_provider | after_provider | before_tool | after_tool | before_pause | manual | automatic */
+  reason: text('reason').notNull(),
+  /** Resume 兼容性比对基准(§55) */
+  stateHash: text('state_hash').notNull(),
+  agentState: text('agent_state').notNull().default('{}'),
+  variables: text('variables').notNull().default('{}'),
+  toolState: text('tool_state').notNull().default('{}'),
+  contextState: text('context_state').notNull().default('{}'),
+  promptSnapshotId: text('prompt_snapshot_id'),
+  createdAt: text('created_at').notNull(),
+})
+
+/**
+ * §36.2 Approval —— Waiting 状态**不能依赖内存 Promise**,必须持久化(§116)。
+ * `status` 只表审计配对进度(pending → decided);**最终结论由 `outcome` 承载**,
+ * 四值封闭:allowed_once | rejected | cancelled | unavailable(§115.1,R-P3-5 fail-closed)。
+ * 只有 allowed_once 放行;无回答者(后台 / 定时 / 群聊跑批)默认 unavailable = 拒。
+ */
+export const approvals = sqliteTable('approvals', {
+  id: text('id').primaryKey(),
+  runId: text('run_id').notNull(),
+  toolCallId: text('tool_call_id'),
+  action: text('action').notNull(),
+  description: text('description'),
+  /** low | medium | high */
+  risk: text('risk').notNull(),
+  requestedPermissions: text('requested_permissions').notNull().default('[]'),
+  status: text('status').notNull(),
+  outcome: text('outcome'),
+  /** 发起方给出的"为什么问"(不携带工具入参,避免第二份会漂移的副本) */
+  reason: text('reason'),
+  /** 发起时有效的 per-chat 策略:ask | never(Replay 需要) */
+  policyAtRequest: text('policy_at_request'),
+  decidedAt: text('decided_at'),
+  expiresAt: text('expires_at'),
+  createdAt: text('created_at').notNull(),
+})

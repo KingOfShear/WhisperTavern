@@ -275,3 +275,45 @@ describe('S20 §43/§44 缓存模拟 API(零 API 成本)', () => {
     expect(notFound.status).toBe(404)
   })
 })
+
+describe('S21 §43 scenarios 确定性回放(零 API)', () => {
+  it('声明场景族 → 走确定性回放,未识别名原样回显,零未声明失效', async () => {
+    const { app } = makeE2eHarness().open()
+    const chatId = await makeChat(app)
+    const res = await app.request('/api/v2/cache/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ chatId, rounds: 200, scenarios: ['swipe', 'worldbook-activation', 'nope'] }),
+    })
+    expect(res.status).toBe(200)
+    const { data } = (await res.json()) as Envelope<{
+      rounds: { round: number; theoreticalCachedTokens: number; appliedScenarios: string[]; trimmedSegments: number }[]
+      aggregate: { expectedCacheRatio: number }
+      kpi: { hitRatio: number; costReduction: number; unexpectedBreakTotal: number }
+      unsupportedScenarios: string[]
+    }>
+    expect(data.rounds.length).toBe(200)
+    // 只回显未识别名;已识别的两个不再算"未支持"
+    expect(data.unsupportedScenarios).toEqual(['nope'])
+    expect(data.rounds.some((r) => r.appliedScenarios.includes('swipe'))).toBe(true)
+    expect(data.rounds.some((r) => r.appliedScenarios.includes('worldbook-activation'))).toBe(true)
+    expect(data.kpi.unexpectedBreakTotal).toBe(0)
+    expect(data.kpi.hitRatio).toBeGreaterThan(0.7)
+    expect(data.kpi.costReduction).toBeGreaterThan(0.6)
+    expect(data.aggregate.expectedCacheRatio).toBe(data.kpi.hitRatio)
+    // 首轮无基线
+    expect(data.rounds[0]!.theoreticalCachedTokens).toBe(0)
+    // 200 轮确定性回放:根级全量跑时并行压力下会超默认 5s(实测 6.8s),故显式放宽
+  }, 60_000)
+
+  it('未识别的场景名 → 落回 S20 真实快照路径并原样回显', async () => {
+    const { app } = makeE2eHarness().open()
+    const chatId = await makeChat(app)
+    const res = await app.request('/api/v2/cache/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ chatId, scenarios: ['nope'] }),
+    })
+    expect(res.status).toBe(200)
+    const { data } = (await res.json()) as Envelope<{ unsupportedScenarios: string[] }>
+    expect(data.unsupportedScenarios).toEqual(['nope'])
+  })
+})

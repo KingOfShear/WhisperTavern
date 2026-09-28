@@ -87,3 +87,29 @@ export const PersonaIdSchema = z.string().brand<'PersonaId'>()
 export type PersonaId = z.infer<typeof PersonaIdSchema>
 export const PresetIdSchema = z.string().brand<'PresetId'>()
 export type PresetId = z.infer<typeof PresetIdSchema>
+
+/**
+ * P3 执行层级业务 ID(agent-runtime-spec §4.1.2「ID 与 Sequence」;
+ * shared-contracts-spec §40 ID 清单的 P3 子集)。
+ *
+ * 为什么 ID 在 contracts 而**执行形状**不在:shared-contracts-spec §4 C4 明确
+ * contracts 不重造 Run / Attempt / StepRun 的形状(它们归 agent-runtime-spec §4.1),
+ * 但 ID 属"跨模块形状",由 §40 清单统一在册——runtime / agent / api-types 需要
+ * 同一套 brand 才能互通,各包自造同义 brand 正是 §40 禁止的。
+ */
+export const AgentIdSchema = z.string().brand<'AgentId'>()
+export type AgentId = z.infer<typeof AgentIdSchema>
+export const AttemptIdSchema = z.string().brand<'AttemptId'>()
+export type AttemptId = z.infer<typeof AttemptIdSchema>
+export const StepRunIdSchema = z.string().brand<'StepRunId'>()
+export type StepRunId = z.infer<typeof StepRunIdSchema>
+export const OperationIdSchema = z.string().brand<'OperationId'>()
+export type OperationId = z.infer<typeof OperationIdSchema>
+export const ToolCallIdSchema = z.string().brand<'ToolCallId'>()
+export type ToolCallId = z.infer<typeof ToolCallIdSchema>
+export const ArtifactIdSchema = z.string().brand<'ArtifactId'>()
+export type ArtifactId = z.infer<typeof ArtifactIdSchema>
+export const CheckpointIdSchema = z.string().brand<'CheckpointId'>()
+export type CheckpointId = z.infer<typeof CheckpointIdSchema>
+export const ApprovalIdSchema = z.string().brand<'ApprovalId'>()
+export type ApprovalId = z.infer<typeof ApprovalIdSchema>

@@ -85,13 +85,16 @@ function segmentsByZone(ir: DeepReadonly<PromptIR>): Map<PromptZoneName, readonl
  * 跳过 enabled=false 段(与序列化口径一致,§91/§19.2)。
  */
 export function buildPrefixHash(ir: DeepReadonly<PromptIR>, upToSegmentId: string): string {
-  let acc: Uint8Array = new Uint8Array(0)
+  // 先收集框架再一次性拼接:原先 `acc = concatBytes([acc, frame])` 逐段累积在**字节**上
+  // 是 O(n²)(第 i 段要复制全部已累积前缀),长对话下每轮数百 MB 拷贝——S21 千轮门禁
+  // 实测 222s 的头号来源。字节序列完全不变 → 哈希值不变,纯性能修复。
+  const frames: Uint8Array[] = []
   for (const segment of ir.segments) {
     if (!segment.enabled) continue
-    acc = concatBytes([acc, frameSegment(segment)])
+    frames.push(frameSegment(segment))
     if (segment.id === upToSegmentId) break
   }
-  return sha256Hex(acc)
+  return sha256Hex(concatBytes(frames))
 }
 
 /** 八区字节流(§18 区序);空区 = 空字节 */
