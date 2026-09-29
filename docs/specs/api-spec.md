@@ -1,6 +1,6 @@
 # WhisperTavern V2 API Specification
 
-> **Version:** 2.6（2026-09-27：S28/WP3.6——§154 P3 Agent API 由 P0 预留的骨架转为已实现契约（`GET/POST /agents`、`POST /agents/:id/runs`、`GET /agent-runs/:id`、cancel/pause/resume/delegate/handoff、`GET /tools`、`GET /skills`，§61–§73/§75–§79 同步转实现注）；任务 3 观测面追加 `GET /agent-runs/:id/timeline`（§121）/ `GET /agent-runs/:id/cost`（§122）/ `GET /agents/:id/inspector`（§124）三只读端点（源 = 既有执行层表，零新存储）；§70 AgentBudget 补 Agent Tree 四护栏字段 `maxDepth/maxChildren/maxTotalAgents/maxRuntimeMs`（对齐 agent-runtime-spec §39，还账 #17）；§8 补 `AGENT_RECURSION_LIMIT`。Breaking: N——全部为新增端点与可选字段，未触碰既有 2.5 契约）；2.5（2026-09-26：S21/WP2.6——§43/§44 的 `scenarios` 由"回显未支持"转为**确定性回放**（零 Provider 调用；响应补 `appliedScenarios`/`trimmedSegments`/`kpi`；`unsupportedScenarios` 只余未识别名；scenarios 分支 rounds 上限放宽至 1000。Breaking: N——新增字段与行为分支，未声明 scenarios 时行为与 2.4 逐字节一致））；2.4（2026-09-22：S20/WP2.5——§38 Prompt Diff `firstDivergence.byteOffset` 由省略转为必填（UTF-8 字节偏移，Breaking: N，纯增量/无既有消费方读取该字段）；§41 Cache Telemetry、§42 Cache Break Diagnosis、§43/§44 Cache Simulation 三节由骨架转为已实现契约（`GET /api/v2/chats/:id/cache/telemetry`、`GET /api/v2/runs/:id/cache-break`、`POST /api/v2/cache/simulate`，自 §153 P2 提前至 P2 先行落地）；2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
+> **Version:** 2.7（2026-09-28：S31/WP4.2b——§88 Search Memory、§90 Summary API、§91 Dossier API、§92 Timeline API 由骨架转为**已实现契约**（`POST /api/v2/chats/:id/memory/search` 跨四层子串检索（dossier=FTS5∪LIKE 兜底、document=chunks FTS 收敛会话、summary/timeline=LIKE；`Memory.score` 可选投影——§88 检索命中才携带）、`GET/POST /api/v2/chats/:id/summaries`、`GET /api/v2/chats/:id/dossier` + `POST /api/v2/chats/:id/dossier/entities` + `PATCH /api/v2/dossier/entities/:id`、`GET/POST /api/v2/chats/:id/timeline`；§155 追加 `POST /api/v2/chats/:id/memory/scribe`（Scribe 触发，§143 长任务 202 + runId；写入经 agent tool_calls / artifacts 落账，语义见 memory-runtime-spec §4）。Breaking: N——全部为新增端点与可选字段，未触碰既有 2.6 契约）；2.6（2026-09-27：S28/WP3.6——§154 P3 Agent API 由 P0 预留的骨架转为已实现契约（`GET/POST /agents`、`POST /agents/:id/runs`、`GET /agent-runs/:id`、cancel/pause/resume/delegate/handoff、`GET /tools`、`GET /skills`，§61–§73/§75–§79 同步转实现注）；任务 3 观测面追加 `GET /agent-runs/:id/timeline`（§121）/ `GET /agent-runs/:id/cost`（§122）/ `GET /agents/:id/inspector`（§124）三只读端点（源 = 既有执行层表，零新存储）；§70 AgentBudget 补 Agent Tree 四护栏字段 `maxDepth/maxChildren/maxTotalAgents/maxRuntimeMs`（对齐 agent-runtime-spec §39，还账 #17）；§8 补 `AGENT_RECURSION_LIMIT`。Breaking: N——全部为新增端点与可选字段，未触碰既有 2.5 契约）；2.5（2026-09-26：S21/WP2.6——§43/§44 的 `scenarios` 由"回显未支持"转为**确定性回放**（零 Provider 调用；响应补 `appliedScenarios`/`trimmedSegments`/`kpi`；`unsupportedScenarios` 只余未识别名；scenarios 分支 rounds 上限放宽至 1000。Breaking: N——新增字段与行为分支，未声明 scenarios 时行为与 2.4 逐字节一致））；2.4（2026-09-22：S20/WP2.5——§38 Prompt Diff `firstDivergence.byteOffset` 由省略转为必填（UTF-8 字节偏移，Breaking: N，纯增量/无既有消费方读取该字段）；§41 Cache Telemetry、§42 Cache Break Diagnosis、§43/§44 Cache Simulation 三节由骨架转为已实现契约（`GET /api/v2/chats/:id/cache/telemetry`、`GET /api/v2/runs/:id/cache-break`、`POST /api/v2/cache/simulate`，自 §153 P2 提前至 P2 先行落地）；2.3（2026-09-17：S14/WP1.5——§36 补快照列表与 ir 投影、§38 Prompt Diff 对齐 SegmentDiff/firstDivergence/tokenDelta/cacheBreak 口径并自 §153 提前至 P1、§107 InspectorData 落地口径、新增 §161 Sanitized Debug Export（还账 #15，Breaking: N）；2.2（2026-09-15：§48 Worldbook Entry 枚举拼写对齐 contracts（anTop/anBottom/depth + andAny 等，#20 勾销，Breaking: N）；2.1（2026-09 收编修订版。5 处修正与既有文档对齐：①事件名以总设计 §5.4 权威事件表为准——agent.* 平铺命名并入 agent.run.*/agent.turn.*/tool.call.*，generation.usage 并入 usage.recorded，provider/import/export/memory/artifact 五个域反哺进权威表；②事件持久化按 durability 三档（§141），不是"generation.* 全持久化"；③里程碑 M2–M5 重映射 P2–P5；④对象形状以模块规格为准，本 spec 的 DTO 是线格式投影（§1.2）；⑤PromptSnapshot hashes / SegmentSnapshot stability / CacheCheckpoint / AgentBudget 字段对齐模块 spec））
 > **Status:** Implementation Specification  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **HTTP/SSE API 模块详细规格**  
 > **Protocol:** HTTP/1.1 + SSE  
@@ -2307,6 +2307,8 @@ output/
 
 # 88. Memory API
 
+> **▲ 已实现（S31/WP4.2b，V2.7）** 契约测试：`apps/server/src/memory-api.test.ts`（§88 跨四层检索 + kinds 过滤 + query 必填；7 条全绿）。
+
 ## Search Memory
 
 ```http
@@ -2330,9 +2332,27 @@ Request：
 }
 ```
 
+Response（`SearchMemoryResultDto`；`memory-runtime-spec §2` 四层合并取 topN，dossier/document 有真实相关度，summary/timeline 恒定 0.5）：
+
+```ts
+{
+  items: Memory[]   // §89 投影 + score(仅检索命中携带)
+  total: number
+}
+```
+
+实现注（S31）：
+- `dossier`：Repository FTS5 关键词（bm25 归一）**∪ LIKE 子串兜底**——FTS5 对无空格语系（中文）不按字分词，须以 `content LIKE %q% OR entity LIKE %q%` 补召回；FTS 命中 score=bm25 归一、(0.4) 子串命中、语义命中 cosine（memory-runtime-spec §3.3）。
+- `document`：chunks_fts bm25 → 按 `documents.chat_id` 收敛到本会话（跨会话文档分块不泄漏）。
+- `summary` / `timeline`：无全文索引（结构化小表），参数化 `LIKE` 子串过滤；score 恒定 0.5。
+- `limit` 上限 100，缺省 20；`query` 必填否则 `VALIDATION_ERROR` 400。
+- 错误信封：chat 不存在 → `NOT_FOUND`（与 §13 一致）。
+
 ---
 
 # 89. Memory Schema
+
+> **▲ 已实现（S31/WP4.2b，V2.7）** api-types `MemoryDto`；`score?: number` 为 §88 检索投影可选字段（§89 存储语义不含 score）。
 
 ```ts
 type Memory = {
@@ -2361,12 +2381,17 @@ type Memory = {
   createdAt: string
 
   updatedAt: string
+
+  // S31 检索命中才携带（§88）：
+  score?: number
 }
 ```
 
 ---
 
 # 90. Summary API
+
+> **▲ 已实现（S31/WP4.2b，V2.7）** api-types `SummaryBlockDto`/`CreateSummaryRequest`；契约测试对齐 seq/covers/frozenAt。
 
 ```http
 GET  /api/v2/chats/{chatId}/summaries
@@ -2392,6 +2417,11 @@ type SummaryBlock = {
 }
 ```
 
+实现注（S31）：
+- `GET`：按 `sequence` 升序返回冻结块链（memory-runtime-spec §2.1.1 Checkpoint 语义）。
+- `POST`：显式 Checkpoint —— 服务端 `appendSummaryBlock` **自动分配 seq = MAX+1**、`frozen=TRUE`；`from/to` 必须存在且 `REFERENCES messages(id)`（FK 违例 → `TOOL_PIPELINE_ERROR`/`VALIDATION_ERROR` 语义）；冻结块一律追加，**不原地修改**（§90 铁律）。
+- `coversMessageRange.{from,to}` 与 `tokenCount`（可选，api-types `CreateSummaryRequest`）在请求体；响应 201 `SummaryBlockDto`。
+
 Summary 一旦冻结，不原地修改。
 
 新摘要：
@@ -2408,20 +2438,34 @@ S3
 
 # 91. Dossier API
 
+> **▲ 已实现（S31/WP4.2b，V2.7）** api-types `DossierEntityDto`/`CreateDossierEntityRequest`；契约测试含实体卡建/更新/PATCH 版本化与 404。
+
 ```http
 GET  /api/v2/chats/{chatId}/dossier
 POST /api/v2/chats/{chatId}/dossier/entities
 PATCH /api/v2/dossier/entities/{id}
 ```
 
+实现注（S31）：
+- `GET`：`listMemories({ chatId, type:'fact' })` 按 `updated_at` 降序 → `DossierEntityDto[]`（版本号 = `version` 计数，S31 行级投影）。
+- `POST`：**同 entity = 版本化更新**（服务端先按 `(chatId, entity)` 查既有卡，命中则带 `memoryId` 走 `upsertMemory` UPDATE → `version+1`；否则新建 INSERT → version=1）。缺 `entity`/`content` → `VALIDATION_ERROR` 400。
+- `PATCH`：按 id 取既有卡（不存在 → `MEMORY_NOT_FOUND` 404），**实体名保持原值**，`content/importance/confidence/sourceMessageIds` 可改；版本化更新。
+
 ---
 
 # 92. Timeline API
+
+> **▲ 已实现（S31/WP4.2b，V2.7）** api-types `TimelineEventDto`/`CreateTimelineEventRequest`；契约测试含只追加与最新在前。
 
 ```http
 GET  /api/v2/chats/{chatId}/timeline
 POST /api/v2/chats/{chatId}/timeline
 ```
+
+实现注（S31）：
+- `GET`：`listTimelineEvents({ chatId })` 按 `created_at DESC`（最新在前，`rowid` 平局序——同一毫秒内追加按插入序，X14 确定性）；`ORDER BY created_at ASC, rowid ASC` 亦用于 Scribe 增量判定。
+- `POST`：只追加不 UPDATE（memory-runtime-spec §4.1 不变量 3）；`eventType`/`summary` 必填否则 `VALIDATION_ERROR` 400；其余参与者/location/consequences/sourceMessageId/importance/emotionalWeight 可选。响应 201。
+- `participants` 服务端 JSON 数组投影。
 
 ---
 
@@ -3982,6 +4026,10 @@ Agent Inspector 读面,Definition + Runtime State + Tool Calls + Artifacts + Bud
 
 # 155. P4 Workflow / Memory API
 
+> **▲ 已实现（S31/WP4.2b，V2.7）** Memory 块 —— 以下 memory 路由已转已实现契约（§88–§92，见对应节实现注）：
+> `POST /chats/:id/memory/search`、`GET/POST /chats/:id/summaries`、`GET /chats/:id/dossier`、`POST /chats/:id/dossier/entities`、`PATCH /dossier/entities/:id`、`GET/POST /chats/:id/timeline`；
+> **新增** `POST /chats/:id/memory/scribe`（Scribe 触发，本节下方）。Workflow 面（`/workflows`、`/workflow-runs`）仍为 S33+ 骨架；RAG/知识库（`/knowledge`）为 S32+ 骨架。
+
 加入：
 
 ```text
@@ -3991,17 +4039,57 @@ POST /workflows
 POST /workflows/:id/runs
 GET  /workflow-runs/:id
 
-POST /chats/:id/memory/search
+POST /chats/:id/memory/search      ✅ S31
 
-GET  /chats/:id/summaries
-POST /chats/:id/summaries
+GET  /chats/:id/summaries          ✅ S31
+POST /chats/:id/summaries          ✅ S31
 
-GET  /chats/:id/dossier
-GET  /chats/:id/timeline
+GET  /chats/:id/dossier            ✅ S31
+POST /chats/:id/dossier/entities   ✅ S31
+PATCH /dossier/entities/:id        ✅ S31
+GET  /chats/:id/timeline           ✅ S31
+POST /chats/:id/timeline           ✅ S31
+
+POST /chats/:id/memory/scribe      ✅ S31
 
 POST /knowledge
 POST /knowledge/:id/search
 ```
+
+## Scribe 触发（S31/WP4.2b；memory-runtime-spec §4）
+
+```http
+POST /api/v2/chats/{chatId}/memory/scribe
+```
+
+Request（api-types `ScribeTriggerRequest`；全部可选——缺省区间 = 最后一个 Summary 块之后）：
+
+```ts
+{
+  providerId?: string
+  model?: string
+  fromMessageId?: string
+  toMessageId?: string
+  budget?: AgentBudget   // §70;maxTurns/maxToolCalls/maxExecutionTimeMs
+}
+```
+
+Response（202 Accepted，api-types `ScribeTriggerStartDto`；§143 长任务先 track 再异步跑）：
+
+```ts
+{
+  runId: string
+  chatId: string
+  scribeChatId: string   // 影子会话 id（Scribe 对话隔离区,title=`scribe:<chatId>`）
+  status: 'running'
+}
+```
+
+实现注（S31）：
+- provider 解析：`body.providerId/model` 覆盖 → chat 绑定（`modelProvider/modelName`）；二者皆缺 → `VALIDATION_ERROR` 400；provider 不可用 → 400。
+- Scribe 的整个对话在**影子会话** `scribe:<targetChatId>` 运行（memory-runtime-spec §4.2「不直接修改原始聊天记录」——目标 chat 消息树一行不动）；记忆写入经三个 memory 工具（`memory.upsert_dossier` / `memory.append_timeline` / `memory.append_summary`）落 `tool_calls` 行 + `memory.created/updated` durable 事件 + `memories/timeline_events/summary_blocks` 行（chat_id = 目标会话），即「经 tool_calls / artifacts 落账」。
+- Scribe 无新剧情（空链或区间空）→ 状态 `skipped`，零写入。
+- 未实现：`GET /workflow-runs/:id` 状态查询仍走 §66 `GET /agent-runs/:id` 语义（Scribe run 即 agent run）。
 
 ---
 

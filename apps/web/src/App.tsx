@@ -5,12 +5,13 @@ import { MessageList } from './components/MessageList'
 import { PromptInspector } from './components/PromptInspector'
 import { ProviderSettings } from './components/ProviderSettings'
 import { CacheTelemetry } from './components/CacheTelemetry'
+import { MemoryPanel } from './components/MemoryPanel'
 import { useChatStore } from './stores/chat'
 
 /**
  * 聊天工作台精简版(ui-design §4.1):会话列表 / 消息流 / 输入框 / 流式渲染 /
  * 停止生成 / swipe 切换(变体激活)/ 设置页(provider/密钥)/ Prompt Inspector /
- * 缓存遥测面板(S20,ui-design §4.6)。
+ * 缓存遥测面板(S20,ui-design §4.6)/ 记忆管理面板(S31,ui-design §4.7 memory 区)。
  */
 export function App(): ReactElement {
   const loadChats = useChatStore((s) => s.loadChats)
@@ -19,7 +20,9 @@ export function App(): ReactElement {
   const clearError = useChatStore((s) => s.clearError)
   const settingsOpen = useChatStore((s) => s.settingsOpen)
   const setSettingsOpen = useChatStore((s) => s.setSettingsOpen)
+  const currentChatId = useChatStore((s) => s.currentChatId)
   const [telemetryOpen, setTelemetryOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
 
   useEffect(() => {
     void loadChats()
@@ -39,6 +42,15 @@ export function App(): ReactElement {
               onClick={() => setTelemetryOpen(!telemetryOpen)}
             >
               遥测
+            </button>
+            <button
+              type="button"
+              className="rounded px-3 py-1 text-sm hover:bg-[var(--muted)] disabled:opacity-40"
+              disabled={currentChatId === null}
+              title={currentChatId === null ? '先选择会话' : '摘要链 / Dossier / Timeline / 检索(S31)'}
+              onClick={() => setMemoryOpen(!memoryOpen)}
+            >
+              记忆
             </button>
             <button
               type="button"
@@ -62,6 +74,7 @@ export function App(): ReactElement {
       </main>
       {settingsOpen && <ProviderSettings />}
       {telemetryOpen && <CacheTelemetry />}
+      {memoryOpen && currentChatId !== null && <MemoryPanel chatId={currentChatId} onClose={() => setMemoryOpen(false)} />}
       <PromptInspector />
     </div>
   )

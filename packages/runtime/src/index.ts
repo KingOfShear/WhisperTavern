@@ -36,6 +36,38 @@ export {
 export { MIGRATIONS, LATEST_SCHEMA_VERSION, type Migration } from './db/migrations'
 export * from './db/schema'
 export {
+  createMemoryRepository,
+  serializeEmbedding,
+  parseEmbedding,
+  cosine,
+  assertMemoryType,
+} from './memory/repository'
+export { buildSummaryContributions } from './memory/summary-contributions'
+export { searchMemory } from './memory/search'
+export {
+  type MemoryHit,
+  type MemoryRepository,
+  type MemoryWriter,
+  type MemoryReader,
+  type KeywordSearchQuery,
+  type SemanticSearchQuery,
+  type UpsertMemoryInput,
+  type AppendTimelineEventInput,
+  type AppendChunksInput,
+  type AppendSummaryBlockInput,
+  type SummaryBlock,
+  type InsertDocumentInput,
+  type ListMemoriesQuery,
+  type ListTimelineEventsQuery,
+  type TimelineEventRecord,
+  type DocumentRecord,
+  type ChunkRecord,
+  type ChunkHit,
+  type MemorySearchKind,
+  type SearchMemoryQuery,
+  type MemorySearchHit,
+} from './memory/types'
+export {
   activateMessage,
   createBranch,
   createChat,

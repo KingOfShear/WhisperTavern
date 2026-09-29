@@ -382,6 +382,11 @@ export function prepareIteration(
 
   const contributions: PromptContribution[] = [...buildContributions(chat.value, chain.value), ...recurring]
 
+  // S26 §19:Agent Runtime 缺省不驱动 compile 输入——Context Policy 过滤由调用方经
+  // filterContributions 注入(此处应用;S30 修复:此前参数已声明但从未被消费,WEB/S26 测试
+  // 靠编译后快照断言而非依赖过滤行为)。append 语义=追加在过滤结果之后(记忆 tail 注入)。
+  const filteredContributions = input.filterContributions !== undefined ? input.filterContributions(contributions) : contributions
+
   const outcome = compile({
     chatId: input.chatId,
     snapshotId,
@@ -393,7 +398,7 @@ export function prepareIteration(
     maxOutputTokens: input.adapter.capabilities(input.model).maxOutputTokens,
     providerCacheType: input.adapter.capabilities(input.model).cacheType,
     mode: 'preview',
-    contributions,
+    contributions: filteredContributions,
     variables,
     ...(chain.value.at(-1) !== undefined
       ? {

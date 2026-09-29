@@ -176,6 +176,23 @@ export {
   type PolicyDrop,
   type PolicyFilterResult,
 } from './context/policy'
+/** S30(WP4.2a):Memory Policy 真实实现(R-P3-9 兑现)——检索编排经 Context Policy 注 tail */
+export { resolveMemoryPolicy, type MemoryPolicyInput, type MemoryPolicyResult } from './memory/policy'
+/** S31(WP4.2b):Scribe Agent + 记忆写入工具(memory-runtime-spec §4) */
+export {
+  runScribe,
+  scribeChatTitle,
+  SCRIBE_METADATA_ROLE,
+  type RunScribeInput,
+  type RunScribeResult,
+} from './memory/scribe'
+export {
+  createMemoryWriterToolDefinitions,
+  memoryWriterWireTools,
+  MEMORY_WRITE_PERMISSIONS,
+  MEMORY_TOOL_SPECS,
+  type MemoryWriterToolDeps,
+} from './memory/tools'
 export {
   createArtifact,
   freezeArtifact,

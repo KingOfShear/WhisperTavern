@@ -5,12 +5,21 @@ import type {
   CacheSimulationResultDto,
   ChatSnapshotSummaryDto,
   ChatTelemetryDto,
+  CreateDossierEntityRequest,
+  CreateSummaryRequest,
+  CreateTimelineEventRequest,
   DebugExportBundleDto,
   DebugExportPolicyDto,
+  DossierEntityDto,
   MessageWithVariantsDto,
   PromptDiffDto,
   PromptSnapshotDto,
   ProviderDto,
+  SearchMemoryResultDto,
+  ScribeTriggerRequest,
+  ScribeTriggerStartDto,
+  SummaryBlockDto,
+  TimelineEventDto,
 } from '@whispertavern/api-types'
 
 /**
@@ -149,6 +158,41 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // ===== S31 Memory HTTP 面(api-spec §88–§92)=====
+
+  /** §88 Search Memory:跨四层(dossier/document/summary/timeline)子串检索 */
+  searchMemory: (chatId: string, body: { query: string; limit?: number; kinds?: ('summary' | 'dossier' | 'timeline' | 'document')[] }) =>
+    apiRequest<SearchMemoryResultDto>(`/api/v2/chats/${chatId}/memory/search`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** §90 Summary 链(冻结块按 seq 升序) */
+  getSummaries: (chatId: string) => apiRequest<SummaryBlockDto[]>(`/api/v2/chats/${chatId}/summaries`),
+
+  /** §90 显式 Checkpoint:追加一个冻结摘要块 */
+  createSummary: (chatId: string, body: CreateSummaryRequest) =>
+    apiRequest<SummaryBlockDto>(`/api/v2/chats/${chatId}/summaries`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** §91 Dossier 实体卡列表 */
+  getDossier: (chatId: string) => apiRequest<DossierEntityDto[]>(`/api/v2/chats/${chatId}/dossier`),
+
+  /** §91 建/更新实体卡(同 entity = 版本化更新) */
+  createDossierEntity: (chatId: string, body: CreateDossierEntityRequest) =>
+    apiRequest<DossierEntityDto>(`/api/v2/chats/${chatId}/dossier/entities`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** §91 更新既有实体卡(保持 entity 名,内容/重要度/置信度版本化) */
+  patchDossierEntity: (id: string, body: Partial<Pick<DossierEntityDto, 'content' | 'importance' | 'confidence' | 'sourceMessageIds'>>) =>
+    apiRequest<DossierEntityDto>(`/api/v2/dossier/entities/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** §92 Timeline 事件流(只追加;GET 按 createdAt 降序最新在前) */
+  getTimeline: (chatId: string) => apiRequest<TimelineEventDto[]>(`/api/v2/chats/${chatId}/timeline`),
+
+  /** §92 追加 Timeline 事件 */
+  createTimelineEvent: (chatId: string, body: CreateTimelineEventRequest) =>
+    apiRequest<TimelineEventDto>(`/api/v2/chats/${chatId}/timeline`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** wp4.2b Scribe 触发(§143 长任务:202 + runId,写入经 tool_calls/artifacts 落账) */
+  triggerScribe: (chatId: string, body: ScribeTriggerRequest = {}) =>
+    apiRequest<ScribeTriggerStartDto>(`/api/v2/chats/${chatId}/memory/scribe`, { method: 'POST', body: JSON.stringify(body) }),
 }
 
 /** 列表面(裁剪自 MessageDto;完整形状见 api-types) */

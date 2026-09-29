@@ -967,6 +967,8 @@ CREATE TABLE memories (
 
     type                TEXT NOT NULL,
 
+    entity              TEXT,                    -- P4：Dossier 实体维度（type='fact' 时非空；人物/地点/组织/物品/关系）
+
     content             TEXT NOT NULL,
 
     importance          REAL,
@@ -981,6 +983,8 @@ CREATE TABLE memories (
 
     content_hash        TEXT NOT NULL,
 
+    embedding           BLOB,                   -- sqlite-vec 语义向量（float32 序列化，§25.5）
+
     version             INTEGER NOT NULL DEFAULT 1,
 
     created_at           TIMESTAMPTZ NOT NULL,
@@ -988,6 +992,8 @@ CREATE TABLE memories (
 
     deleted_at          TIMESTAMPTZ
 );
+CREATE INDEX idx_memories_chat_type ON memories(chat_id, type) WHERE deleted_at IS NULL;
+CREATE INDEX idx_memories_entity ON memories(entity) WHERE deleted_at IS NULL AND entity IS NOT NULL;
 ```
 
 Memory 类型：
@@ -1002,7 +1008,7 @@ instruction
 other
 ```
 
-P4 补充（总设计 §25 四层记忆）：①本表需增加 `embedding BLOB`（sqlite-vec vec0 虚拟表或独立向量表）支撑语义检索，另建 FTS5 虚拟表作**关键词兜底**（建表/触发器见 §25.1）；②Dossier 的实体维度以 `entity TEXT` 列 + type='fact' 承载；③尚缺 **timeline_events** 与 **Data Bank**（documents/chunks 两表 + 向量索引），P4 实现时按总设计 §31 补齐。
+P4 补充（总设计 §25 四层记忆，已在 §25.2–§25.5 补齐）：①本表已增加 `embedding BLOB`（sqlite-vec vec0 虚拟表，§25.5）支撑语义检索，FTS5 虚拟表作**关键词兜底**（建表/触发器见 §25.1）；②Dossier 的实体维度以 `entity TEXT` 列 + type='fact' 承载；③timeline_events（§25.2）与 Data Bank（documents/chunks + chunks_fts，§25.3/§25.4）已补齐。
 
 ---
 
@@ -1057,6 +1063,142 @@ LIMIT :topN;
 清理与迁移：`memories` 的软删除（`deleted_at`）不触发物理 DELETE，需按保留策略定期 `DELETE FROM memories_fts WHERE memory_id IN (SELECT id FROM memories WHERE deleted_at IS NOT NULL)`；重建索引 = `DROP + CREATE` 并用 `INSERT INTO ... SELECT` 回填。
 
 > **Data Bank 复用同一模式**（P4）：`chunks` 追加式（append-only），故只需 insert / delete 两个触发器：`chunks_fts(chunk_id UNINDEXED, document_id UNINDEXED, content)`——chunk 重写入以新 chunk_id 追加，不触发 update 重写。
+
+---
+
+# 25.2 Timeline Events（P4，S29 补表定义）
+
+【2026-09，总设计 §25 四层记忆之 Timeline 层】记录**带时间戳的事件**——谁、何时、何地、做了什么、产生了什么后果。Scribe Agent 将对话流转化为事件序列，供检索与关系推导。
+
+```sql
+CREATE TABLE timeline_events (
+    id                UUID PRIMARY KEY,
+    chat_id           UUID NOT NULL,
+
+    event_type        TEXT NOT NULL,         -- e.g. 'conversation'|'discovery'|'relationship_change'|'plot_event'|'custom'
+    summary           TEXT NOT NULL,          -- 事件摘要（经 Scribe 压缩）
+    participants      JSONB NOT NULL DEFAULT '[]',  -- [character_id, ...] 参与者列表
+    location          TEXT,                   -- 地点描述，可空
+    consequences      TEXT,                   -- 后果/影响描述
+
+    source_message_id UUID,                  -- 溯源消息（可空）
+    importance        REAL,                   -- 0–1，纳入 revisit_probability 排序
+    emotional_weight  REAL,                   -- 0–1，影响情绪惯性
+    created_at        TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_timeline_events_chat ON timeline_events(chat_id, created_at);
+CREATE INDEX idx_timeline_events_type ON timeline_events(chat_id, event_type);
+```
+
+> `participants` 为 JSONB 数组（`['character-uuid-1', 'user']`），支持多角色事件。`emotional_weight` 在 Emotion Transition（spec §8）中使用：`eventImpact × emotional_weight`。
+
+---
+
+# 25.3 Documents — Data Bank 元数据（P4，S29 补表定义）
+
+【2026-09，总设计 §25 四层记忆之 Data Bank RAG 层】存储**导入文档的元数据**（txt/md/pdf/epub 等），实际文本内容存入 `chunks` 并建 FTS5 向量索引。
+
+```sql
+CREATE TABLE documents (
+    id                  UUID PRIMARY KEY,
+    chat_id             UUID,                  -- 关联 chat（可空，离线文档库）
+    owner_id            UUID NOT NULL,
+
+    title               TEXT NOT NULL,
+    source_type         TEXT NOT NULL,          -- 'file'|'url'|'pasted'
+    source_uri           TEXT,                    -- 文件路径 / URL
+
+    mime_type            TEXT,                   -- e.g. 'text/plain' / 'application/pdf'
+    file_size_bytes      INTEGER,
+
+    metadata            JSONB NOT NULL DEFAULT '{}',  -- 提取的元信息（PDF 页数/语言/作者等）
+
+    total_chunks         INTEGER DEFAULT 0,      -- 由 chunks 表聚合更新
+    indexed_at           TIMESTAMPTZ,            -- 向量索引时间
+
+    created_at           TIMESTAMPTZ NOT NULL,
+    deleted_at           TIMESTAMPTZ
+);
+CREATE INDEX idx_documents_chat ON documents(chat_id) WHERE deleted_at IS NULL;
+```
+
+---
+
+# 25.4 Chunks — Data Bank 文本块（P4，S29 补表定义）
+
+【2026-09，总设计 §25 四层记忆之 Data Bank RAG 层】RAG 分块存储。`chunks` 为追加式（append-only），重写 = 新增一条（`chunk_id` 换），不 UPDATE 旧行。FTS5 触发器只维护 insert/delete（无 update 触发器）。
+
+```sql
+CREATE TABLE chunks (
+    id                UUID PRIMARY KEY,
+
+    document_id       UUID NOT NULL,            -- FK → documents.id
+    chat_id           UUID,                      -- 可空（离线文档）
+
+    chunk_index       INTEGER NOT NULL,         -- 在文档内的序号（0-based）
+    content           TEXT NOT NULL,
+
+    token_count       INTEGER,
+
+    content_hash      TEXT NOT NULL,             -- 内容指纹（去重/更新检测）
+
+    metadata         JSONB NOT NULL DEFAULT '{}', -- {heading, page, line_start, line_end...}
+
+    created_at        TIMESTAMPTZ NOT NULL,
+    deleted_at        TIMESTAMPTZ
+);
+
+CREATE VIRTUAL TABLE chunks_fts USING fts5(
+    chunk_id        UNINDEXED,   -- 关联 chunks.id
+    document_id      UNINDEXED,   -- 关联 chunks.document_id
+    content_hash     UNINDEXED,   -- 内容指纹（校验）
+    content,                     -- 唯一参与索引的列
+    tokenize = 'unicode61 remove_diacritics 2',
+    prefix = '3 4'
+);
+
+-- Chunks 追加式，触发器只有 insert/delete（无 update——update 以新 chunk_id 追加）
+CREATE TRIGGER chunks_fts_after_insert AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(chunk_id, document_id, content_hash, content)
+    VALUES (new.id, new.document_id, new.content_hash, new.content);
+END;
+
+CREATE TRIGGER chunks_fts_after_delete AFTER DELETE ON chunks BEGIN
+    DELETE FROM chunks_fts WHERE chunk_id = old.id;
+END;
+
+CREATE INDEX idx_chunks_document ON chunks(document_id) WHERE deleted_at IS NULL;
+```
+
+> **append-only 特性**：`update_chunk` 语义 = `INSERT new_chunk(id=new-uuid, chunk_id_new, content=new) + DELETE old_chunk(id=old-id)`。这样 FTS5 触发器无需 update 路径，且历史版本可保留在 `chunks` 表中（由 `memory_versions` 关联，暂不显式建模）。
+
+---
+
+# 25.5 Embeddings（sqlite-vec 向量索引，P4，S29 补表定义）
+
+【2026-09，总设计 §25 / §41.1】Embedding 向量存储使用 **sqlite-vec**（纯 SQLite 扩展，`packages/runtime/src/memory/` 的 Repository 层唯一存储位置，不进 Core 纯函数包 / Compiler）。vec0 虚拟表直接关联 `memories.id`：
+
+```sql
+-- memories 语义向量（sqlite-vec vec0）
+CREATE VIRTUAL TABLE memories_vec USING vec0();
+
+-- chunks 语义向量（可选，Data Bank RAG 语义检索）
+CREATE VIRTUAL TABLE chunks_vec USING vec0();
+
+-- chunks 向量与 chunks 表的关联（sqlite-vec 内部以 rowid 为主键，chunks.id 需额外映射表）
+-- 方案：chunks_vec.rowid = CAST(chunks.id AS INTEGER) 的低 63 位（UUIDv7 可转整数）
+-- 警告：UUIDv7 在高并发下有碰撞风险（§5.8 UUIDv7 碰撞风险说明）
+-- → chunks_vec 改用独立映射表：
+CREATE TABLE chunks_embeddings (
+    chunk_id   TEXT PRIMARY KEY,   -- chunks.id（TEXT，UUID）
+    vector_id  INTEGER NOT NULL   -- vec0 内部 rowid 映射
+);
+CREATE INDEX idx_chunks_embeddings_vec_id ON chunks_embeddings(vector_id);
+```
+
+> **UUIDv7 与 vec0 rowid 映射**：`memories_vec` 直接以 `memories.id` 插入（sqlite-vec vec0 接受 TEXT 主键）；`chunks_vec` 因 vec0 rowid 为自增整数，用 `chunks_embeddings` 映射表隔离碰撞风险。
+> 
+> **可移植纪律（§70）**：vec0 仅在 `packages/runtime/src/memory/` 的 Repository 层封装，不扩散进 `packages/core` 或 `packages/contracts`。
 
 ---
 

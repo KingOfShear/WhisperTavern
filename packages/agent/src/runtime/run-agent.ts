@@ -51,11 +51,12 @@ import {
   type WhisperTavernDb,
 } from '@whispertavern/runtime'
 import { eq } from 'drizzle-orm'
-import { runs as runsTable } from '@whispertavern/runtime'
+import { runs as runsTable, createMemoryRepository } from '@whispertavern/runtime'
 import { BudgetTracker, BudgetExceeded } from '../tools/budget'
 import { ToolRegistry, type BatchContext } from '../tools/registry'
 import { TOOL_PERMISSIONS, type CancellationToken, type ToolResult } from '../tools/types'
 import { DEFAULT_CONTEXT_POLICY, resolveContextByPolicy, type ContextPolicy, type PolicyDrop } from '../context/policy'
+import { resolveMemoryPolicy } from '../memory/policy'
 import { artifactContributions, type Artifact } from '../artifacts/store'
 import { commitOutput, DEFAULT_OUTPUT_POLICY, type OutputPolicy } from '../output/commit'
 import { replayToolResults } from './replay'
@@ -115,6 +116,12 @@ export interface RunAgentInput {
   permissions?: ReadonlySet<string>
   /** S26 §18–§22:Context Policy(缺省 = 全放行;历史/世界书/Artifact 过滤落编译前) */
   contextPolicy?: ContextPolicy
+  /**
+   * S30 §20:记忆检索入参(policy.memory.enabled 时生效)。
+   * query=关键词兜底 / embedding=语义向量;策略 recent/importance 可不传。
+   * 命中经 resolveMemoryPolicy **一律注 tail**(memory-runtime-spec §5)——绝不进稳定前缀(C2/R4)。
+   */
+  memoryRetrieval?: { query?: string; embedding?: Float32Array }
   /** S26 §22:参与本次 Run 的 Artifact(经 ArtifactPolicy 投影为贡献;frozen → injection) */
   artifacts?: readonly Artifact[]
   /** S26 §75:Output Policy(缺省 = mode message + role character,保 S23 行为) */
@@ -299,6 +306,8 @@ export async function runAgent(deps: AgentRunDeps, input: RunAgentInput): Promis
   // —— S26:Context Policy 过滤审计 + Artifact 贡献 + §106 缓存失效收集 ——
   const policy = input.contextPolicy ?? DEFAULT_CONTEXT_POLICY
   const policyDrops: PolicyDrop[] = []
+  // S30 §20:记忆 tail 贡献(每轮检索后由 filterContributions append;zone=tail 可逐轮变)
+  let memoryTailContribs: PromptContribution[] = []
   const artifactContribs =
     input.artifacts !== undefined && input.artifacts.length > 0 ? artifactContributions(input.artifacts, policy.artifacts).contributions : []
   const cacheBreaks: import('@whispertavern/contracts').CacheBreakReason[] = []
@@ -362,6 +371,20 @@ export async function runAgent(deps: AgentRunDeps, input: RunAgentInput): Promis
         recurring = undefined
         recurringInvalid = false
       }
+      // S30 §20:记忆检索(每轮一次;命中注 tail 可逐轮变,volatile 不破坏稳定前缀)。
+      // 首轮与后续轮都重查——记忆随会话增长检索结果应随之更新(memory-runtime-spec §2 四层语义)
+      if (policy.memory.enabled && input.memoryRetrieval !== undefined) {
+        const memResult = await resolveMemoryPolicy({
+          policy: policy.memory,
+          repository: createMemoryRepository(store.sqlite),
+          chatId: input.chatId,
+          query: input.memoryRetrieval.query,
+          embedding: input.memoryRetrieval.embedding,
+        })
+        memoryTailContribs = memResult.items
+      } else {
+        memoryTailContribs = []
+      }
       const prep = prepareIteration(
         { store, bus, snapshots: deps.snapshots, onUsageRecorded: deps.onUsageRecorded },
         {
@@ -376,11 +399,12 @@ export async function runAgent(deps: AgentRunDeps, input: RunAgentInput): Promis
           ...(recurring === undefined ? {} : { recurringContributions: recurring }),
           ...(input.tools === undefined ? {} : { tools: [...input.tools] }),
           ...(cacheBreaks.length > 0 ? { cacheInvalidations: cacheBreaks.splice(0) } : {}),
-          // §19 分工:Agent Runtime 裁决"哪些内容进 Context";Layout 仍归 Compiler
+          // §19 分工:Agent Runtime 裁决"哪些内容进 Context";Layout 仍归 Compiler。
+          // S30:记忆命中(zone=tail)在策略过滤后追加——tail 永久不碰稳定前缀(C2/R4)
           filterContributions: (contribs) => {
             const filtered = resolveContextByPolicy(policy, contribs)
             if (iteration === 1) policyDrops.push(...filtered.dropped)
-            return filtered.contributions
+            return [...filtered.contributions, ...memoryTailContribs]
           },
         },
       )

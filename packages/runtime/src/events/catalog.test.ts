@@ -76,6 +76,7 @@ describe('§5.4 分档判据(§5.4 硬约束二 + X13)', () => {
       'approval',
       'workflow',
       'artifact',
+      'memory',
     ])
     const strays = NAMES.filter((n) => !allowed.has(n.split('.')[0]!))
     expect(strays, `越权域:${strays.join(', ')}`).toEqual([])

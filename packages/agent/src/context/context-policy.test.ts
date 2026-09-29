@@ -24,6 +24,15 @@ import { runAgent } from '../runtime/run-agent'
 
 const NOW = '2026-09-26T18:00:00.000Z'
 
+/** MemoryHit-like 测试工厂(policy.ts MemoryHitLike 形状) */
+function hit(
+  memoryId: string,
+  content: string,
+  extra: Partial<{ importance: number; confidence: number }> = {},
+): { memoryId: string; content: string; importance?: number; confidence?: number } {
+  return { memoryId, content, ...extra }
+}
+
 function makeStore(): WhisperTavernDb {
   const store = createDatabase(':memory:')
   store.sqlite
@@ -136,11 +145,39 @@ describe('S26 §22 Artifact Policy', () => {
   })
 })
 
-describe('S26 §20 Memory Policy(R-P3-9 空实现)', () => {
-  it('检索恒空且带说明', () => {
-    const r = resolveMemoryItems(DEFAULT_CONTEXT_POLICY.memory)
+describe('S26 §20 Memory Policy(R-P3-9 兑现,S30)', () => {
+  it('enabled=false → 恒空带关闭说明', () => {
+    const r = resolveMemoryItems({ ...DEFAULT_CONTEXT_POLICY.memory, enabled: false }, [hit('m1', 'fox likes springs')])
     expect(r.items).toHaveLength(0)
-    expect(r.note).toContain('R-P3-9')
+    expect(r.note).toContain('enabled=false')
+  })
+
+  it('命中 → zone=tail 贡献 + source memory + order 单调', () => {
+    const r = resolveMemoryItems(
+      { ...DEFAULT_CONTEXT_POLICY.memory, enabled: true, maxItems: 2 },
+      [hit('m1', 'fox likes springs'), hit('m2', 'crow guards gate')],
+    )
+    expect(r.items).toHaveLength(2)
+    const [first, second] = r.items
+    expect(first!.source).toEqual({ type: 'memory', memoryId: 'm1' })
+    expect(first!.segment.zone).toBe('tail') // §5:记忆只注 tail,不进稳定前缀(C2/R4)
+    expect(first!.semanticPlacement.order).toBe(0)
+    expect(second!.semanticPlacement.order).toBe(1)
+    expect(first!.segment.content).toContain('fox likes springs')
+  })
+
+  it('maxItems / minImportance / minConfidence 过滤且审计 note', () => {
+    const base = { ...DEFAULT_CONTEXT_POLICY.memory, enabled: true }
+    const r1 = resolveMemoryItems({ ...base, maxItems: 1 }, [hit('m1', 'a'), hit('m2', 'b')])
+    expect(r1.items.map((c) => c.source)).toEqual([{ type: 'memory', memoryId: 'm1' }])
+    expect(r1.note).toContain('maxItems')
+
+    const r2 = resolveMemoryItems({ ...base, minImportance: 0.7 }, [hit('m1', 'a', { importance: 0.9 }), hit('m2', 'b', { importance: 0.2 })])
+    expect(r2.items.map((c) => c.id)).toEqual(['memory:m1'])
+    expect(r2.note).toContain('importance')
+
+    const r3 = resolveMemoryItems({ ...base, minConfidence: 0.8 }, [hit('m1', 'a', { confidence: 0.95 }), hit('m2', 'b', { confidence: 0.4 })])
+    expect(r3.items.map((c) => c.id)).toEqual(['memory:m1'])
   })
 })
 

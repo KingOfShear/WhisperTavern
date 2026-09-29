@@ -1,4 +1,4 @@
-import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { blob, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
  * P0 表清单 —— database-schema P0 阶段清单的 Drizzle 投影(p0-plan S5 任务 2):
@@ -608,4 +608,109 @@ export const approvals = sqliteTable('approvals', {
   decidedAt: text('decided_at'),
   expiresAt: text('expires_at'),
   createdAt: text('created_at').notNull(),
+})
+
+/**
+ * P4(WP4.1)Memory 持久化底座 —— database-schema §23/§25/§25.1/§25.2/§25.3/§25.4/§26
+ * 的 Drizzle 投影(migration v10 同批落库)。
+ *
+ * 细节:①FTS5 虚拟表(memories_fts/chunks_fts)非 Drizzle 表,经原生 SQL 访问
+ * (Repository 层封装,X16);②embedding 为 float32 序列化 BLOB,编解码见
+ * `packages/runtime/src/memory/repository.ts`。
+ */
+
+/** §23 Summary Block —— 追加式冻结块(R-P4-4;compiler-spec §32/§33) */
+export const summaryBlocks = sqliteTable('summary_blocks', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  sequence: integer('sequence').notNull(),
+  content: text('content').notNull(),
+  fromMessageId: text('from_message_id').notNull(),
+  toMessageId: text('to_message_id').notNull(),
+  frozen: integer('frozen', { mode: 'boolean' }).notNull().default(false),
+  contentHash: text('content_hash').notNull(),
+  tokenCount: integer('token_count'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** §25 Memories —— Dossier 事实卡 + 其他长期记忆;embedding BLOB = float32 语义向量 */
+export const memories = sqliteTable('memories', {
+  id: text('id').primaryKey(),
+  ownerId: text('owner_id').notNull(),
+  chatId: text('chat_id'),
+  /**
+   * fact | preference | relationship | event | world | instruction | other(§25 类型清单)
+   * entity 为 Dossier 实体维度,type='fact' 时非空
+   */
+  type: text('type').notNull(),
+  entity: text('entity'),
+  content: text('content').notNull(),
+  importance: real('importance'),
+  confidence: real('confidence'),
+  sourceMessageIds: text('source_message_ids').notNull().default('[]'),
+  tags: text('tags').notNull().default('[]'),
+  metadata: text('metadata').notNull().default('{}'),
+  contentHash: text('content_hash').notNull(),
+  embedding: blob('embedding', { mode: 'buffer' }),
+  version: integer('version').notNull().default(1),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+/** §26 Memory Version —— 版本化更新快照(memory.updated 事件同行) */
+export const memoryVersions = sqliteTable('memory_versions', {
+  id: text('id').primaryKey(),
+  memoryId: text('memory_id').notNull(),
+  version: integer('version').notNull(),
+  content: text('content').notNull(),
+  snapshot: text('snapshot').notNull().default('{}'),
+  contentHash: text('content_hash').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
+/** §25.2 Timeline Events —— Scribe 追加式事件流 */
+export const timelineEvents = sqliteTable('timeline_events', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  eventType: text('event_type').notNull(),
+  summary: text('summary').notNull(),
+  participants: text('participants').notNull().default('[]'),
+  location: text('location'),
+  consequences: text('consequences'),
+  sourceMessageId: text('source_message_id'),
+  importance: real('importance'),
+  emotionalWeight: real('emotional_weight'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** §25.3 Documents —— Data Bank 元数据 */
+export const documents = sqliteTable('documents', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id'),
+  ownerId: text('owner_id').notNull(),
+  title: text('title').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceUri: text('source_uri'),
+  mimeType: text('mime_type'),
+  fileSizeBytes: integer('file_size_bytes'),
+  metadata: text('metadata').notNull().default('{}'),
+  totalChunks: integer('total_chunks').default(0),
+  indexedAt: text('indexed_at'),
+  createdAt: text('created_at').notNull(),
+  deletedAt: text('deleted_at'),
+})
+
+/** §25.4 Chunks —— Data Bank 文本块(append-only) */
+export const chunks = sqliteTable('chunks', {
+  id: text('id').primaryKey(),
+  documentId: text('document_id').notNull(),
+  chatId: text('chat_id'),
+  chunkIndex: integer('chunk_index').notNull(),
+  content: text('content').notNull(),
+  tokenCount: integer('token_count'),
+  contentHash: text('content_hash').notNull(),
+  metadata: text('metadata').notNull().default('{}'),
+  createdAt: text('created_at').notNull(),
+  deletedAt: text('deleted_at'),
 })

@@ -1,6 +1,6 @@
 # WhisperTavern V2 — Roleplay Runtime Specification
 
-> 版本：V1.1（2026-09-05 升级：并入细化版后按折中 5 表持久化 + `roleplay.*` 事件域对齐收编）
+> 版本：V1.2（2026-09-28：§25 Memory 集成补 **Scribe 集成注**（S31/WP4.2b 落地载体——触发面/影子会话隔离/三写入工具/SUMMARY_CHECKPOINT），对齐 memory-runtime-spec V0.3 与 api-spec V2.7）
 > 状态：Draft（与总设计、agent-runtime-spec、prompt-compiler-spec、database-schema、api-spec 对齐，待 P4 实施验证）
 > 文档层级：[technical-design.md](../technical-design.md) 之下的 **Roleplay Runtime 模块详细规格**（第五份模块规格，§38 决策 28）
 > 依赖：`agent-runtime-spec.md`（执行四层 C5）、`prompt-compiler-spec.md`（PromptContribution / zone / CachePlan / C6）、`database-schema.md`（Roleplay 五表，§29.1–29.5）、`api-spec.md`、`dialogue-director-spec.md`（Director 子规格）、`roleplay-quality-spec.md`（Quality 子规格）、`technical-design.md`（§5.4 事件权威清单、§25 Memory、§26 群聊、§23.2 快速路径）
@@ -530,6 +530,11 @@ interface MemoryQuery {
 默认优先级：`Relationship → Relevant Episodic → Character → Unresolved Threads → World → General History`（可由 Context Policy 调序）。
 
 **Runtime State / Memory / Summary 三者关系**：Memory=可检索事实（"用户曾救过角色"）；State=当前动态状态（"因此更信任"）；Summary=过去发生了什么。三者不可互相替代。
+
+**Scribe 集成注（S31/WP4.2b）**：记忆的**写入**由 Scribe Agent 承担（memory-runtime-spec §4），Roleplay 面只消费 `Retrieve` 面（§25 上文 `MemoryQuery` / memory-runtime-spec §3 双检索引擎 / §5 zone=tail 注入）。落地载体：
+- Scribe 触发 = `POST /api/v2/chats/:id/memory/scribe`（api-spec §155；显式 Checkpoint / Summary 冻结 / 用户指令，**不**在 RP Fast 每轮同步调用——P4 出场约束每轮恰 1 次模型调用）；
+- Scribe 对话在**影子会话**隔离运行（不修改原聊天记录，memory-runtime-spec §4.1 不变量 1），写入经 `memory.upsert_dossier` / `memory.append_timeline` / `memory.append_summary` 三工具落在四层表，Dossier 版本化 / Timeline 只追加 / Summary 冻结追加（§4.1 不变量 2/3/5）；
+- 摘要冻结块经 `SUMMARY_CHECKPOINT` CacheBreak 后才进 stable zone summary 区（memory-runtime-spec §5.3 / compiler-spec §33）。
 
 ---
 

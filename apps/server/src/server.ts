@@ -25,12 +25,14 @@ import {
   createBranch,
   createChat,
   createMessage,
+  createMemoryRepository,
   deleteChat,
   deleteMessage,
   editMessage,
   loadActiveChain,
   loadChat,
   loadMessage,
+  searchMemory,
   sha256Hex,
   startRun,
   swipeMessage,
@@ -44,10 +46,12 @@ import {
   AGENT_TYPES,
   assertCanSpawn,
   createAgentDefinition,
+  createMemoryWriterToolDefinitions,
   listAgentDefinitions,
   loadAgentDefinition,
   resumeRun,
   runAgent as runAgentOrchestrator,
+  runScribe,
   ToolRegistry,
   type AgentRunDeps,
   type ToolDefinition,
@@ -109,6 +113,8 @@ export function createApp(deps: ServerDeps): CreatedApp {
   const registry = new RunStreamRegistry(deps.bus)
   /** S28 §154:空注册表兜底(GET /tools 读面);持有者可注入已注册工具 */
   const tools = deps.tools ?? new ToolRegistry({ store: deps.store, bus: deps.bus, persistApprovalAudit: () => undefined })
+  /** S31(WP4.2b):注册 Scribe 记忆写入工具(Scribe/Roleplay 共通;GET /tools 亦可见) */
+  for (const tool of createMemoryWriterToolDefinitions({ store: deps.store, bus: deps.bus })) tools.register(tool)
   const agentRunDeps = (): AgentRunDeps => ({
     store: deps.store,
     bus: deps.bus,
@@ -2014,6 +2020,285 @@ export function createApp(deps: ServerDeps): CreatedApp {
       500,
     )
   })
+
+  // ===== S31(WP4.2b)Memory HTTP 面(api-spec §88–§92 / §155;记忆读写唯一入口 = Repository)=====
+
+  /** §88 POST /chats/:id/memory/search:跨四层检索(plugin:kinds 过滤;limit 上限防无界) */
+  app.post('/api/v2/chats/:id/memory/search', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    if (typeof body.query !== 'string' || body.query === '') return fail(c, requestId, 'VALIDATION_ERROR', 'query 必填')
+    const rawKinds = Array.isArray(body.kinds) ? body.kinds : undefined
+    const kinds = rawKinds?.filter((k): k is NonNullable<(typeof rawKinds)[number]> => typeof k === 'string' && ['summary', 'dossier', 'timeline', 'document'].includes(k))
+    const limit = num(body.limit, 20)
+    const items = await searchMemory(deps.store.sqlite, {
+      chatId,
+      query: body.query,
+      limit: Math.min(Math.max(limit, 1), 100),
+      kinds: kinds && kinds.length > 0 ? (kinds as ('summary' | 'dossier' | 'timeline' | 'document')[]) : undefined,
+    })
+    return ok(c, requestId, { items, total: items.length })
+  })
+
+  /** §90 GET /chats/:id/summaries:冻结块链(sequence 升序 = 剧情压缩时间序) */
+  app.get('/api/v2/chats/:id/summaries', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const chain = await repo.listSummaryChain(chatId)
+    return ok(c, requestId, chain.map((b) => ({
+      id: b.id,
+      seq: b.sequence,
+      content: b.content,
+      coversMessageRange: { from: b.fromMessageId, to: b.toMessageId },
+      frozenAt: b.createdAt,
+      ...(b.tokenCount === undefined ? {} : { tokenCount: b.tokenCount }),
+    })))
+  })
+
+  /** §90 POST /chats/:id/summaries:显式 Checkpoint 冻结块(§24;ContentRange 校验区间属本 chat) */
+  app.post('/api/v2/chats/:id/summaries', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    const content = typeof body.content === 'string' && body.content !== '' ? body.content : ''
+    if (content === '') return fail(c, requestId, 'VALIDATION_ERROR', 'content 必填')
+    const range = body.coversMessageRange
+    const from = isRecord(range) && typeof range.from === 'string' ? range.from : ''
+    const to = isRecord(range) && typeof range.to === 'string' ? range.to : ''
+    if (from === '' || to === '') return fail(c, requestId, 'VALIDATION_ERROR', 'coversMessageRange.{from,to} 必填')
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const block = await repo.appendSummaryBlock({
+      chatId,
+      content,
+      fromMessageId: from,
+      toMessageId: to,
+      tokenCount: typeof body.tokenCount === 'number' ? body.tokenCount : undefined,
+    })
+    return ok(c, requestId, {
+      id: block.id,
+      seq: block.sequence,
+      content: block.content,
+      coversMessageRange: { from: block.fromMessageId, to: block.toMessageId },
+      frozenAt: block.createdAt,
+      ...(block.tokenCount === undefined ? {} : { tokenCount: block.tokenCount }),
+    }, 201)
+  })
+
+  /** §91 GET /chats/:id/dossier:Dossier 实体卡列表(图 type='fact',按 updated_at 降序) */
+  app.get('/api/v2/chats/:id/dossier', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const entries = await repo.listMemories({ chatId, type: 'fact', limit: 200 })
+    return ok(c, requestId, entries.map((m) => toDossierDto(chatId, m)))
+  })
+
+  /** §91 POST /chats/:id/dossier/entities:建/更新实体卡(同 entity = 版本化更新,镜像 memory.upsert_dossier 工具) */
+  app.post('/api/v2/chats/:id/dossier/entities', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    const entity = typeof body.entity === 'string' && body.entity !== '' ? body.entity : ''
+    const content = typeof body.content === 'string' && body.content !== '' ? body.content : ''
+    if (entity === '' || content === '') return fail(c, requestId, 'VALIDATION_ERROR', 'entity/content 必填')
+    const repo = createMemoryRepository(deps.store.sqlite)
+    // 同 entity 的既有卡 = 版本化更新(upsertMemory 仅有 memoryId 才走 UPDATE;先查后传)
+    const existing = await repo.listMemories({ chatId, type: 'fact', entity, limit: 1 })
+    const memoryId = await repo.upsertMemory({
+      ...(existing[0] ? { memoryId: existing[0].memoryId } : {}),
+      ownerId: 'api',
+      chatId,
+      type: 'fact',
+      entity,
+      content,
+      importance: typeof body.importance === 'number' ? body.importance : (existing[0]?.importance ?? undefined),
+      confidence: typeof body.confidence === 'number' ? body.confidence : (existing[0]?.confidence ?? undefined),
+      sourceMessageIds: Array.isArray(body.sourceMessageIds)
+        ? body.sourceMessageIds.filter((x): x is string => typeof x === 'string')
+        : existing[0]?.sourceMessageIds,
+    })
+    const memory = await repo.getMemory(memoryId)
+    return ok(c, requestId, toDossierDto(chatId, memory!), 201)
+  })
+
+  /** §91 PATCH /dossier/entities/:id:更新既有实体卡(实体名不变,内容/重要度可改;版本化) */
+  app.patch('/api/v2/dossier/entities/:id', async (c) => {
+    const requestId = requestIdOf(c)
+    const entityId = c.req.param('id')
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const existing = await repo.getMemory(entityId)
+    if (existing === undefined || existing.type !== 'fact') return fail(c, requestId, 'MEMORY_NOT_FOUND', 'Dossier 实体卡不存在', { status: 404 })
+    const chatId = existing.chatId ?? ''
+    if (chatId === '') return fail(c, requestId, 'VALIDATION_ERROR', '实体卡无 chatId,无法定位会话')
+    const body = await jsonBody(c)
+    const content = typeof body.content === 'string' && body.content !== '' ? body.content : existing.content
+    const memoryId = await repo.upsertMemory({
+      memoryId: entityId,
+      ownerId: 'api',
+      chatId,
+      type: 'fact',
+      entity: existing.entity ?? '',
+      content,
+      importance: typeof body.importance === 'number' ? body.importance : existing.importance,
+      confidence: typeof body.confidence === 'number' ? body.confidence : existing.confidence,
+      sourceMessageIds: typeof body.sourceMessageIds === 'undefined' ? existing.sourceMessageIds : (Array.isArray(body.sourceMessageIds) ? body.sourceMessageIds.filter((x): x is string => typeof x === 'string') : undefined),
+    })
+    const memory = await repo.getMemory(memoryId)
+    return ok(c, requestId, toDossierDto(chatId, memory!))
+  })
+
+  /** §92 GET /chats/:id/timeline:追加式事件流(created_at 降序 = 最新在前) */
+  app.get('/api/v2/chats/:id/timeline', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const events = await repo.listTimelineEvents({ chatId, limit: 200 })
+    return ok(c, requestId, events.map((e) => toTimelineDto(e)))
+  })
+
+  /** §92 POST /chats/:id/timeline:追加事件(只追加不 UPDATE,§4.1.3) */
+  app.post('/api/v2/chats/:id/timeline', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+    const eventType = typeof body.eventType === 'string' && body.eventType !== '' ? body.eventType : ''
+    const summary = typeof body.summary === 'string' && body.summary !== '' ? body.summary : ''
+    if (eventType === '' || summary === '') return fail(c, requestId, 'VALIDATION_ERROR', 'eventType/summary 必填')
+    const repo = createMemoryRepository(deps.store.sqlite)
+    const eventId = await repo.appendTimelineEvent({
+      chatId,
+      eventType,
+      summary,
+      participants: Array.isArray(body.participants) ? body.participants.filter((x): x is string => typeof x === 'string') : undefined,
+      location: typeof body.location === 'string' ? body.location : undefined,
+      consequences: typeof body.consequences === 'string' ? body.consequences : undefined,
+      sourceMessageId: typeof body.sourceMessageId === 'string' ? body.sourceMessageId : undefined,
+      importance: typeof body.importance === 'number' ? body.importance : undefined,
+      emotionalWeight: typeof body.emotionalWeight === 'number' ? body.emotionalWeight : undefined,
+    })
+    const events = await repo.listTimelineEvents({ chatId, limit: 1 })
+    const created = events.find((e) => e.id === eventId) ?? {
+      id: eventId,
+      chatId,
+      eventType,
+      summary,
+      participants: [],
+      location: typeof body.location === 'string' ? body.location : undefined,
+      consequences: typeof body.consequences === 'string' ? body.consequences : undefined,
+      sourceMessageId: typeof body.sourceMessageId === 'string' ? body.sourceMessageId : undefined,
+      importance: typeof body.importance === 'number' ? body.importance : undefined,
+      emotionalWeight: typeof body.emotionalWeight === 'number' ? body.emotionalWeight : undefined,
+      createdAt: nowIso(),
+    }
+    return ok(c, requestId, toTimelineDto(created), 201)
+  })
+
+  /** wp4.2b Scribe 触发(§4.2 用户指令 Trigger;§143 长任务先 track 再异步跑;写入经 tool_calls/artifacts 落账) */
+  app.post('/api/v2/chats/:id/memory/scribe', async (c) => {
+    const requestId = requestIdOf(c)
+    const chatId = c.req.param('id')
+    const chat = loadChat(deps.store, chatId as ChatId)
+    if (!chat.ok) return runtimeError(c, requestId, chat.error)
+    const body = await jsonBody(c)
+
+    // provider 解析:body.providerId/model 覆盖 → 对话绑定
+    const providerId = typeof body.providerId === 'string' ? body.providerId : chat.value.modelProvider
+    const model = typeof body.model === 'string' ? body.model : chat.value.modelName
+    if (providerId === undefined || model === undefined) {
+      return fail(c, requestId, 'VALIDATION_ERROR', 'chat 未绑定 modelProvider/model,且请求未覆盖')
+    }
+    const providerRow = deps.store.db.select().from(providersTable).where(eq(providersTable.id, providerId)).get()
+    if (providerRow === undefined) return fail(c, requestId, 'PROVIDER_NOT_FOUND', `provider 不存在: ${providerId}`)
+    let adapter: ProviderAdapter | undefined
+    try {
+      const config = JSON.parse(providerRow.config) as Record<string, unknown>
+      const secretRef = typeof config.secretRef === 'string' ? config.secretRef : undefined
+      const apiKey = secretRef === undefined ? undefined : deps.secretStore.get(secretRef)
+      adapter = buildAdapter(providerRow.type, config, apiKey)
+    } catch (error) {
+      return fail(c, requestId, 'VALIDATION_ERROR', String((error as Error).message))
+    }
+    if (adapter === undefined) return fail(c, requestId, 'VALIDATION_ERROR', 'Scribe 需要可用 provider')
+
+    // 长任务:先 track(不错过首事件)再异步跑
+    const controller = new AbortController()
+    const runId = uuidv7()
+    registry.track(runId, controller)
+
+    void runScribe(agentRunDeps(), {
+      chatId: chatId as ChatId,
+      ...(typeof body.fromMessageId === 'string' ? { fromMessageId: body.fromMessageId } : {}),
+      ...(typeof body.toMessageId === 'string' ? { toMessageId: body.toMessageId } : {}),
+      adapter,
+      providerId,
+      model,
+      signal: controller.signal,
+      runId: runId as never,
+      ...(isRecord(body.budget)
+        ? {
+            budget: {
+              ...(body.budget.maxTurns === undefined ? {} : { maxTurns: num(body.budget.maxTurns, 1) }),
+              ...(body.budget.maxToolCalls === undefined ? {} : { maxToolCalls: num(body.budget.maxToolCalls, 20) }),
+              ...(body.budget.maxExecutionTimeMs === undefined ? {} : { maxExecutionTimeMs: num(body.budget.maxExecutionTimeMs, 0) }),
+            },
+          }
+        : {}),
+      now: nowIso(),
+    })
+      .then(() => registry.abort(runId))
+      .catch((error) => {
+        deps.logger?.('error', `scribe run 异常: ${runId}`, String(error))
+        registry.abort(runId)
+      })
+
+    return ok(c, requestId, { runId, chatId, status: 'running' }, 202)
+  })
+
+  function toDossierDto(chatId: string, m: { memoryId: string; entity?: string; content: string; importance?: number; confidence?: number; version: number; createdAt: string; updatedAt: string }): Record<string, unknown> {
+    return {
+      id: m.memoryId,
+      chatId,
+      entity: m.entity ?? '',
+      content: m.content,
+      ...(m.importance === undefined ? {} : { importance: m.importance }),
+      ...(m.confidence === undefined ? {} : { confidence: m.confidence }),
+      version: m.version,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+    }
+  }
+
+  function toTimelineDto(e: { id: string; chatId: string; eventType: string; summary: string; participants: string[]; location?: string; consequences?: string; sourceMessageId?: string; importance?: number; emotionalWeight?: number; createdAt: string }): Record<string, unknown> {
+    return {
+      id: e.id,
+      chatId: e.chatId,
+      eventType: e.eventType,
+      summary: e.summary,
+      participants: e.participants,
+      ...(e.location === undefined ? {} : { location: e.location }),
+      ...(e.consequences === undefined ? {} : { consequences: e.consequences }),
+      ...(e.sourceMessageId === undefined ? {} : { sourceMessageId: e.sourceMessageId }),
+      ...(e.importance === undefined ? {} : { importance: e.importance }),
+      ...(e.emotionalWeight === undefined ? {} : { emotionalWeight: e.emotionalWeight }),
+      createdAt: e.createdAt,
+    }
+  }
 
   return { app, registry }
 }

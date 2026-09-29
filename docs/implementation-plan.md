@@ -1,7 +1,7 @@
 # WhisperTavern V2 — 实施计划总纲（Implementation Plan）
 
 > **文件：** `docs/implementation-plan.md`
-> **版本：** V2.9（2026-09-27：**P3 完成（S28/WP3.6 收官）进 §12 看板**——还账 #17 Agent Tree 递归护栏 + §154 Agent API 面 + 观测面 + CI 门禁 D5 + 出场登记；§38 决策 46；全量 507 测试 / 56 文件全绿 + typecheck 全包 0 + ESLint 0 + 守卫 19/19；§10 #17 勾销；p3-plan 归档）；V2.8（2026-09-26：**S22/WP3.1a 持久化底座完成进 §12 看板**——migration v8（10 表 + runs 十四列）+ runtime `execution/` 三模块 + §5.4 新增 23 条事件登记 + 架构守卫 B4；p3-plan §4 补落地实录、§13 看板 S22 ✅）；V2.7（2026-09-26：**P3 细化会话完成**——[p3-plan.md](./p3-plan.md) 落盘（S22–S28 会话切分 / R-P3-1–10 范围裁决 / 入场条件 + 首个待决项「Agent Runtime 落点方案 A/B」；出场 = agent-runtime-spec §173 七组 + §174 十场景）；§7 P3 WP 表补"会话"列并挂指针）；V2.6（2026-09-26：**P2 六个 WP（S16–S21）完成进 §12 看板**——WP2.6 CI 硬门禁收口（§38 决策 44），P2 完成（CI 侧），真实 API 出场待作者 key 实测）；V2.5（2026-09-15：S13/WP1.4 完成进看板 + §10 #20 勾销（api-spec §48 拼写对齐 contracts，方案 A）；V2.4：2026-09-12：P0 DoD/看板收口——G2/G4 随指令安全特性撤下的引用清理，测试数改引 p1-plan §11；V2.3：2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 31/34）
+> **版本：** V3.2（2026-09-27：**S30/WP4.2a Summary 链 + 四层记忆 + 双检索完成进 §12 看板**——四层 Memory Runtime + Summary 链冻结块 + chunks_fts 关键词检索 + agent Memory Policy 兑现（R-P3-9）+ runAgent tail 接线 + filterContributions 消费修复；memory-runtime-spec 升 V0.2（锚点转已实现契约）；全仓 534 测试/59 文件 + typecheck 全包 0 + ESLint 0 + **P2 缓存门禁保绿**）；V3.1（2026-09-27：**S29/WP4.1 memory 持久化底座完成进 §12 看板**——memory-runtime-spec V0.1 + database-schema 三处修复 + migration v10 + runtime `memory/` 层 + catalog memory.created/updated；测试全绿闭环（runtime 15 条 / 全仓 517/57 + typecheck 0 + ESLint 0）；§10 #8 勾销（spec 部分，Runtime 接口归 S31）；V3.0（2026-09-27：**P4 细化会话完成**——[p4-plan.md](./p4-plan.md) 落盘（S29–S36 会话切分 / R-P4-1–10 范围裁决 / 出场 KPI 对齐 §36 P4 行）；§8 P4 WP 表补"会话"列并挂指针）；V2.9（2026-09-27：**P3 完成（S28/WP3.6 收官）进 §12 看板**——还账 #17 Agent Tree 递归护栏 + §154 Agent API 面 + 观测面 + CI 门禁 D5 + 出场登记；§38 决策 46；全量 507 测试 / 56 文件全绿 + typecheck 全包 0 + ESLint 0 + 守卫 19/19；§10 #17 勾销；p3-plan 归档）；V2.8（2026-09-26：**S22/WP3.1a 持久化底座完成进 §12 看板**——migration v8（10 表 + runs 十四列）+ runtime `execution/` 三模块 + §5.4 新增 23 条事件登记 + 架构守卫 B4；p3-plan §4 补落地实录、§13 看板 S22 ✅）；V2.7（2026-09-26：**P3 细化会话完成**——[p3-plan.md](./p3-plan.md) 落盘（S22–S28 会话切分 / R-P3-1–10 范围裁决 / 入场条件 + 首个待决项「Agent Runtime 落点方案 A/B」；出场 = agent-runtime-spec §173 七组 + §174 十场景）；§7 P3 WP 表补"会话"列并挂指针）；V2.6（2026-09-26：**P2 六个 WP（S16–S21）完成进 §12 看板**——WP2.6 CI 硬门禁收口（§38 决策 44），P2 完成（CI 侧），真实 API 出场待作者 key 实测）；V2.5（2026-09-15：S13/WP1.4 完成进看板 + §10 #20 勾销（api-spec §48 拼写对齐 contracts，方案 A）；V2.4：2026-09-12：P0 DoD/看板收口——G2/G4 随指令安全特性撤下的引用清理，测试数改引 p1-plan §11；V2.3：2026-09-06：P1 细化——§5 挂 p1-plan 指针、§4.11 P1 DoD/Non-goals、还账 #4/#15 绑定 WP1.5；V2.2：P0 完成；V2.1–V1.2：S7–S2 逐会话；V1.1 评审吸收；V1.0 首版，§38 决策 31/34）
 > **状态：** Active（随执行滚动更新——WP 状态看板在 §12，每完成一个包即更新）
 > **文档层级：** [technical-design.md](./technical-design.md) 之下的**执行层文档**。与 AGENTS.md 的分工：AGENTS 管**会话纪律**（怎么读、怎么改、何时问），本文管**执行顺序**（做什么、先做哪个、做到什么程度算完）。
 > **决策锚点：** technical-design §38 **决策 31**。
@@ -188,14 +188,17 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 
 # 8. P4 工作包分解（初版）
 
-| WP | 内容 | 关键锚点 / 还账 |
-|---|---|---|
-| WP4.1 | **前置：memory-runtime-spec 骨架**（四层记忆/双检索/Scribe 实施语义） | 挂账还清后 WP4.2 才开工 |
-| WP4.2 | Summary 链 + 四层记忆 + FTS5/sqlite-vec 双检索 | 总设计 §25；database §25 |
-| WP4.3 | 网络搜索工具（结果注 tail / agent 工具，origin 溯源） | （—） |
-| WP4.4 | 群聊 + per-char 缓存命名空间 | 总设计 §26；worldbook-cache-design §6 |
-| WP4.5 | Roleplay Fast 档（三表 + BD 规则推导 + Story Thread） | roleplay-runtime-spec；R1 单调用 |
-| WP4.6 | ~~scope 边界确认还账~~（roleplay scope 与指令归属——随指令安全撤下） | （—） |
+> **会话级明细见 [p4-plan.md](./p4-plan.md)**（S29–S36 会话切分 / R-P4-1–10 范围裁决 / 出场 KPI 对齐 §36 P4 行，2026-09-27 落盘）。
+
+| WP | 内容 | 关键锚点 / 还账 | 会话 |
+|---|---|---|---|
+| WP4.1 | **前置：memory-runtime-spec 骨架**（四层记忆/双检索/Scribe 实施语义） | 挂账还清后 WP4.2 才开工 | S29 |
+| WP4.2 | Summary 链 + 四层记忆 + FTS5/sqlite-vec 双检索 | 总设计 §25；database §25 | S30–S31 |
+| WP4.3 | 网络搜索工具（结果注 tail / agent 工具，origin 溯源） | （—） | S32 |
+| WP4.4 | 群聊 + per-char 缓存命名空间 | 总设计 §26；worldbook-cache-design §6 | S33 |
+| WP4.5 | Roleplay Fast 档（三表 + BD 规则推导 + Story Thread） | roleplay-runtime-spec；R1 单调用 | S34–S35 |
+| WP4.6 | ~~scope 边界确认还账~~（roleplay scope 与指令归属——随指令安全撤下） | （—） | （已撤下） |
+| S36 收官 | Workflow HTTP 面（§155）+ World State 规则版（#18）+ Simulation mock + UI | api-spec §155；还账 #18/#21 | S36 |
 
 # 9. P5 工作包分解（初版）
 
@@ -214,7 +217,7 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | 5 | 剩余诊断码随触发源落地（P0 两码 → P3 全量） | WP0.4 / WP3.2 | compiler-spec §71 |
 | 6 | ~~Gemini explicit caching 评估~~ **✅ 2026-09-22 S19/WP2.4 勾销**（provider-adapter §23 开放点 1 关闭：隐式缓存默认，显式 `cachedContent` 暂缓——显式缓存有创建/存储成本与 TTL 管理，KPI 命中率经 usage `cachedContentTokenCount`（§17.1 已归一）同样可观测；待 S20 遥测证明显式收益再启用） | WP2.4 | adapter §23 开放点 1 |
 | 7 | ~~untrusted 工具回灌~~（随指令安全撤下）；结构化/审批提升 | WP3.2 | — |
-| 8 | memory-runtime-spec 骨架 | WP4.1 | 上次文档盘点结论 |
+| 8 | ~~memory-runtime-spec 骨架~~ **✅ 2026-09-27 S29 勾销（spec 骨架）**：[memory-runtime-spec.md](./specs/memory-runtime-spec.md) V0.1 落盘（四层记忆职责/数据形状 + 双检索语义 + Scribe 写入不变量 + zone 约束 + memory.* 事件登记 + Repository 契约）；**Runtime 接口兑现归 S31**（p4-plan §4/§6） | WP4.1 | 上次文档盘点结论 |
 | 9 | ~~roleplay scope 边界确认~~（随指令安全撤下） | WP4.6 | — |
 | 10 | evaluation-engine-spec 充实 | P5 | 各挂账 |
 | 11 | 重启恢复逐状态矩阵核对 + non-idempotent 工具对账（reconciliation）——§50/§51–55 已有幂等分类与 Resume 骨架，补"每状态重启后行为"表 | WP3.1 | agent-runtime-spec §50/§51–55 |
@@ -278,6 +281,8 @@ Plugin SDK + iframe sandbox + 权限；备份/导入导出 + 酒馆聊天记录�
 | WP3.5 Resume / Recovery / Replay | ✅ | 2026-09-27 S27 完成（pauseToken + resumeRun + 崩溃恢复 §96/§97 + Replay §143–§146 逐字节一致；§174 Test 5/6/10；S27 5/5、agent 51/51；详见 p3-plan §9） |
 | WP3.6 P3 收官 | ✅ | 2026-09-27 S28 完成（还账 #17 Agent Tree 递归护栏 + §154 Agent API 面 12 路由 + 观测面 timeline/cost/inspector + CI 门禁 D5 + 出场登记；**全量 507 测试 / 56 文件全绿 + typecheck 全包 0 + ESLint 0 + 守卫 19/19**；§38 决策 46；详见 p3-plan §10–§13） |
 | **P3 完成** | ✅ | 2026-09-27 出场（§36）：agent-runtime-spec §173 七组全勾销 + §174 十场景全绿；单/多 Agent 的 Delegate / Cancel / Resume / 崩溃恢复可用（Retry Agent 自动编排与 Memory Runtime 明确挂账 P4）。下一阶段 = P4（并行解锁 B1） |
+| WP4.1 memory 持久化底座 | ✅ 完成 | 2026-09-27 S29：memory-runtime-spec.md V0.1 骨架（四层/双检索/Scribe/zone/事件/契约）+ database-schema §23/§25.1–§25.5/§26 表定义修复（去冗余 UNIQUE、metadata_→metadata、§25.5 存储位置口径）+ migration v10（八表 + FTS5 双组触发器）+ runtime `memory/` 持久化层（Repository/Writer + 双检索引擎）+ catalog memory.created/updated 登记。**测试全绿闭环**：runtime 15 条（migrate 7 / repository 8）+ 全仓 517 测试/57 文件 + typecheck 全包 0 + ESLint 0；守卫漂移修复（catalog 域白名单补 memory / migrate.test 变量类型泄漏 / repository spread 类型）。环境：better-sqlite3 用 node 22（muyootools v22.14.0），系统 node 24 ABI 不匹配（technical-plan §8.7 教训①） |
+| WP4.2a Summary 链 + 四层记忆 + 双检索 | ✅ 完成 | 2026-09-27 S30：四层 Memory Runtime（memories CRUD + entity 约束 + timeline 读取 + Data Bank 分块入表 + chunks_fts 检索）+ Summary 链（appendSummaryBlock 冻结块 sequence 单调 / listSummaryChain / buildSummaryContributions 注 summary 区）+ 双检索引擎（FTS5 关键词 + embedding 余弦 + via=both 合并去重）+ agent Memory Policy 兑现（R-P3-9：resolveMemoryPolicy 四策略 + resolveMemoryItems 纯过滤 + runAgent memoryRetrieval 接线注 tail）+ **修复 S26 缺口（prepareIteration.filterContributions 此前已声明但从未被消费,现于 compile 前应用）** + memory-runtime-spec 升 V0.2（锚点转已实现契约）。**测试全绿闭环**：全仓 534 测试/59 文件 + typecheck 全包 0 + ESLint 0 + **P2 缓存门禁保绿**（100 轮稳定前缀/KPI 98.7%） |
 
 （P4–P5 WP 在各阶段开工细化时进看板。）
 

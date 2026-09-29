@@ -19,6 +19,19 @@
  */
 import type { PromptContribution } from '@whispertavern/contracts'
 
+/**
+ * §20 记忆命中最小投影(纯函数不依赖 runtime 类型;结构与 runtime MemoryHit 子集一致,
+ * 调用方传入时天然兼容——C4 不造同义枚举,这里是"够用即止"的结构类型)
+ */
+export interface MemoryHitLike {
+  memoryId: string
+  content: string
+  importance?: number
+  confidence?: number
+  /** 命中通道(仅双检索合并时存在;keywords | semantic | both)——memory-runtime-spec §3.3 */
+  via?: 'keywords' | 'semantic' | 'both'
+}
+
 /** §19 History Policy:历史可见性(spec 形状逐字收编) */
 export interface HistoryPolicy {
   enabled: boolean
@@ -259,10 +272,43 @@ export function resolveContextByPolicy(
   return { contributions: working, dropped }
 }
 
-/** §20 Memory Policy 空实现(R-P3-9):Memory Runtime 归 P4,恒返回空 */
+/**
+ * §20 Memory Policy —— R-P3-9 兑现(S30/WP4.2a)。
+ *
+ * 检索 IO(repository.search,async)由调用方(run-agent)执行,本函数是**纯转换层**:
+ * 把已检出的 MemoryHit 按策略过滤(minImportance/minConfidence/maxItems/enabled)
+ * 并投影为 PromptContribution——**一律 zone='tail'**(memory-runtime-spec §5:
+ * 检索命中注 tail,绝不进稳定前缀;C2/R4)。若注入位置需要改变,先改 spec。
+ */
 export function resolveMemoryItems(
   policy: MemoryContextPolicy,
+  hits: readonly MemoryHitLike[],
 ): { items: PromptContribution[]; note: string } {
-  void policy
-  return { items: [], note: 'R-P3-9:Memory Runtime 归 P4,检索恒空' }
+  if (!policy.enabled) {
+    return { items: [], note: 'memory.enabled=false:记忆检索关闭' }
+  }
+  const dropped: string[] = []
+  const working = hits.filter((h) => {
+    if (policy.minImportance !== undefined && h.importance !== undefined && h.importance < policy.minImportance) {
+      dropped.push(`${h.memoryId}#importance`)
+      return false
+    }
+    if (policy.minConfidence !== undefined && h.confidence !== undefined && h.confidence < policy.minConfidence) {
+      dropped.push(`${h.memoryId}#confidence`)
+      return false
+    }
+    return true
+  })
+  const capped = policy.maxItems !== undefined ? working.slice(0, policy.maxItems) : working
+  if (policy.maxItems !== undefined && working.length > policy.maxItems) {
+    for (const h of working.slice(policy.maxItems)) dropped.push(`${h.memoryId}#maxItems`)
+  }
+  const items: PromptContribution[] = capped.map((h, i) => ({
+    id: `memory:${h.memoryId}`,
+    source: { type: 'memory', memoryId: h.memoryId },
+    segment: { role: 'system', content: `【记忆】${h.content}`, zone: 'tail' },
+    priority: 0,
+    semanticPlacement: { type: 'tail', order: i },
+  }))
+  return { items, note: dropped.length > 0 ? `记忆过滤:${dropped.join(', ')}` : '记忆检索全量注入(tail)' }
 }

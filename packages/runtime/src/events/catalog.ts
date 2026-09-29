@@ -14,8 +14,10 @@ import type { Timestamp } from '@whispertavern/contracts'
  * - P3(S22/WP3.1a)补 agent.* / agent.run.* / agent.turn.* / tool.call.* / approval.* /
  *   workflow.* / artifact.*(database-schema §27–§36 对应表同批落库)。
  *
- * 仍未注册的域(明示,避免"看起来漏了"):import.* / export.* / memory.* / roleplay.*
- * ——分别归 P4(WP4.4 群聊/记忆)、P5(插件与导入导出作业面),到那时随触发源逐条登记(X13)。
+ * 仍未注册的域(明示,避免"看起来漏了"):import.* / export.* / roleplay.*
+ * ——import/export 归 P5(插件与导入导出作业面);roleplay.* 事件名已在 §5.4
+ * 注册但代码执行面归 P4(WP4.5 Roleplay Runtime),到那时随触发源逐条登记(X13)。
+ * memory.* 已随 S29(WP4.1)登记。
  */
 export type EventDurability = 'durable' | 'deferred-durable' | 'live'
 
@@ -69,6 +71,10 @@ export const EVENT_CATALOG = {
   'cache.invalidated': 'deferred-durable',
   'artifact.created': 'deferred-durable',
   'artifact.updated': 'deferred-durable',
+  // S29(WP4.1)Memory 持久化底座:账目/一致性重建需要(memory-runtime-spec §6;
+  // 检索行为可重建不发事件;soft-delete 由 deleted_at 列承载,权威表无 memory.deleted)
+  'memory.created': 'deferred-durable',
+  'memory.updated': 'deferred-durable',
   // live:内存广播即可,丢了不影响重建(generation.delta 每 token 一条,落表撑爆 events)
   'generation.delta': 'live',
   'prompt.compiling': 'live',

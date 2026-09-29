@@ -456,3 +456,117 @@ export type HandoffRequest = {
   findings?: string
   artifacts?: string[]
 }
+
+// ===== S31(WP4.2b)Memory HTTP 面 DTO(api-spec §88–§92 / §155;DTO = 线格式投影,语义不漂移)=====
+
+/** §89 Memory(api-spec §89;跨层统一投影,kind 区分四层) */
+export type MemoryDto = {
+  id: string
+  chatId: string
+  kind: 'summary' | 'dossier' | 'timeline' | 'document'
+  entity?: string
+  content: string
+  importance?: number
+  sourceMessageIds?: string[]
+  embedding?: { model: string }
+  /** §88 Search Memory 检索命中投影才携带:跨层可比相关度(0..1) */
+  score?: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** §90 Summary Block(api-spec §90;冻结后不可回写) */
+export type SummaryBlockDto = {
+  id: string
+  seq: number
+  content: string
+  coversMessageRange: { from: string; to: string }
+  frozenAt: string
+  tokenCount?: number
+}
+
+/** §90 POST /chats/:id/summaries 请求 */
+export type CreateSummaryRequest = {
+  content: string
+  coversMessageRange: { from: string; to: string }
+  tokenCount?: number
+}
+
+/** §91 Dossier 实体卡(api-spec §91;Scribe 维护的事实卡) */
+export type DossierEntityDto = {
+  id: string
+  chatId: string
+  entity: string
+  content: string
+  importance?: number
+  confidence?: number
+  version: number
+  sourceMessageIds?: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** §91 POST /chats/:id/dossier/entities 请求 */
+export type CreateDossierEntityRequest = {
+  entity: string
+  content: string
+  importance?: number
+  confidence?: number
+  sourceMessageIds?: string[]
+}
+
+/** §92 Timeline 事件(api-spec §92;只追加) */
+export type TimelineEventDto = {
+  id: string
+  chatId: string
+  eventType: string
+  summary: string
+  participants?: string[]
+  location?: string
+  consequences?: string
+  sourceMessageId?: string
+  importance?: number
+  emotionalWeight?: number
+  createdAt: string
+}
+
+/** §92 POST /chats/:id/timeline 请求 */
+export type CreateTimelineEventRequest = {
+  eventType: string
+  summary: string
+  participants?: string[]
+  location?: string
+  consequences?: string
+  sourceMessageId?: string
+  importance?: number
+  emotionalWeight?: number
+}
+
+/** §88 POST /chats/:id/memory/search 请求 */
+export type SearchMemoryRequest = {
+  query: string
+  limit?: number
+  kinds?: ('summary' | 'dossier' | 'timeline' | 'document')[]
+}
+
+/** §88 POST /chats/:id/memory/search 响应 */
+export type SearchMemoryResultDto = {
+  items: MemoryDto[]
+  total: number
+}
+
+/** wp4.2b Scribe 触发(POST /chats/:id/memory/scribe;§143 长任务先track后异步) */
+export type ScribeTriggerRequest = {
+  providerId?: string
+  model?: string
+  fromMessageId?: string
+  toMessageId?: string
+  budget?: AgentRunRequest['budget']
+}
+
+export type ScribeTriggerStartDto = {
+  runId: string
+  chatId: string
+  scribeChatId: string
+  status: string
+}

@@ -652,6 +652,189 @@ UPDATE runs SET status = 'running'   WHERE status = 'streaming';
 UPDATE runs SET status = 'succeeded' WHERE status = 'completed';
 `
 
+/**
+ * v10(S29/WP4.1)Memory 持久化底座:p4-plan §4 任务 2 的八项,
+ * 逐表镜像 database-schema §23/§25/§25.1/§25.2/§25.3/§25.4/§26。
+ *
+ * 设计口径:①**只建普通表 + FTS5 虚拟表**,不建 sqlite-vec `vec0` 虚拟表
+ * (memory-runtime-spec §3.2 / database-schema §25.5)——vec0 是 loadable 扩展,
+ * 版本化迁移必须环境无关(无扩展 env 迁移会炸),语义检索走 embedding BLOB 余弦扫描,
+ * vec0 仅为可用时的加速面(S30);②FTS5(§25.1/§25.4)随表同批,memories 用
+ * insert/delete/update 三触发器,chunks 因 append-only 只用 insert/delete;
+ * ③软删除(deleted_at)不触发 FTS 物理清理,靠定期 cleanup 语句(memory-runtime-spec §3.1)。
+ */
+const V10_P4_MEMORY_TABLES = /* sql */ `
+-- §23 Summary Block(追加式冻结块;R-P4-4)
+CREATE TABLE summary_blocks (
+    id                  TEXT PRIMARY KEY,
+    chat_id             TEXT NOT NULL REFERENCES chats(id),
+    sequence            INTEGER NOT NULL,
+    content             TEXT NOT NULL,
+    from_message_id     TEXT NOT NULL REFERENCES messages(id),
+    to_message_id       TEXT NOT NULL REFERENCES messages(id),
+    frozen              INTEGER NOT NULL DEFAULT 0,
+    content_hash        TEXT NOT NULL,
+    token_count         INTEGER,
+    created_at          TEXT NOT NULL,
+    UNIQUE(chat_id, sequence)
+);
+
+CREATE INDEX idx_summary_blocks_chat_seq ON summary_blocks(chat_id, sequence);
+
+-- §25 Memories(Dossier 事实卡 + Summary 之外的全部长期记忆;embedding BLOB = float32)
+CREATE TABLE memories (
+    id                  TEXT PRIMARY KEY,
+
+    owner_id            TEXT NOT NULL,
+    chat_id             TEXT,
+
+    type                TEXT NOT NULL,
+    entity              TEXT,                    -- P4:Dossier 实体维度(type='fact' 时非空)
+
+    content             TEXT NOT NULL,
+
+    importance          REAL,
+    confidence          REAL,
+
+    source_message_ids  TEXT NOT NULL DEFAULT '[]',
+    tags                TEXT NOT NULL DEFAULT '[]',
+
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    content_hash        TEXT NOT NULL,
+
+    embedding           BLOB,                    -- sqlite-vec 语义向量(float32 序列化,§25.5)
+
+    version             INTEGER NOT NULL DEFAULT 1,
+
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL,
+
+    deleted_at          TEXT
+);
+
+CREATE INDEX idx_memories_chat_type ON memories(chat_id, type) WHERE deleted_at IS NULL;
+CREATE INDEX idx_memories_entity ON memories(entity) WHERE deleted_at IS NULL AND entity IS NOT NULL;
+
+-- §25.1 FTS5 关键词兜底索引(memories_fts;只索 content)
+CREATE VIRTUAL TABLE memories_fts USING fts5(
+    memory_id      UNINDEXED,
+    type           UNINDEXED,
+    content_hash   UNINDEXED,
+    content,
+    tokenize='unicode61 remove_diacritics 2',
+    prefix='3 4'
+);
+
+CREATE TRIGGER memories_fts_after_insert AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(memory_id, type, content_hash, content)
+    VALUES (new.id, new.type, new.content_hash, new.content);
+END;
+
+CREATE TRIGGER memories_fts_after_delete AFTER DELETE ON memories BEGIN
+    DELETE FROM memories_fts WHERE memory_id = old.id;
+END;
+
+CREATE TRIGGER memories_fts_after_update AFTER UPDATE OF content, type ON memories BEGIN
+    DELETE FROM memories_fts WHERE memory_id = OLD.id;
+    INSERT INTO memories_fts(memory_id, type, content_hash, content)
+    VALUES (NEW.id, NEW.type, NEW.content_hash, NEW.content);
+END;
+
+-- §26 Memory Version(版本化更新;memory.updated 事件同行)
+CREATE TABLE memory_versions (
+    id              TEXT PRIMARY KEY,
+    memory_id       TEXT NOT NULL REFERENCES memories(id),
+    version         INTEGER NOT NULL,
+    content         TEXT NOT NULL,
+    snapshot        TEXT NOT NULL DEFAULT '{}',
+    content_hash    TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    UNIQUE(memory_id, version)
+);
+
+CREATE INDEX idx_memory_versions_memory ON memory_versions(memory_id, version);
+
+-- §25.2 Timeline Events(Scribe 追加式事件流)
+CREATE TABLE timeline_events (
+    id                TEXT PRIMARY KEY,
+    chat_id           TEXT NOT NULL,
+    event_type        TEXT NOT NULL,
+    summary           TEXT NOT NULL,
+    participants      TEXT NOT NULL DEFAULT '[]',
+    location          TEXT,
+    consequences      TEXT,
+    source_message_id TEXT,
+    importance        REAL,
+    emotional_weight  REAL,
+    created_at        TEXT NOT NULL
+);
+
+CREATE INDEX idx_timeline_events_chat ON timeline_events(chat_id, created_at);
+CREATE INDEX idx_timeline_events_type ON timeline_events(chat_id, event_type);
+
+-- §25.3 Documents — Data Bank 元数据
+CREATE TABLE documents (
+    id              TEXT PRIMARY KEY,
+    chat_id         TEXT,
+    owner_id        TEXT NOT NULL,
+
+    title           TEXT NOT NULL,
+    source_type     TEXT NOT NULL,
+    source_uri      TEXT,
+
+    mime_type       TEXT,
+    file_size_bytes INTEGER,
+
+    metadata        TEXT NOT NULL DEFAULT '{}',
+
+    total_chunks    INTEGER DEFAULT 0,
+    indexed_at      TEXT,
+
+    created_at      TEXT NOT NULL,
+    deleted_at      TEXT
+);
+
+CREATE INDEX idx_documents_chat ON documents(chat_id) WHERE deleted_at IS NULL;
+
+-- §25.4 Chunks(append-only)+ FTS5(仅 insert/delete 触发器)
+CREATE TABLE chunks (
+    id              TEXT PRIMARY KEY,
+    document_id     TEXT NOT NULL REFERENCES documents(id),
+    chat_id         TEXT,
+
+    chunk_index     INTEGER NOT NULL,
+    content         TEXT NOT NULL,
+
+    token_count     INTEGER,
+    content_hash    TEXT NOT NULL,
+
+    metadata        TEXT NOT NULL DEFAULT '{}',
+
+    created_at      TEXT NOT NULL,
+    deleted_at      TEXT
+);
+
+CREATE INDEX idx_chunks_document ON chunks(document_id) WHERE deleted_at IS NULL;
+
+CREATE VIRTUAL TABLE chunks_fts USING fts5(
+    chunk_id        UNINDEXED,
+    document_id     UNINDEXED,
+    content_hash    UNINDEXED,
+    content,
+    tokenize='unicode61 remove_diacritics 2',
+    prefix='3 4'
+);
+
+CREATE TRIGGER chunks_fts_after_insert AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(chunk_id, document_id, content_hash, content)
+    VALUES (new.id, new.document_id, new.content_hash, new.content);
+END;
+
+CREATE TRIGGER chunks_fts_after_delete AFTER DELETE ON chunks BEGIN
+    DELETE FROM chunks_fts WHERE chunk_id = old.id;
+END;
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -706,6 +889,12 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'p3-run-status-vocabulary',
     sql: V9_RUN_STATUS_VOCABULARY,
     checksum: sha256Hex(V9_RUN_STATUS_VOCABULARY),
+  },
+  {
+    version: 10,
+    name: 'p4-memory-tables',
+    sql: V10_P4_MEMORY_TABLES,
+    checksum: sha256Hex(V10_P4_MEMORY_TABLES),
   },
 ]
 
