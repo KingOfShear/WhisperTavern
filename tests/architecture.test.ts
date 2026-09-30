@@ -350,6 +350,61 @@ describe('D 测试门禁完整性（防新包漏接 CI）', () => {
     // 门禁必须挂在 vitest projects(packages/agent 是其归属包)——防它被移到不被跑的位置
     expect(readText('packages/agent/vitest.config.ts')).toContain("'src/**/*.test.ts'")
   })
+
+  /**
+   * D6 S32(WP4.3):自动批准器的**只读白名单**不得越出 §33 权限目录。
+   *
+   * 自由裁量的地方最需要卡点。`createAutoApprover` 是"无人值守默认放行"——它一旦
+   * 放行写类权限,审批管线就退化成摆设,而这件事**没有任何编译错误会提示**。
+   * 两条断言各自能一句话说清:
+   * - 只读集合 ⊆ §33 目录(防写入 spec 里不存在的权限名,那种拼写错会静默失效);
+   * - 只读集合不含写类/提权类(`.write` / `provider.call`),即"只读"名副其实。
+   * 检查手段是**跨文件双向比对**(types.ts 的目录 vs approval.ts 的集合),
+   * 与 A/E 两组同构:任一侧单独改都不会红,两侧不一致才红。
+   */
+  it('D6 自动批准只读白名单必须是 §33 权限目录的真子集,且不含写类/提权类权限', () => {
+    /** 从 `... = [ 'a', 'b' ]` 形态的代码块里抽出字符串字面量 */
+    const quotedStringsIn = (src: string, startMarker: string, endMarker: string): string[] => {
+      const start = src.indexOf(startMarker)
+      expect(start, `定位失败:${startMarker} 缺失(格式变了?)`).toBeGreaterThanOrEqual(0)
+      const end = src.indexOf(endMarker, start)
+      expect(end, `定位失败:${startMarker} 之后的 ${endMarker} 缺失(格式变了?)`).toBeGreaterThan(start)
+      return [...src.slice(start, end).matchAll(/'([a-z][a-z0-9._]*)'/g)].map((m) => m[1] as string)
+    }
+
+    const declared = quotedStringsIn(readText('packages/agent/src/tools/types.ts'), 'TOOL_PERMISSIONS = [', '] as const')
+    expect(declared.length, '§33 权限目录解析为空').toBeGreaterThan(0)
+
+    const readOnly = quotedStringsIn(readText('packages/agent/src/tools/approval.ts'), 'READ_ONLY_TOOL_PERMISSIONS = new Set([', '])')
+    expect(readOnly.length, '只读白名单解析为空(自动批准器没了安全边界)').toBeGreaterThan(0)
+
+    const unknown = readOnly.filter((p) => !declared.includes(p))
+    expect(unknown, `只读白名单含 §33 目录外的权限名(拼写错会静默失效): ${unknown.join(', ')}`).toEqual([])
+
+    const privileged = readOnly.filter((p) => p.endsWith('.write') || p === 'provider.call')
+    expect(
+      privileged,
+      `只读白名单混进写类/提权类权限——自动批准会因此变成无条件放行: ${privileged.join(', ')}`,
+    ).toEqual([])
+  })
+
+  /**
+   * D7 S32(WP4.3):组合根必须**三件同批**装配审批门。
+   *
+   * 单独看每行都无害,漏掉任意一行却各自有不同后果——注册了工具但没 `requireApproval`
+   * 就是审批被跳过;没有默认回答者就是搜索永远被拒。这类"少了一行"的问题在
+   * 类型检查与单测里都是静默的(单测自己会装齐),只有组合根被直证才拦得住。
+   */
+  it('D7 组合根注册 web.search 时必须同批装好静态审批门与自动批准默认回答者', () => {
+    const src = readText('apps/server/src/server.ts')
+    expect(src, '组合根未注册 web.search 工具').toContain('createWebSearchToolDefinition(')
+    expect(src, "组合根缺静态审批门(requireApproval)——工具会被静默跳过审批").toContain(
+      'tools.requireApproval(WEB_SEARCH_TOOL_NAME)',
+    )
+    expect(src, '组合根缺默认回答者——无 UI 时 web.search 会被一律拒绝').toContain(
+      'tools.approvals.setDefaultResponder(createAutoApprover(APPROVAL_GATED_TOOLS))',
+    )
+  })
 })
 
 describe('E Capability 权威域（technical-design §18.2 Capabilities）', () => {

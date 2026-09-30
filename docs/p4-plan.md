@@ -2,7 +2,7 @@
 
 > **文件:** `docs/p4-plan.md`
 > **版本:** V1.0（2026-09-27：P4 细化会话落盘——按 B4 滚动细化原则，S29–S36 会话切分 / R-P4-1–10 范围裁决 / 出场 KPI 对齐总设计 §36 P4 行）
-> **状态:** 🟢 **执行中**——S29（WP4.1）+ S30（WP4.2a）✅ + **S31（WP4.2b）✅ 测试全绿闭环**（544/61 + typecheck 0 + ESLint 0 + P2 缓存门禁保绿，还账 #8 勾销）；下一会话 = **S32（WP4.3 网络搜索工具）**
+> **状态:** 🟢 **执行中**——S29（WP4.1）+ S30（WP4.2a）✅ + S31（WP4.2b）✅ + **S32（WP4.3）✅ 测试全绿闭环**（565/62 + typecheck 0 + ESLint 0 error 0 warning + P2 缓存门禁保绿）；下一会话 = **S33（WP4.4 群聊 + per-char 缓存命名空间）**
 > **文档层级:** [implementation-plan.md](./implementation-plan.md) §8（P4 WP 概览）的**会话级执行明细**。设计语义一律指向 spec，本文只管"会话里具体干什么"。
 > **上游锚点:** 总设计 §36（P4 行）/ §25（Memory）/ §26（群聊）/ implementation-plan §7·§8·§10 / [roleplay-runtime-spec.md](./specs/roleplay-runtime-spec.md) 及其三子规格（dialogue-director / roleplay-quality / roleplay-evaluation-engine）/ [database-schema.md](./specs/database-schema.md) §23·§25·§26·§29.1–29.5·§30–§31 / [api-spec.md](./specs/api-spec.md) §155 / [worldbook-cache-design.md](./worldbook-cache-design.md) §6 / §38 决策 28·36·45·46 / p3-plan（已归档） / AGENTS 会话纪律。
 
@@ -168,19 +168,70 @@ R-P4-10 P4 明确不做(防范围膨胀)：
 
 # 7. S32 — WP4.3 网络搜索工具（1 会话）
 
+> **✅ 已完成（2026-09-28）**。实现注：
+> - **网络搜索工具**：`packages/agent/src/tools/web-search.ts` —— `web.search`(wire 名点号命名空间，
+>   与 `memory.*` 同规)经 **ToolRegistry 五段流水线**执行(不另起并行抽象)：落 `tool_calls` 行 +
+>   `tool.call.started/completed/failed/denied` durable 四件套(S24 面复用)。`permissions: ['network.request']`
+>   (§33 权限目录既有项)、`sideEffectLevel: 'none'`(§50：只读 → §47 C3 瞬时重试生效)。
+> - **§89 网络沙箱 = 结构性而非尽力而为**：出站目标只能是注入配置里那**一个** endpoint
+>   (入参**没有** URL 字段，模型无法指定目标)；per-Run 外发次数封顶(`maxOutboundRequests`，超限
+>   `RUN_BUDGET_EXCEEDED` fail-closed)；**未配置 endpoint = 确定性 `TOOL_FAILED`**，
+>   绝不返回空结果/伪造结果——"没连上"与"网上查不到"必须对模型可区分。
+> - **tail 注入 + origin 溯源**：工具**不碰 zone**。`toolCallId` 随消息元数据落库
+>   (`messages.metadata`，`CreateMessageInput.metadata` 新增，缺省 `'{}'` 零回归)，
+>   编译期 `buildContributions` 升格为 `source.type='toolResult'` + `toolCallId` 并注 **tail**。
+>   **精确口径 = 末尾连续输入段**：只把链尾连续的 `role ∈ {user, tool}` 注 tail
+>   (`runtime/generation/run.ts` `trailingInputStart`)，其余回落 history——因为 pipeline 排序是
+>   **zone-first**，把中间轮次的 tool 结果也挪进 tail 会让 `[u,a1,t1,a2,t2]` 序列化成
+>   `[u,a1,a2,t1,t2]`，tool 结果与其调用错位 → provider 协议报错。
+>   `tail` 默认稳定性 `volatile`(§16) 且居 §15.1 裁剪序首位 → 既不进稳定前缀也不挤占稳定区预算。
+> - **结果缓存与去重**：同 query 短窗内**不重复外发**(按 query 归一键 + 窗口 TTL，含全部限定条件
+>   防"同词不同站点"错误合并)；**同批并发同 query 共享在飞请求**(否则一批两个相同调用仍打两次网络)；
+>   在飞项亦受窗口约束——后端挂起时该键不会永久钉死后续同 query(§46 超时只包在 execute 外层，
+>   中断不了被共享的 Promise)。去重缓存/在飞表**跨 Run 共享**，外发预算**按 runId 隔离**(§39 预算是 Run 级资源)。
+> - **审批：默认 auto-approve 但走 §115.1 管线不绕过**：三件同批装配——①工具注册；
+>   ②`ToolRegistry.requireApproval(name)` **静态审批门**(与 pre-execute 的动态 `ask` 取或)；
+>   ③`createAutoApprover(APPROVAL_GATED_TOOLS)` 作**默认回答者**。审批侧新增**回答者链**
+>   (per-chat → default → `unavailable`)：弃权可下探，抛异常/枚举外**当场 fail-closed 不下探**
+>   (否则一次 UI 崩溃会静默滑到自动批准器上 = 用故障换放行)。自动批准器只放行白名单内**且**
+>   权限全落在只读集合里的工具——白名单人工维护、权限由工具声明，用后者约束前者，
+>   保证"往白名单里加错工具"的后果只是**拒绝**而非**越权**；判据不含 `risk`。
+>   `policy='never'` 仍在链之前生效，自动批准无法越过。
+> - **单测 19 条**(`web-search.test.ts`)，逐条对上任务清单 5 项：未配置 fail-closed / 同 query 短窗去重
+>   (第二次 `deduped=true` 且零新外发) / 并发同 query 共享在飞 / 超窗重新外发 / 外发预算超限
+>   `RUN_BUDGET_EXCEEDED` / **预算按 Run 隔离** / **审批四值+审计成对**(allowed_once、unavailable、
+>   rejected(policy=never)、白名单外弃权) / 白名单内带写权限工具**仍被弃权**(不提权) /
+>   链序不封死人工路径(per-chat 回答者优先) / **结果注 tail 且 source.type=toolResult + toolCallId 可追回** /
+>   历史 tool 结果回落 history(只末尾段注 tail) / §46 超时 `status='timeout'` / 形状不识别 → `TOOL_FAILED` /
+>   空 query → `INVALID_INPUT` 且不外发 / 429·5xx 归一为可重试瞬时码、4xx 为确定性失败 / wire 投影与只读声明。
+> - **组合根 / `GET /tools` 读面**：`ServerDeps.webSearch`(端点/凭据/传输注入) + `server.ts` 组合根三件装配 +
+>   `main.ts` 读 `DG_WEB_SEARCH_ENDPOINT`/`DG_WEB_SEARCH_API_KEY`。**未配置也照常注册**：
+>   注册面必须与部署环境无关，配置差异收敛到工具**执行**里，结构面保持恒定。
+>   **api-spec 不动**(无新路由)：§154 `GET /tools` 的契约是"返回当前已注册工具"，注册面变化
+>   不构成契约变更——但既有测试把它当基线断言，故 `agent-api.test.ts` 的两处期望值按新注册面更新
+>   (+`web.search`，并新增 `?capability=network.request` 断言)。
+> - **门禁**：全量 **565/565 测试(62 文件)**、typecheck 全包 0、ESLint **0 error 0 warning**、
+>   **P2 缓存门禁保绿**(100 轮稳定前缀 / KPI 98.7% 不变)。`GET /tools` 基线按新注册面更新(+`web.search`)。
+> - **新增架构守卫 D6/D7**(AGENTS 纪律 7：纪律必须有机器卡点)——D6 断言自动批准只读白名单
+>   是 §33 权限目录的真子集且不含写类/提权类(**跨文件双向比对**：types.ts 的目录 vs approval.ts
+>   的集合，任一侧单独改都不红、两侧不一致才红)；D7 断言组合根三件同批装配(防"少装一行"——注册了
+>   工具却漏 `requireApproval` 或漏默认回答者，在类型检查与单测里都是静默的，因为单测自己会装齐)。
+>   **两条都用负例实测能真变红**：白名单塞 `filesystem.write` → D6 报 privileged；拼错成
+>   `memory.readd` → D6 报 unknown。
+
 **任务清单**：
 
 ```text
 1. 网络搜索工具(Web Search)作为 agent 工具注册(tool registry 五段流水线):
-   结果注 tail(origin 溯源,不进稳定前缀,R4)
-2. 搜索结果 ToolCall 落 tool_calls 表 + tool.call.* 事件四件套(S24 面复用)
-3. 结果缓存与去重:同一 query 短窗内不重复外发(HTTP 层去重;超出预算 fail-closed)
-4. 审批策略:默认 auto-approve(低风险,只读外网)但走 §115.1 审批管线不绕过
-5. 单测:审批四值 / 超时 / 预算 / tail 注入 / origin 溯源
+   结果注 tail(origin 溯源,不进稳定前缀,R4)                                        ✅
+2. 搜索结果 ToolCall 落 tool_calls 表 + tool.call.* 事件四件套(S24 面复用)          ✅
+3. 结果缓存与去重:同一 query 短窗内不重复外发(HTTP 层去重;超出预算 fail-closed)      ✅(+并发在飞去重)
+4. 审批策略:默认 auto-approve(低风险,只读外网)但走 §115.1 审批管线不绕过             ✅(+回答者链)
+5. 单测:审批四值 / 超时 / 预算 / tail 注入 / origin 溯源                          ✅(19 条)
 ```
 
-**验收**：工具注册 + 审批 + 沙箱预算 + 结果注 tail 全链路绿；不破坏 P2 缓存门禁。
-**spec 锚点**：agent-runtime-spec §31–§36（Tool Runtime 复用）；总设计 §15（tail 注入）。
+**验收**：工具注册 + 审批 + 沙箱预算 + 结果注 tail 全链路绿；不破坏 P2 缓存门禁。→ **✅ 达成**（web-search.test.ts 19/19；全量 565/565；缓存门禁 100 轮稳定前缀 + KPI 98.7% 原样保绿）。
+**spec 锚点**：agent-runtime-spec §31–§36（Tool Runtime 复用）；总设计 §15（tail 注入）。→ **已同步**：agent-runtime-spec 升 V2.3（§115.1 回答者链 + `createAutoApprover` 边界 + `requireApproval` 静态门；§89 network 限制落地口径与去重规则；§155 登记 toolResult 缺口并维持五源不变）；prompt-compiler-spec 升 V2.6（§86 "默认进 tail"精确口径 = 末尾连续输入段 + zone-first 排序为何要求连续性）。
 
 # 8. S33 — WP4.4 群聊 + per-char 缓存命名空间（1–2 会话）
 
@@ -322,7 +373,7 @@ P3 转正挂账的 P4 归属：
 | S29 | WP4.1 | ✅ 完成 | 测试全绿闭环:runtime 15 条(migrate 7 / repository 8)+ 全仓 517/57 全绿 + typecheck 全部 0 + ESLint 0;catalog.test.ts 域白名单补 memory(守卫漂移);migrate.test.ts 三处变量类型泄漏 + repository spread 类型修复;**环境关键发现:better-sqlite3(ABI 127)用 node 22 跑,系统 node 24 会 ABI 不匹配——本机埋点 `D:\BaiduNetdiskDownload\muyootools-v1.0.1\node`(v22.14.0),AGENTS 七版"用 node 24"过时,以 technical-plan §8.7 教训①为准 |
 | S30 | WP4.2a | ✅ 完成 | 测试全绿闭环:runtime memory 全套(repository 14 + summary-contributions 3)+ agent memory/policy 6 + context-policy 14 + **全仓 534/59 全绿** + typecheck 全部 0 + ESLint 0 + P2 缓存门禁保绿(100 轮稳定前缀/KPI 98.7%);交付:四层 Memory Runtime(CRUD+timeline 读取+Data Bank 分块入表)+ Summary 链(appendSummaryBlock 冻结块 sequence 单调 + buildSummaryContributions 注 summary 区)+ chunks_fts 关键词检索 + agent Memory Policy 兑现(R-P3-9,resolveMemoryPolicy 四策略 + tail 注入)+ runAgent memoryRetrieval 接线;**顺带修复 S26 缺口:prepareIteration.filterContributions 此前已声明但从未被消费,现于 compile 前应用**;memory-runtime-spec 升 V0.2(锚点转已实现契约) |
 | S31 | WP4.2b | ☑ 完成 | 测试全绿闭环:**全仓 544/61 全绿**(S30 534 起 +10:runtime search 3 / agent scribe 3 / server memory-api 7 + agent-api 工具断言重编 -13...) + typecheck 全部 0 + ESLint 0 + P2 缓存门禁保绿(100 轮);交付:Scribe Agent(runScribe 影子会话隔离 + 三 memory 工具落账)+ Memory HTTP 面(api-spec V2.7 §88–§92/§155 九路由:search/search 中文 LIKE 兜底/summaries/dossier entities PATCH/timeline/scribe 202)+ MemoryHit 行级投影(时间戳/version/sourceMessageIds)+ web MemoryPanel;还账 #8 勾销;顺带修复 runtime timeline rowid 平局序(X14 确定性) |
-| S32 | WP4.3 | ☐ | |
+| S32 | WP4.3 | ☑ 完成 | 测试全绿闭环:**全仓 565/62 全绿**(S31 544 起 +21:web-search.test.ts 19 条 + 架构守卫 D6/D7)+ typecheck 全部 0 + ESLint 0(**0 error 0 warning**)+ P2 缓存门禁保绿(100 轮稳定前缀 / KPI 98.7% 原样);交付:`web.search` 工具(tool_calls 行 + `tool.call.*` 四件套、§89 结构性网络沙箱:出站目标唯一/外发次数封顶/未配置即 fail-closed、短窗 query 去重 + 并发在飞去重 + 预算按 Run 隔离)+ 审批回答者链(per-chat → default → unavailable;弃权可下探、抛异常/枚举外当场 fail-closed)+ `createAutoApprover`(白名单 ∩ 只读权限双重守门,判据不含 risk)+ `requireApproval` 静态审批门 + **结果注 tail + origin 溯源全链路**(`CreateMessageInput.metadata` → tool 结果消息 `toolCallId` → `buildContributions` 升格 `source.type='toolResult'`;精确口径 = **末尾连续输入段**,因 pipeline zone-first 排序要求连续性)+ `context/policy.ts` toolResult 同时过 History 与 ToolResultPolicy 双门 + server 组合根三件装配 + `DG_WEB_SEARCH_ENDPOINT/API_KEY`;spec 同步:agent-runtime-spec V2.3(§115.1/§89/§155)、prompt-compiler-spec V2.6(§86) |
 | S33 | WP4.4 | ☐ | |
 | S34 | WP4.5a | ☐ | |
 | S35 | WP4.5b | ☐ | |

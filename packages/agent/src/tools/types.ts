@@ -139,8 +139,23 @@ export interface ApprovalRequest {
 export const APPROVAL_OUTCOMES = ['allowed_once', 'rejected', 'cancelled', 'unavailable'] as const
 export type ApprovalOutcome = (typeof APPROVAL_OUTCOMES)[number]
 
+/**
+ * §115.1 回答者链的**弃权**信号(S32 补)。
+ *
+ * 为什么需要独立的弃权值而不是"返回枚举外值":链上可能有多级回答者
+ * (per-chat → default),某一级"此事我无权批准"与"回答者坏了/返回垃圾"是两回事——
+ * 前者应继续下探下一级,后者必须当场 fail-closed 为 `unavailable`。
+ * 把弃权表达成枚举外字符串会让这两种情况在审计里长得一模一样。
+ *
+ * 注意:弃权**不是**一个 ApprovalOutcome——它只是链上的流转信号,永不作为最终决定。
+ */
+export const APPROVAL_ABSTAIN = 'abstain' as const
+
 /** §115.1 per-chat 策略:ask(默认)派发回答者链;never 不派发,确定性 rejected */
 export type ApprovalPolicy = 'ask' | 'never'
 
-/** §115.1 回答者:属于该 Run 所属 chat 的一方(UI / 操作者) */
-export type ApprovalResponder = (request: ApprovalRequest) => Promise<ApprovalOutcome | string>
+/** §115.1 回答者:属于该 Run 所属 chat 的一方(UI / 操作者);可返回 APPROVAL_ABSTAIN 弃权 */
+export type ApprovalResponder = (request: ApprovalRequest) => Promise<ApprovalOutcome | typeof APPROVAL_ABSTAIN | string>
+
+/** §115 审批风险档(审计面用;工具缺省 medium = S24 既有行为) */
+export type ApprovalRisk = 'low' | 'medium' | 'high'

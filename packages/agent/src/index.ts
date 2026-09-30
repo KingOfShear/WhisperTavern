@@ -129,8 +129,22 @@ export type {
 export {
   ApprovalManager,
   ApprovalAuditError,
+  createAutoApprover,
   type ApprovalAuditRow,
 } from './tools/approval'
+/** S32(WP4.3):网络搜索工具(§89 网络沙箱 + §86 结果注 tail + 短窗去重/fail-closed) */
+export {
+  createWebSearchToolDefinition,
+  webSearchWireTools,
+  WEB_SEARCH_TOOL_NAME,
+  WEB_SEARCH_PERMISSIONS,
+  APPROVAL_GATED_TOOLS,
+  type WebSearchHit,
+  type WebSearchPayload,
+  type WebSearchToolOptions,
+  type WebSearchTransport,
+  type WebSearchHttpResponse,
+} from './tools/web-search'
 export { BudgetExceeded, BudgetTracker, type RunBudgetEffective } from './tools/budget'
 export {
   ToolBusinessError,

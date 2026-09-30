@@ -25,7 +25,28 @@ const logger = (level: 'error' | 'info', message: string, meta?: unknown): void 
   else console.info(`[server] ${message}`, meta ?? '')
 }
 
-const { app } = createApp({ store, bus, snapshots: new SnapshotRegistry(), secretStore, secretsDir, assetsDir: dataDir, logger })
+/**
+ * S32(WP4.3)网络搜索后端配置:端点 + 可选凭据。
+ *
+ * **未配置 DG_WEB_SEARCH_ENDPOINT 时工具会 fail-closed**(执行确定性失败)。
+ * 刻意不在引导层"没配就不注册":注册面必须与部署环境无关(见 ServerDeps.webSearch 注)。
+ */
+const webSearchEndpoint = process.env.DG_WEB_SEARCH_ENDPOINT
+const webSearchApiKey = process.env.DG_WEB_SEARCH_API_KEY
+
+const { app } = createApp({
+  store,
+  bus,
+  snapshots: new SnapshotRegistry(),
+  secretStore,
+  secretsDir,
+  assetsDir: dataDir,
+  logger,
+  webSearch: {
+    ...(webSearchEndpoint === undefined || webSearchEndpoint === '' ? {} : { endpoint: webSearchEndpoint }),
+    ...(webSearchApiKey === undefined || webSearchApiKey === '' ? {} : { apiKey: webSearchApiKey }),
+  },
+})
 
 const port = Number.parseInt(process.env.DG_PORT ?? '8787', 10)
 serve({ fetch: app.fetch, port }, (info) => {

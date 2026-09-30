@@ -511,6 +511,9 @@ export async function runAgent(deps: AgentRunDeps, input: RunAgentInput): Promis
           content: JSON.stringify(payload),
           authorType: 'tool',
           authorId: call.name,
+          // S32(§86 Tool Results):toolCallId 是结果↔调用唯一的持久关联键,
+          // 编译期据此还原 source.type='toolResult'(compiler-spec §10 来源登记表)
+          metadata: { toolCallId: call.id, toolName: call.name, status: outcome.status },
           now: doneAt,
         })
         if (!created.ok) throw new Error(`tool 结果写入失败: ${created.error.message}`)

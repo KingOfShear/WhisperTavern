@@ -44,15 +44,19 @@ import {
 } from '@whispertavern/runtime'
 import {
   AGENT_TYPES,
+  APPROVAL_GATED_TOOLS,
   assertCanSpawn,
   createAgentDefinition,
+  createAutoApprover,
   createMemoryWriterToolDefinitions,
+  createWebSearchToolDefinition,
   listAgentDefinitions,
   loadAgentDefinition,
   resumeRun,
   runAgent as runAgentOrchestrator,
   runScribe,
   ToolRegistry,
+  WEB_SEARCH_TOOL_NAME,
   type AgentRunDeps,
   type ToolDefinition,
 } from '@whispertavern/agent'
@@ -115,6 +119,19 @@ export function createApp(deps: ServerDeps): CreatedApp {
   const tools = deps.tools ?? new ToolRegistry({ store: deps.store, bus: deps.bus, persistApprovalAudit: () => undefined })
   /** S31(WP4.2b):注册 Scribe 记忆写入工具(Scribe/Roleplay 共通;GET /tools 亦可见) */
   for (const tool of createMemoryWriterToolDefinitions({ store: deps.store, bus: deps.bus })) tools.register(tool)
+  /**
+   * S32(WP4.3)网络搜索工具:注册 + 审批门 + 自动批准回答者,三者必须同批装配。
+   *
+   * 端点缺省读 `DG_WEB_SEARCH_ENDPOINT`(**未配置则工具 fail-closed**,不做假搜索);
+   * `DG_WEB_SEARCH_API_KEY` 可选。审批侧:
+   * - `requireApproval` 把"每次调用必问"钉在工具名上(§115.1 不绕过);
+   * - `createAutoApprover(APPROVAL_GATED_TOOLS)` 作为**默认回答者**只放行白名单里的
+   *   低风险只读工具,其余弃权 → `unavailable` → 拒绝。
+   * 两者必须同时存在:少了前者 = 审批被跳过;少了后者 = 搜索永远被拒。
+   */
+  tools.register(createWebSearchToolDefinition({ ...(deps.webSearch ?? {}) }))
+  tools.requireApproval(WEB_SEARCH_TOOL_NAME)
+  tools.approvals.setDefaultResponder(createAutoApprover(APPROVAL_GATED_TOOLS))
   const agentRunDeps = (): AgentRunDeps => ({
     store: deps.store,
     bus: deps.bus,

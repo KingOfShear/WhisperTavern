@@ -485,6 +485,28 @@ function generationSink(deps: RunDeps, providerId: string) {
   }
 }
 
+/**
+ * 末尾"新输入"连续段起点(§86 Tool Results + §15 tail 注入)。
+ *
+ * 规则 = **只把末尾连续的一撮"尚未被模型消费过的输入"注 tail**:user 输入、
+ * 或刚回灌的 tool 结果。链尾是 assistant 时什么都不进 tail(生成完的正常 RP 轮)。
+ *
+ * 为什么必须"连续末尾"而不是"凡是 tool 结果都注 tail":`pipeline.ts` 的稳定排序
+ * **先按 zone 再按语义序**,把中间轮次的 tool 结果也挪进 tail 会让 `[u,a1,t1,a2,t2]`
+ * 序列化为 `[u,a1,a2,t1,t2]`,tool 结果与其发起调用错位 → provider 协议直接报错。
+ * 末尾连续段天然保持区内字节序,故 `[u,a1,t1]` 的 tail 恰为 `[t1]`,而 `a2` 之后的
+ * `t1` 已不再是"新鲜输入",回落到 history——这正是 §86 想表达的口径。
+ */
+function trailingInputStart(chain: readonly Message[]): number {
+  let start = chain.length
+  while (start > 0) {
+    const role = chain[start - 1]!.role
+    if (role !== 'user' && role !== 'tool') break
+    start -= 1
+  }
+  return start
+}
+
 /** Context Resolution(chat 状态 → 段,compiler-spec §3):P0 口径,见模块头 */
 export function buildContributions(chat: Chat, chain: readonly Message[]): PromptContribution[] {
   const settings = chat.settings as { systemPrompt?: string }
@@ -497,21 +519,37 @@ export function buildContributions(chat: Chat, chain: readonly Message[]): Promp
       semanticPlacement: { type: 'header', order: 0 },
     },
   ]
-  for (const message of chain) {
-    const isLast = message === chain.at(-1)
+  const tailStart = trailingInputStart(chain)
+  for (let i = 0; i < chain.length; i += 1) {
+    const message = chain[i]!
     contributions.push({
       id: `chat:${chat.id}:message:${message.sequence}`,
-      source: { type: 'message', messageId: message.id },
+      source: sourceOfMessage(message),
       segment: {
         role: mapRole(message.role),
         content: message.content,
-        zone: isLast && message.role === 'user' ? 'tail' : 'history',
+        zone: i >= tailStart ? 'tail' : 'history',
       },
       priority: 0,
       semanticPlacement: { type: 'history', order: message.sequence },
     })
   }
   return contributions
+}
+
+/**
+ * 消息来源溯源(compiler-spec §86 Tool Results / §10 来源登记表)。
+ *
+ * tool 结果消息的 `toolCallId` 是**唯一能追回"这条结果由哪次调用产生"的键**
+ * (wire 侧关联 id 不进 IR,见 S24 不变量 2),故在消息元数据里持久化并在此升格为
+ * `toolResult` 来源。缺元数据时退回 `message` 来源——老数据与普通消息行为不变。
+ */
+function sourceOfMessage(message: Message): PromptContribution['source'] {
+  const toolCallId = message.metadata?.['toolCallId']
+  if (message.role === 'tool' && typeof toolCallId === 'string' && toolCallId !== '') {
+    return { type: 'toolResult', toolCallId }
+  }
+  return { type: 'message', messageId: message.id }
 }
 
 /** MessageRole → PromptRole:character/assistant 都按"角色发言"翻译为 assistant */

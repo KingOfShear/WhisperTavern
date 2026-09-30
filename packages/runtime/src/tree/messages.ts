@@ -98,6 +98,12 @@ export interface CreateMessageInput {
   authorType?: MessageRole
   authorId?: string
   name?: string
+  /**
+   * 消息级溯源元数据(缺省 `{}`,行为与 S13 起逐字节一致)。
+   * S32(WP4.3)唯一用途:tool 结果消息写入 `{ toolCallId }`,
+   * 供 `buildContributions` 还原 `source.type='toolResult'`(compiler-spec §86 Tool Results)。
+   */
+  metadata?: Record<string, unknown>
   now: Timestamp
 }
 
@@ -131,7 +137,7 @@ export function createMessage(
       authorId: input.authorId,
       content: input.content,
       name: input.name,
-      metadata: '{}',
+      metadata: JSON.stringify(input.metadata ?? {}),
       createdAt: input.now,
       updatedAt: input.now,
     }).run()

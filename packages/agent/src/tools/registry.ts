@@ -62,6 +62,17 @@ export type BatchContext = Omit<ToolExecutionContext, 'budget'> & { budgetTracke
 export class ToolRegistry {
   readonly approvals = new ApprovalManager()
   private readonly tools = new Map<string, ToolDefinition>()
+  /**
+   * §115.1(S32):**永远**须经审批的工具名集合。
+   *
+   * 与 pre-execute 返回 `'ask'` 是同一段的两个入口,取或:pre-execute 是
+   * "本次调用要不要问"的动态判据,这里是"这个工具每次都要问"的静态声明。
+   * 为什么不只用 pre-execute:注册面可以在构造注册表**之后**增长(S31/S32 都在
+   * server 组合根注册工具),而 pre-execute 只在构造时注入——把"必须审批"钉在工具名上,
+   * 才能保证"注册了工具但忘了装审批门"这件事在结构上不可能发生(不绕过 §115.1)。
+   * `deny` 仍然优先于审批。
+   */
+  private readonly approvalGated = new Set<string>()
 
   constructor(
     private readonly deps: ToolRegistryDeps,
@@ -70,6 +81,11 @@ export class ToolRegistry {
 
   register(tool: ToolDefinition): void {
     this.tools.set(tool.name, tool)
+  }
+
+  /** §115.1:声明该工具每次调用都须走审批管线(审计仍成对落库,不是绕过) */
+  requireApproval(toolName: string): void {
+    this.approvalGated.add(toolName)
   }
 
   get(name: string): ToolDefinition | undefined {
@@ -195,7 +211,8 @@ export class ToolRegistry {
       }
 
       // —— ② approval(一次性授权解析;必须在 guards 之前 §36.1)——
-      if (pre.action === 'ask') {
+      // 触发面取或:pre-execute 的动态 ask,或本工具被静态声明为"必审批"(S32)
+      if (pre.action === 'ask' || this.approvalGated.has(call.name)) {
         const outcome = await this.approvals.resolve(
           { bus: this.deps.bus, persistAudit: this.deps.persistApprovalAudit },
           {
@@ -204,9 +221,11 @@ export class ToolRegistry {
               runId: ctx.runId,
               action: call.name,
               description: tool.description,
+              // §115 risk 当前恒为 medium:注册面尚无按工具声明的风险档(见 web-search
+              // createAutoApprover 注——自动批准判据刻意不用 risk,故这里不影响放行面)
               risk: 'medium',
               requestedPermissions: [...tool.permissions],
-              reason: pre.reason,
+              reason: pre.action === 'ask' ? pre.reason : '该工具策略要求每次调用均须审批(§115.1)',
               toolCallId: callId,
             },
             now: startedAt,

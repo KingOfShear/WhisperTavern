@@ -1,6 +1,6 @@
 # WhisperTavern V2 — Agent Runtime Specification
 
-> 版本：V2.2（2026-09-27：S28/WP3.6——§39 RunBudget 补 Agent Tree 四护栏字段、§93 Scheduler 补 `assertCanSpawn`、§100 补 `AGENT_RECURSION_LIMIT`（还账 #17，见 §39/§93 修订注）；§125 Debug 模式补实现注（五项能力 P3 已具备,Debug 读面 = §121 Run Timeline,见 §125 注））；V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
+> 版本：V2.3（2026-09-28：S32/WP4.3——§115.1 补**回答者链**（per-chat → default → unavailable，弃权可下探、抛异常/枚举外当场 fail-closed）+ `createAutoApprover` 安全边界 + `requireApproval` 静态审批门；§89 补 **network 限制落地口径**（出站目标唯一 / 外发次数封顶 / 未配置即 fail-closed）与结果去重规则。先前 V2.2 修订内容：S28/WP3.6——§39 RunBudget 补 Agent Tree 四护栏字段、§93 Scheduler 补 `assertCanSpawn`、§100 补 `AGENT_RECURSION_LIMIT`（还账 #17，见 §39/§93 修订注）；§125 Debug 模式补实现注（五项能力 P3 已具备,Debug 读面 = §121 Run Timeline,见 §125 注））；V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
 > 状态：Draft（已与总设计对齐，待 P3 实施验证）
 > 文档层级：[technical-design.md](../technical-design.md) 之下的 **Agent Runtime 模块详细规格**，与 `prompt-compiler-spec.md`、`database-schema.md` 同级
 > 依赖：`database-schema.md`、`prompt-compiler-spec.md`
@@ -2907,6 +2907,28 @@ process
 environment
 ```
 
+**【2026-09-28 补，S32/WP4.3】`network` 限制的落地口径（`web.search` 为参照实现）**
+
+"限制 network"在本仓库落成三条**结构性**约束，而不是靠工具自觉：
+
+1. **出站目标唯一且不可由模型指定**——`web.search` 只往注入配置里的那一个 `endpoint` 发请求，
+   工具入参里**没有** URL 字段。模型无法把它当任意网络的跳板。
+2. **外发次数封顶**（per-Run 预算）——超过 `maxOutboundRequests` 即
+   `RUN_BUDGET_EXCEEDED` fail-closed，防止一次 Run 内被诱导发起无界出网。
+3. **未配置后端 = fail-closed**——没有 `endpoint` 时工具**确定性失败**（`TOOL_FAILED`），
+   绝不返回空结果或伪造结果。"没连上"与"网上查不到"必须对模型可区分，
+   否则模型会把后端故障当成事实缺失并据此编造。
+
+去重与缓存（p4-plan §7 任务 3）：同一 query 在短窗内**不重复外发**；
+同批并发同 query 共享同一个在飞请求。去重缓存与在飞表按 query 归一键
+（含全部限定条件，防止"同词不同站点"被错误合并），在飞项亦受窗口约束——
+后端挂起时该键不会永久钉死后续同 query 的调用。
+
+> **本节的边界（未实现项不掩盖）**：真实搜索后端的 wire 方言翻译
+> （各家 query/response 形状）按 R-P4-8 随作者接入真实 API 补齐；
+> 当前实现的响应契约是最小面 `{ results: [{title,url,snippet}] }`，
+> 形状不可识别时确定性失败而非猜测字段。
+
 ---
 
 # 90. Concurrency
@@ -3712,6 +3734,46 @@ type ApprovalPolicy =
 - `never` 适用于 CI、无人值守跑批，以及「结果无需询问即可预知」的场景。
 - `never` 必须在派发**之前**生效，后注册的回答者无法绕过它。
 - 策略变更本身要写入事件日志，Replay 才能还原当时的有效策略。
+
+**【2026-09-28 补，S32/WP4.3】回答者链：per-chat → default → `unavailable`**
+
+`ask` 策略下的派发不是"查一个回答者"，而是一条**有序链**：
+
+```text
+per-chat 回答者   （注册在本次 Run 所属 chat 上的 UI / 操作者）
+      ↓ 弃权(abstain)
+default 回答者    （进程级兜底，如 headless 场景的自动批准器）
+      ↓ 弃权(abstain) / 缺位
+unavailable       （默认拒绝，fail-closed）
+```
+
+弃权（`abstain`）与"回答者坏了"**必须区分**：
+
+| 该级回答者的行为 | 处置 |
+|---|---|
+| 返回 `abstain` | **继续下探下一级**——「此事不归我批」是合法流转 |
+| 返回四值之一 | 立即采纳为该次决定，停止下探 |
+| 抛异常 / 返回枚举外值 | **当场 `unavailable`，不下探** |
+
+> **为什么"抛异常/枚举外"不下探**：回答者坏掉是**基础设施故障**，不是"它不想批"。
+> 若允许下探，一次 UI 崩溃就会静默滑到自动批准器上，等于用故障换放行。
+> `abstain` 是显式声明的"不归我管"，故可安全下探。
+
+**自动批准回答者（`createAutoApprover`）的安全边界**（S32 新增，落地 `web.search` 一类低风险只读工具）：
+
+- 它在链上只是 **default 回答者**，`policy='never'` 仍在其之前生效，无法被越过；
+- 放行面**写死在白名单**里，且白名单**不足以放行**——还要求该工具声明的
+  `requestedPermissions` 全部落在只读权限集内。白名单人工维护、权限由工具自己声明，
+  用后者约束前者，才能保证"有人往白名单里加错工具"的后果只是**拒绝**而非**越权**；
+- 判据**不包含 `risk`**：派发审批时 `risk` 由流水线统一给出，按 risk 放行等于无条件放行；
+- 它**不是"关掉审批"**：每次调用照旧走完整管线——审计行先写、
+  `approval.requested`/`approval.decided` 成对落库。它改变的只是**谁回答**这一个环节。
+
+**审批门与注册面的绑定（S32）**：工具可以被静态声明为"每次调用均须审批"
+（`ToolRegistry.requireApproval(toolName)`），与 pre-execute 的动态 `ask` 取**或**。
+理由：注册面可在注册表构造**之后**增长（S32 的 `web.search`、S31 的三个 memory 工具都是
+在 server 组合根注册的），而 pre-execute 只在构造时注入——把"必须审批"钉在工具名上，
+才能让"注册了工具但忘了装审批门"在结构上不可能发生。`deny` 仍优先于审批。
 
 **审计要求**：
 
@@ -4728,6 +4790,22 @@ type ContextSource =
 ```
 
 这样 Prompt Segment 可以追溯来源。
+
+**【2026-09-28 补，S32/WP4.3】本枚举维持**封闭五值**不变——但 toolResult 是它的已知缺口**
+
+S32 起工具结果进入编译输入，携带 `SegmentSource.type = 'toolResult'` + `toolCallId`
+（compiler-spec §10 来源登记表 / §86）。它**不在**上述五值内，故：
+
+- **编译面**：溯源完整——IR 段自带 `toolResult` 来源与 `toolCallId`，可直接追回是哪次工具调用
+  （`§155` 之前没有工具面，故当时收五值是无损的）；
+- **Agent 面**：`resolveAgentContext` 把它计入 `unmapped` 并**显式上报**
+  （`UnmappedContextOrigin`）——沿用 S26 裁决"维持五源不变 + 报告"，
+  **不静默丢弃、也不擅自扩枚举**。
+
+> **本注记只登记事实，不改变契约**：是否把 `toolResult` 收进 `ContextSource`
+> 属于公共语义变更（决策协议 b），需作者拍板；届时同步改 `contracts` 与本节。
+> 当前明确不做的事：既不静默吞掉溯源信息，也不让 Agent 面自造第 6 个值
+> （那会让 spec 与实现漂移）。
 
 ---
 

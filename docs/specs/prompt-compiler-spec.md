@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.5（2026-09-22 S19 修订：§54 providerStrategy 定稿——翻译指令落 contracts ProviderStrategySchema（breakpoints 投影 afterPartIndex/stableZoneTokens 不含 freshWB/prefixTooSmall 阈值数据），装配条件 checkpoints>0，providerCacheType 由 run.ts 注入；§71 注记 CACHE_UNSAFE_MACRO 等不动。先前 V2.4 修订内容：S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.6（2026-09-28 S32 修订：§86 补落地注记——"Tool Result 默认进 tail"的精确口径 = **末尾连续输入段**（`role ∈ {user, tool}`），并说明为何不能"凡 tool 结果都注 tail"（zone-first 排序会打乱 tool 结果与其调用的配对）；tool 结果段经 `source.type='toolResult'` + `toolCallId` 溯源。先前 V2.5 修订内容：S19 修订：§54 providerStrategy 定稿——翻译指令落 contracts ProviderStrategySchema（breakpoints 投影 afterPartIndex/stableZoneTokens 不含 freshWB/prefixTooSmall 阈值数据），装配条件 checkpoints>0，providerCacheType 由 run.ts 注入；§71 注记 CACHE_UNSAFE_MACRO 等不动。先前 V2.4 修订内容：S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -2716,6 +2716,25 @@ tool result
 ```
 
 才可以成为稳定内容。
+
+> **【2026-09-28 补，S32/WP4.3 落地注记】"默认进 tail"的精确口径 = 末尾连续输入段。**
+>
+> 实现（`packages/runtime/src/generation/run.ts` `trailingInputStart`）把本节的"默认"落成：
+> **链尾连续的一段 `role ∈ {user, tool}`（尚未被模型消费过的输入）注 tail，其余消息回落 history。**
+> 直白说：`[u,a1,t1]` 的 tail 恰为 `[t1]`；而 `[u,a1,t1,a2,t2]` 中 `t1` 已不再是新鲜输入 → history，
+> 只有 `t2` 进 tail。
+>
+> **为什么必须是"连续末尾"而不是"凡 tool 结果都进 tail"**：`§48`/pipeline 的排序是
+> **先按 zone 再按语义序**（`ZONE_ORDER` → `placementOrder` → physical index）。把中间轮次的
+> tool 结果也挪进 tail，会把 `[u,a1,t1,a2,t2]` 序列化成 `[u,a1,a2,t1,t2]`——tool 结果与其发起
+> 调用错位，Provider 协议直接报错。末尾连续段天然保持区内字节序，故这条规则同时满足协议正确性与本节意图。
+>
+> **溯源（§10 来源登记表）**：tool 结果段携带 `source.type = 'toolResult'` + `toolCallId`，
+> 该 id 由运行层写入消息元数据（`messages.metadata.toolCallId`）后在编译期升格。
+> 缺元数据时退回 `message` 来源——存量数据与普通消息行为不变。
+>
+> **缓存语义**：`tail` 的 zone 默认稳定性是 `volatile`（`§16`），并位于 `§15.1` 裁剪序**首位**
+> ——tool 结果既不可能进稳定前缀，也不会挤占稳定区预算。这正是 §86 想要的"不进稳定内容"。
 
 ---
 

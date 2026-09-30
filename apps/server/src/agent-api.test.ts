@@ -282,14 +282,14 @@ describe('S28 任务 3 观测面(§121/§122/§124)', () => {
 })
 
 describe('S28 §154 GET /tools + GET /skills(§75/§76/§79)', () => {
-  it('GET /tools 返回注册面投影(§76 shape);默认注册面 = S31 三个 memory 写入工具', async () => {
+  it('GET /tools 返回注册面投影(§76 shape);默认注册面 = S31 三个 memory 工具 + S32 网络搜索', async () => {
     const { app } = makeApp()
     const res = await app.request('/api/v2/tools')
     expect(res.status).toBe(200)
     const body = (await res.json()) as { data: { id: string; name: string; permission: string; source: string }[] }
-    // S31 把三个 memory 写入工具注册进默认注册面(Scribe 与 HTTP 面共享);wire name = memory.*
+    // S31 三个 memory 写入工具(Scribe 与 HTTP 面共享)+ S32 `web.search`;wire name = 点号命名空间
     expect(body.data.map((t) => t.name).sort()).toEqual(
-      ['memory.append_summary', 'memory.append_timeline', 'memory.upsert_dossier'].sort(),
+      ['memory.append_summary', 'memory.append_timeline', 'memory.upsert_dossier', 'web.search'].sort(),
     )
     expect(body.data.every((t) => t.source === 'core')).toBe(true)
   })
@@ -313,17 +313,21 @@ describe('S28 §154 GET /tools + GET /skills(§75/§76/§79)', () => {
     const { app } = makeApp({ tools })
     const res = await app.request('/api/v2/tools')
     const body = (await res.json()) as { data: { id: string; name: string; permission: string; source: string }[] }
-    // 注入的 t_query + 内建 3 个 memory 写入工具 = 4(wire name=memory.*)
-    expect(body.data).toHaveLength(4)
+    // 注入的 t_query + 内建 3 个 memory 写入工具 + 网络搜索 = 5
+    expect(body.data).toHaveLength(5)
     expect(body.data.some((t) => t.id === 't_query')).toBe(true)
     expect(body.data.some((t) => t.name === 'memory.upsert_dossier')).toBe(true)
 
     const filtered = await app.request('/api/v2/tools?capability=chat.read')
-    const filteredBody = (await filtered.json()) as { data: unknown[] }
+    const filteredBody = (await filtered.json()) as { data: { name: string }[] }
     expect(filteredBody.data).toHaveLength(1)
     const memoryWrite = await app.request('/api/v2/tools?capability=memory.write')
     const memoryWriteBody = (await memoryWrite.json()) as { data: unknown[] }
     expect(memoryWriteBody.data).toHaveLength(3)
+    // S32:网络搜索按 §89 走 network.request 权限面(GET /tools 可发现)
+    const network = await app.request('/api/v2/tools?capability=network.request')
+    const networkBody = (await network.json()) as { data: { name: string }[] }
+    expect(networkBody.data.map((t) => t.name)).toEqual(['web.search'])
     const none = await app.request('/api/v2/tools?capability=chat.write')
     const noneBody = (await none.json()) as { data: unknown[] }
     expect(noneBody.data).toEqual([])

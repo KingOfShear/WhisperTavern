@@ -139,17 +139,31 @@ export interface PolicyFilterResult {
   dropped: PolicyDrop[]
 }
 
-const isMessage = (c: PromptContribution): boolean => c.source.type === 'message'
 const isWorldbook = (c: PromptContribution): boolean => c.source.type === 'worldbook'
 const isArtifact = (c: PromptContribution): boolean => c.source.type === 'artifact'
 const isToolResult = (c: PromptContribution): boolean => c.source.type === 'toolResult'
 
-/** message 贡献 → HistoryPolicy 的角色分类(§19 includeUser/Assistant/Tools) */
+/**
+ * History 族的成员判定(S32 扩:toll 结果也是历史消息)。
+ *
+ * 工具结果在 §86 里以 `source.type='toolResult'` 溯源,但它**同时是一条历史消息**:
+ * `includeTools` 开关与 `maxMessages` 上限必须照旧管得住它(否则关掉 includeTools
+ * 仍能看到全部工具输出 = 策略失效)。故它受**两道闸门**:先过 History 族,再过
+ * ToolResultPolicy(§22)——两者都放行才留下,任一拒绝即 drop 并注明是哪一族裁决。
+ */
+const isHistoryItem = (c: PromptContribution): boolean => c.source.type === 'message' || c.source.type === 'toolResult'
+
+/** message/toolResult 贡献 → HistoryPolicy 的角色分类(§19 includeUser/Assistant/Tools) */
 function historyRoleOf(c: PromptContribution): 'user' | 'assistant' | 'tools' | 'other' {
   if (c.segment.role === 'user') return 'user'
   if (c.segment.role === 'tool') return 'tools'
   if (c.segment.role === 'assistant') return 'assistant'
   return 'other'
+}
+
+/** 钉住判定用的 message id;toolResult 来源只带 toolCallId → 不可钉(返回空串) */
+function pinnedKeyOf(c: PromptContribution): string {
+  return c.source.type === 'message' ? c.source.messageId : ''
 }
 
 /**
@@ -166,22 +180,22 @@ export function resolveContextByPolicy(
   const dropped: PolicyDrop[] = []
   let working = [...contributions]
 
-  // —— §19 History Policy(消息贡献)——
+  // —— §19 History Policy(消息贡献 + tool 结果贡献;见 isHistoryItem)——
   if (!policy.history.enabled) {
-    const removed = working.filter(isMessage)
-    working = working.filter((c) => !isMessage(c))
+    const removed = working.filter(isHistoryItem)
+    working = working.filter((c) => !isHistoryItem(c))
     for (const c of removed) dropped.push({ contributionId: c.id, policy: 'history', reason: 'history.enabled=false' })
   } else {
     const pinned = new Set(policy.history.pinnedMessages ?? [])
     const kept: PromptContribution[] = []
     const removed: PromptContribution[] = []
     for (const c of working) {
-      if (!isMessage(c)) {
+      if (!isHistoryItem(c)) {
         kept.push(c)
         continue
       }
       const role = historyRoleOf(c)
-      const messageId = c.source.type === 'message' ? c.source.messageId : ''
+      const messageId = pinnedKeyOf(c)
       if (pinned.has(messageId)) {
         kept.push(c) // 钉住的消息无视 include 开关与条数上限(§19 pinnedMessages 语义)
         continue
@@ -195,10 +209,10 @@ export function resolveContextByPolicy(
       else removed.push(c)
     }
     // maxMessages:按剩余条数从旧到新丢弃(保最新;钉住的不占不删)
-    const messages = kept.filter(isMessage)
+    const messages = kept.filter(isHistoryItem)
     if (policy.history.maxMessages !== undefined && messages.length > policy.history.maxMessages) {
       const over = messages.length - policy.history.maxMessages
-      const dropIds = new Set(messages.filter((m) => !pinned.has(m.source.type === 'message' ? m.source.messageId : '')).slice(0, over).map((m) => m.id))
+      const dropIds = new Set(messages.filter((m) => !pinned.has(pinnedKeyOf(m))).slice(0, over).map((m) => m.id))
       for (const c of kept) {
         if (dropIds.has(c.id)) removed.push(c)
       }
