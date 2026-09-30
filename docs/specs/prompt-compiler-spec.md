@@ -1,7 +1,7 @@
 # WhisperTavern V2 — Prompt Compiler Specification
 
 > **文件：** `docs/specs/prompt-compiler-spec.md`  
-> **版本：** V2.6（2026-09-28 S32 修订：§86 补落地注记——"Tool Result 默认进 tail"的精确口径 = **末尾连续输入段**（`role ∈ {user, tool}`），并说明为何不能"凡 tool 结果都注 tail"（zone-first 排序会打乱 tool 结果与其调用的配对）；tool 结果段经 `source.type='toolResult'` + `toolCallId` 溯源。先前 V2.5 修订内容：S19 修订：§54 providerStrategy 定稿——翻译指令落 contracts ProviderStrategySchema（breakpoints 投影 afterPartIndex/stableZoneTokens 不含 freshWB/prefixTooSmall 阈值数据），装配条件 checkpoints>0，providerCacheType 由 run.ts 注入；§71 注记 CACHE_UNSAFE_MACRO 等不动。先前 V2.4 修订内容：S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
+> **版本：** V2.7（2026-09-29 S33a 修订：**§10 Segment Source 补 `character` 源的生产者与槽位填充语义**——该变体自 P0 起只有声明（`diff.ts` 已映射 `CHARACTER_CHANGED`）却**零生产者**、`characters.description/personality/scenario` 零消费者、10 个真实预设的 charDescription/charPersonality 全是 `content:""` 空壳标记，属悬空虚设，本轮补齐；确立"① 槽位填充（原地替换标记段内容，段的 id/placement/prompt_order 一概不动，依据 §81 顺序即语义序；段的 source 仍为 preset）/ ② 角色贡献（`character:<id>:<field>` 稳定 ID 的 header 独立贡献，供 SegmentDiff 精确归因）/ ③ 填充范围是正白名单（只含 charDescription/charPersonality；worldInfo*/chatHistory/personaDescription 各有其主，重复填充即双注入）"三分离；补零漂移不变量（未绑定/空卡 → 空槽位表 + 空贡献集 + `character_id` NULL → header 逐字节不变）与 per-(chat, character) 命名空间关系（键落 `prompt_snapshots.character_id`，migration v11）。先前 V2.6 修订内容：2026-09-28 S32 修订：§86 补落地注记——"Tool Result 默认进 tail"的精确口径 = **末尾连续输入段**（`role ∈ {user, tool}`），并说明为何不能"凡 tool 结果都注 tail"（zone-first 排序会打乱 tool 结果与其调用的配对）；tool 结果段经 `source.type='toolResult'` + `toolCallId` 溯源。先前 V2.5 修订内容：S19 修订：§54 providerStrategy 定稿——翻译指令落 contracts ProviderStrategySchema（breakpoints 投影 afterPartIndex/stableZoneTokens 不含 freshWB/prefixTooSmall 阈值数据），装配条件 checkpoints>0，providerCacheType 由 run.ts 注入；§71 注记 CACHE_UNSAFE_MACRO 等不动。先前 V2.4 修订内容：S18 Budget/CachePlan 落地口径：§46–§58 补落地注记——Budget Manager 缺省值、§49 裁剪序权威化落 contracts（BUDGET_TRIM_ORDER，tail→injection→freshWB→elasticHistory→summary→stableWB→header）、CachePlan 装配算法（version=1、automatic 断点三位置、enabled=false 段不参与序列化）、Elastic History 无状态整体推出范围、§71 登记 BUDGET_TRIM。先前 V2.3 修订内容：§16 stableWB/freshWB 区默认稳定性改 session（决策 A）、§29 注记 stale 转场 S17 不产出、§71 登记 WORLD_BOOK_RETIRED/WORLD_BOOK_DEACTIVATED。先前 V2.2 修订内容：§40 时间日期 UTC 格式与 {{random}} 确定性种子流、§41 evaluate 增 args、§43 稳定区枚举与触发判据/处置粒度/三档映射、§44 user 缺省 'User'、§45 MacroContext 增 rng/seed 注入位、§71 登记 CACHE_UNSAFE_MACRO/UNKNOWN_MACRO/EVAL_MACRO_REJECTED 并退役 MACRO_UNEXPANDED_P0。先前 V2.1 修订内容：①§30 stableWB 成员资格与当轮激活解耦；②§32/§111 summary 维持 history 之前、追加=显式失效事件；③§83 撤销"静态 Injection 进稳定区"；④§12/§58 补全 ST 槽位枚举与消息级失效原因）  
 > **状态：** Implementation Specification  
 > **所属系统：** WhisperTavern V2  
 > **文档层级：** [technical-design.md](../technical-design.md) 之下的 **Prompt Compiler 模块详细规格**  
@@ -430,6 +430,36 @@ export type SegmentSource =
       key: string
     }
 ```
+
+【2026-09-29 修订（S33a/WP4.4）】**`character` 源的生产者与槽位填充语义落地**（此前该变体自 P0 起只有声明、`core/serializer/diff.ts` 早已把它映射成 `CHARACTER_CHANGED`，但**零生产者**，属悬空虚设）。
+
+（1）**两个职责分离，别混用**：
+
+```text
+① 槽位填充（slot fill）—— 让角色卡正文落进**作者排好的位置**
+   ST 预设里的 charDescription / charPersonality 是"空壳标记"（只声明位置，content 为空）。
+   编译时用角色卡对应字段**原地替换**该标记段的内容，段的 id / role / placement / prompt_order
+   **一概不动** —— 依据 §81「顺序即语义序」：标记段的位置就是内容该落的位置，
+   另发一条贡献会丢掉作者在 prompt_order 里排的序。
+   段的 source 仍为 `preset`（它确实是预设声明的段）；角色卡自身的溯源由 ② 承载。
+
+② 角色贡献（character contribution）—— 让"角色卡变了"可被精确归因
+   `packages/runtime/src/generation/character.ts` 产 `{ type:'character', assetId, field }`
+   的 header 区独立贡献，段 ID = `character:<characterId>:<field>`（§9 稳定 ID = assetId + logicalPath，
+   禁 randomUUID）。换角色换 ID、换字段换 ID，于是 SegmentDiff 能把变更精确落到一条段。
+
+③ 填充范围是**正白名单**，只含 ① 的两个槽：
+   charDescription → characters.description
+   charPersonality → characters.personality
+   worldInfoBefore/After（世界书 builder 产）、chatHistory（消息链产）、
+   personaDescription（persona builder 产）**各有其主**，在此重复填充即双注入。
+```
+
+（2）**零漂移不变量**：未绑定角色（`chats.character_id IS NULL`）、角色行已删、或字段为空白 → 槽位表为空、角色贡献为空集，且快照 `character_id` 写 NULL。此时 header 与引用 `character` 源之前**逐字节一致**（金样基线与 P2 百轮缓存门禁的前提）。
+
+（3）**缓存纪律**：角色卡是会话内静态资产，进 header 区（§19 Header 允许 Character Description，要求 `stability >= session`）。生产者不声明 stability，按区默认推导。
+
+（4）**与 per-(chat, character) 命名空间的关系**（worldbook-cache-design §6）：角色卡进 header 后，各角色的稳定前缀天然不同 → 同 chat 内不同角色是**两条独立链**。命名空间键落 `prompt_snapshots.character_id`（migration v11），§41 遥测与 §42 二分诊断均按它取前驱；否则群聊里"上一轮"会取到别的角色的快照，每轮都报一次无意义的 CacheBreak。群聊多成员（`chat_members`）归 S33b，届时只换 ② 的输入（单值绑定 → 成员集），段身份口径不变。
 
 ---
 

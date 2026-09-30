@@ -176,6 +176,8 @@ export const runs = sqliteTable('runs', {
 export const promptSnapshots = sqliteTable('prompt_snapshots', {
   id: text('id').primaryKey(),
   chatId: text('chat_id').notNull(),
+  /** S33a(migration v11):per-(chat, character) 缓存命名空间的键(§26);未绑定角色为 NULL */
+  characterId: text('character_id'),
   runId: text('run_id'),
   messageId: text('message_id'),
   provider: text('provider').notNull(),

@@ -18,6 +18,7 @@ import { activeLeafId, ancestorChain, createMessage, loadChat, loadMessage } fro
 import { buildWorldbookContributions, type WorldbookMode } from './worldbook'
 import { buildPresetContributions } from './preset'
 import { buildPersonaContributions } from './persona'
+import { buildCharacterContributions, characterSlotContents } from './character'
 import { buildRuntimeVariables } from './variables'
 import type { Chat, Message, ProviderTool } from '@whispertavern/contracts'
 import { dispatchGeneration, SnapshotRegistry, type DispatchResult } from './dispatch'
@@ -88,6 +89,21 @@ export interface StartedRun {
 export type StartRunResult = Result<StartedRun, ApplicationError>
 
 /** 启动一次生成:contributions → compile → 落 run/snapshot 行 → dispatch(异步立即返回) */
+/**
+ * 快照的缓存命名空间键(S33a §26 群聊 / worldbook-cache-design §6):**(chat, character)**。
+ *
+ * 为什么必须落进快照行:Provider Prompt Cache 的作用域是 per-character——角色卡进
+ * header,各角色前缀天然不同(见 generation/character.ts)。若快照只记 chat,
+ * 群聊里"上一轮"会取到**别的角色**的快照,于是每轮都报一次无意义的 CacheBreak。
+ * 本键就是 §42 二分诊断 / §41 遥测取前驱时的分组依据。
+ *
+ * S33a 取 chat 的单值绑定;S33b 群聊改为"本轮发言角色"(显式入参覆盖),届时本函数
+ * 收一个可选的 override 参数,调用方口径不变。
+ */
+function snapshotCharacterId(chat: Chat): string | null {
+  return chat.characterId ?? null
+}
+
 export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   const { store, bus, snapshots } = deps
   const now = input.now
@@ -133,11 +149,23 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
 
   // WP1.3 资产注入(S12):persona / preset 绑定 → 贡献。二者均为单值 chat 绑定,
   // 只读 DB 解析,无运行时态落库(persona 是静态档案,preset 是静态提示词配置)。
+  // S33a:character 加入同一批——它同样是"chat 的静态资产绑定",且 slotContents
+  // 必须与 character 取自同一行,故二者在同一次读取里成对产出(避免两次查库不一致)。
+  const character = buildCharacterContributions({ store, chatId: input.chatId })
   const persona = buildPersonaContributions({ store, chatId: input.chatId })
-  const preset = buildPresetContributions({ store, chatId: input.chatId })
+  const preset = buildPresetContributions({
+    store,
+    chatId: input.chatId,
+    slotContents: characterSlotContents({ store, chatId: input.chatId }),
+  })
 
+  // 提交序 = character → persona → preset(S33a):同区同 order 时由提交序 + 稳定 ID
+  // 决定最终次序(§19 header 允许 Character Description / Persona / Static Preset,
+  // 该序即 ST 默认 prompt_order 惯例)。未绑定角色时 character 贡献为空集,
+  // 本数组与 S33a 之前逐字节一致。
   const contributions: PromptContribution[] = [
     ...buildContributions(chat.value, chain.value),
+    ...character.contributions,
     ...persona.contributions,
     ...preset.contributions,
     ...worldbook.contributions,
@@ -195,6 +223,8 @@ export function startRun(deps: RunDeps, input: StartRunInput): StartRunResult {
   store.db.insert(promptSnapshots).values({
     id: snapshot.id,
     chatId: input.chatId,
+    // S33a:命名空间键随快照落库(§42/§41 取前驱时的分组依据;未绑定=null)
+    characterId: snapshotCharacterId(chat.value),
     runId,
     messageId,
     provider: snapshot.provider,
@@ -375,9 +405,21 @@ export function prepareIteration(
         variables,
         mode,
       })
+      // S33a:character 与 persona/preset 同批(循环内复用一次算)——它是 run 级静态
+      // 绑定,循环内不会变;漏在这里会让工具循环的每一轮都丢角色卡(header 与首轮不一致)。
+      const character = buildCharacterContributions({ store, chatId: input.chatId })
       const persona = buildPersonaContributions({ store, chatId: input.chatId })
-      const preset = buildPresetContributions({ store, chatId: input.chatId })
-      return [...persona.contributions, ...preset.contributions, ...worldbook.contributions] as const
+      const preset = buildPresetContributions({
+        store,
+        chatId: input.chatId,
+        slotContents: characterSlotContents({ store, chatId: input.chatId }),
+      })
+      return [
+        ...character.contributions,
+        ...persona.contributions,
+        ...preset.contributions,
+        ...worldbook.contributions,
+      ] as const
     })()
 
   const contributions: PromptContribution[] = [...buildContributions(chat.value, chain.value), ...recurring]
@@ -436,6 +478,9 @@ export function prepareIteration(
   store.db.insert(promptSnapshots).values({
     id: snapshot.id,
     chatId: input.chatId,
+    // S33a:同 startRun——每轮快照都带命名空间键,否则工具循环的后续轮次会掉进
+    // chat 级语义,与自己首轮的链断掉。
+    characterId: snapshotCharacterId(chat.value),
     runId: input.runId,
     provider: snapshot.provider,
     model: snapshot.model,

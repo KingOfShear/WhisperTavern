@@ -195,7 +195,7 @@ P1–P5 各自的 DoD（含 Non-goals）由各阶段开工的首个细化会话�
 | WP4.1 | **前置：memory-runtime-spec 骨架**（四层记忆/双检索/Scribe 实施语义） | 挂账还清后 WP4.2 才开工 | S29 |
 | WP4.2 | Summary 链 + 四层记忆 + FTS5/sqlite-vec 双检索 | 总设计 §25；database §25 | S30–S31 |
 | WP4.3 | 网络搜索工具（结果注 tail / agent 工具，origin 溯源） | （—） | S32 ✅ |
-| WP4.4 | 群聊 + per-char 缓存命名空间 | 总设计 §26；worldbook-cache-design §6 | S33 |
+| WP4.4 | 群聊 + per-char 缓存命名空间（拆 **4.4a** 角色身份进 header + 命名空间键 / **4.4b** 群聊本体） | 总设计 §26；worldbook-cache-design §6 | S33a ✅ / S33b |
 | WP4.5 | Roleplay Fast 档（三表 + BD 规则推导 + Story Thread） | roleplay-runtime-spec；R1 单调用 | S34–S35 |
 | WP4.6 | ~~scope 边界确认还账~~（roleplay scope 与指令归属——随指令安全撤下） | （—） | （已撤下） |
 | S36 收官 | Workflow HTTP 面（§155）+ World State 规则版（#18）+ Simulation mock + UI | api-spec §155；还账 #18/#21 | S36 |

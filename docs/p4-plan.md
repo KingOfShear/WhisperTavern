@@ -235,22 +235,44 @@ R-P4-10 P4 明确不做(防范围膨胀)：
 
 # 8. S33 — WP4.4 群聊 + per-char 缓存命名空间（1–2 会话）
 
-**任务清单**：
+**⚠️ 原任务清单前提失实（本会话侦察发现并修订）**：原清单第 1/3 条假设"per-(chat, character) 命名空间可直接建起来"，但实测发现——契约 `SegmentSourceSchema` 自 P0 起就声明了 `{ type:'character', assetId, field }`（`core/serializer/diff.ts` 亦早已把它映射成 `CHARACTER_CHANGED` 缓存破裂因），**但全仓没有任何生产者**；`characters.description/personality/scenario` 三列同样**零消费者**（只有 `variables.ts` 读 `name` 供 `{{char}}`）；且 10 个真实预设 fixture 里 `charDescription`/`charPersonality`/`personaDescription` 全是 `content:""` 的**空壳标记**。
+
+**后果**：每个角色产出的 header 逐字节相同 —— 命名空间即便建起来也是**空转**（§26 要求的"多角色各自前缀"根本不存在），3 角色群聊 50 轮会全绿却什么都没证明，且三个角色会给出完全相同的回复。
+
+**故拆为两段**（作者本会话裁可）：
 
 ```text
-1. migration v11:chat_members(chat_id, character_id, joined_at, settings) + 索引
+S33a（本会话，已完成）—— 修前提：角色身份真的进 prompt + 命名空间键落地
+1. ✅ character.ts：全仓第一个 `{type:'character',assetId,field}` 生产者
+   —— slot 填充（charDescription/charPersonality **原地**替换，位置不动，§81 顺序即语义序）
+   + 独立 header 贡献（段 ID `character:<id>:<field>`，§9 稳定 ID）
+   （只填这两个槽：worldInfo*/chatHistory/personaDescription 归各自生产者，防双注入）
+2. ✅ migration v11：prompt_snapshots.character_id + 复合索引 (chat_id, character_id, created_at)
+   （不建独立 chatCache 哈希表——S17 三次修订已裁决；cache_runtime_states 保持未迁移）
+3. ✅ chats.character_id 写入路径（POST/PATCH + CHARACTER_NOT_FOUND 404 + null 解绑）
+4. ✅ 命名空间感知前驱：cache-break 按 (chat, character) 取前驱（sameNamespaceCondition，
+   NULL 安全——`x = NULL` 恒 UNKNOWN 会让未绑定 chat 静默退化）
+5. ✅ buildCacheTelemetry 按命名空间分链（各链 round 各自从 1 起）+ §41 characterId 过滤面
+6. ✅ 验收：6 条测试（slot 填充 / 未绑定零漂移 / 命名空间分组 / 双角色 header 分歧 /
+   绑定 API / 遥测分链）+ 4 个负例探针确认真能变红；
+   全量 571 测试 / 63 文件绿，typecheck 9 包 0，ESLint 0，P2 门禁 100 轮 + KPI 98.7% 原样保绿
+
+S33b（下一会话）—— 群聊本体
+1. migration v12:chat_members(chat_id, character_id, joined_at, settings) + 索引
 2. 群聊 Agent Runtime:Director → Character Agent A/B/C(总设计 §26;agent-runtime-spec §76/§77)
    ST 原生 NATURAL/LIST/MANUAL/POOLED 策略为子集(st-reference-analysis §5)
-3. per-(chat, character) 缓存命名空间:cache_runtime_states 按成员扩展;
-   世界书缓存 chat scope 共享(内容寻址),Provider Prompt Cache per-character 链
-4. Turn Selection:由群聊 Director 决定谁去 + Roleplay 决定该角色怎么做(R2 分界,
+   —— Director 用启发式（零额外模型调用，R1/C1/R-P3-2）；character.ts 输入从
+   "chat 单值绑定"换成"chat 成员集"（段身份口径不变）；snapshotCharacterId 收 override 参数
+3. Turn Selection:由群聊 Director 决定谁去 + Roleplay 决定该角色怎么做(R2 分界,
    roleplay-runtime-spec §36;S33 只做 Director 路径,RP 状态归 S34)
-5. 群聊 UI:群聊控制台 + per-character 链温度显示(ui-design §4.6+)
-6. 验收:3 角色群聊 50 轮缓存行为符合预期(§36 P4 DoD ②)
+4. 群聊 UI:群聊控制台 + per-character 链温度显示(ui-design §4.6+)
+   —— 遥测 characterId 过滤面已在 S33a 就位，UI 直接消费
+5. 验收:3 角色群聊 50 轮缓存行为符合预期(§36 P4 DoD ②)
 ```
 
 **验收**：3 角色群聊 50 轮缓存行为符合预期（per-(chat,character) 命名空间按成员正确分链）。
 **spec 锚点**：总设计 §26；worldbook-cache-design §6；agent-runtime-spec §76/§77；roleplay-runtime-spec §36。
+**S33a 已同步 spec**：api-spec 升 **2.8**（§41 `characterId` query + `CacheRoundMetric.characterId` 投影、§43 体字段同口径、§8 补 `CHARACTER_NOT_FOUND`）。
 
 # 9. S34 — WP4.5a Roleplay Runtime 持久化 + 状态机（1–2 会话）
 

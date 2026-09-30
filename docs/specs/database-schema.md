@@ -649,7 +649,9 @@ CREATE TABLE chats (
 );
 ```
 
-群聊预留（P4，总设计 §26）：单聊用 character_id；群聊增加 `chat_members(chat_id, character_id, joined_at, settings)` 成员表，per-(chat, character) 缓存命名空间由 cache_runtime_states 按成员扩展。
+群聊预留（P4，总设计 §26）：单聊用 character_id；群聊增加 `chat_members(chat_id, character_id, joined_at, settings)` 成员表（**归 S33b**）。
+
+【2026-09-29 修订（S33a/WP4.4）】**per-(chat, character) 缓存命名空间的键落在 `prompt_snapshots.character_id`（migration v11 + 复合索引），不落 `cache_runtime_states`**——修订上文原表述。理由：①S17 三次修订已裁决"**不建独立 chatCache 哈希表**"（WBCacheEntry 落 `worldbook_runtime_entries` 按 (chat, entry) 一行），命名空间键若另立平行状态即违反该裁决；②`prompt_snapshots` 是缓存链的**唯一真相源**，§42 二分诊断 / §41 遥测取前驱都从它派生，键放在被查的那张表上才能让过滤走索引；③`cache_runtime_states`（§44）**保持未迁移**。之所以"现在才加"这个键：契约 `{type:'character',assetId,field}` 自 P0 起声明却**零生产者**、`characters.description/personality/scenario` 零消费者、10 个真实预设的 charDescription/charPersonality 全是空壳标记——各角色 header 逐字节相同，命名空间建成即空转。故 S33a 先补齐生产者（`packages/runtime/src/generation/character.ts` + 预设 slot 原地填充），键才有意义。S33b 的 `chat_members` 只改 `character.ts` 的输入（单值绑定 → 成员集），段身份与命名空间口径不变。
 
 ---
 
@@ -2132,6 +2134,12 @@ CREATE TABLE prompt_snapshots (
 
     chat_id             UUID NOT NULL,
 
+    -- S33a(migration v11):per-(chat, character) 缓存命名空间的键(worldbook-cache-design §6;总设计 §26)。
+    -- 未绑定角色的单聊为 NULL(= 沿用 chat 级语义,与 v11 之前逐行一致)。
+    -- 为什么落在这张表:Provider Prompt Cache 作用域是 (chat, character),而快照表是缓存链的唯一真相源;
+    -- 另立 chatCache 哈希表已被 S17 三次修订否决。复合索引使"同命名空间内最近一轮"成为纯索引扫描。
+    character_id        UUID,
+
     run_id              UUID,
 
     message_id          UUID,
@@ -2158,6 +2166,10 @@ CREATE TABLE prompt_snapshots (
 
     created_at           TIMESTAMPTZ NOT NULL
 );
+
+-- S33a(migration v11):同命名空间内取最近前驱的查询形态(chat_id + character_id 过滤 + created_at 排序)
+CREATE INDEX idx_prompt_snapshots_character
+    ON prompt_snapshots(chat_id, character_id, created_at);
 ```
 
 ---

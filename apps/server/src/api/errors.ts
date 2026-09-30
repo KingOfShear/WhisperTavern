@@ -15,6 +15,7 @@ export const API_ERROR_CODES = [
   'WORLDBOOK_NOT_FOUND',
   'PRESET_NOT_FOUND',
   'PERSONA_NOT_FOUND',
+  'CHARACTER_NOT_FOUND', // S33a(WP4.4):角色卡绑定校验(与 PERSONA_NOT_FOUND 同档 404)
   'CONFLICT',
   'PROMPT_COMPILE_FAILED',
   'PROMPT_BUDGET_EXCEEDED',
@@ -53,6 +54,7 @@ export function httpStatusFor(code: string): number {
     case 'WORLDBOOK_NOT_FOUND':
     case 'PRESET_NOT_FOUND':
     case 'PERSONA_NOT_FOUND':
+    case 'CHARACTER_NOT_FOUND': // S33a:与其余资产 NOT_FOUND 同档
       return 404
     case 'CONFLICT':
     case 'IDEMPOTENCY_CONFLICT':

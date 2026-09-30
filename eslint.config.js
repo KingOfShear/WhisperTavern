@@ -16,7 +16,6 @@ export default tseslint.config(
       '酒馆参考文件/**',
       'docs/**',
       'data/**',
-      '.workbuddy/**',
       'tests/fixtures/**',
     ],
   },

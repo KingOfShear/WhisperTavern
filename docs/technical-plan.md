@@ -322,8 +322,8 @@
 
 ### 7.3 会话变更记录（延续性）
 
-- 收尾写 `.workbuddy/memory/YYYY-MM-DD.md`：改了什么 / 为什么 / 踩了什么坑；跨会话决策必须落 technical-design §38。
-- 新会话开工先读：memory 最近日记 + technical-design §38 + 相关 spec 头部版本说明。
+- 收尾在 [../AGENTS.md](../AGENTS.md) **§9 修订记录**追加一条：改了什么 / 为什么 / 踩了什么坑；跨会话决策必须落 technical-design §38。（原指向 `.workbuddy/memory/YYYY-MM-DD.md`——该目录为外部软件遗留、已废弃，2026-09-29 改指 §9，见 AGENTS §9 二十九版。）
+- 新会话开工先读：AGENTS §9 修订记录最后几条 + technical-design §38 + 相关 spec 头部版本说明。
 
 ### 7.4 兜底红线（记不住上面全部时至少守这三条）
 

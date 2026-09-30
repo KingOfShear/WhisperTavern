@@ -835,6 +835,33 @@ CREATE TRIGGER chunks_fts_after_delete AFTER DELETE ON chunks BEGIN
 END;
 `
 
+/**
+ * v11(S33a/WP4.4):prompt_snapshots 增 character_id——per-(chat, character) 缓存命名空间的**键**。
+ *
+ * 为什么现在才加、为什么加在这张表(§26 群聊 / worldbook-cache-design §6)：
+ * Provider Prompt Cache 的作用域是 **(chat, character)**——世界书缓存按 chat 共享
+ * (内容寻址),但每个角色的 header 前缀天然不同(角色卡进 header,见
+ * `generation/character.ts`),故各角色各自成链。此前快照行只记 chat_id,于是
+ * "上一轮"只能按 chat 取,群聊里会拿 A 的第 N 轮去比 B 的第 N−1 轮——
+ * 永久性的、无意义的 CacheBreak 报告。这就是本列存在要修的**具体缺陷**。
+ *
+ * 落点选择 = 快照行本身,而非新表(S17 三次修订已裁决"不建独立 chatCache 哈希表",
+ * WBCacheEntry 落 worldbook_runtime_entries 按 (chat, entry) 一行)。
+ * `database-schema` §44 的 cache_runtime_states 保持**未迁移**——本列即是命名空间键,
+ * 快照表是唯一真相源,缓存链由它派生,不另立平行状态。
+ *
+ * 可空:单聊未绑定角色时为 NULL(= 沿用 chat 级语义,与 v11 之前行为一致——
+ * 未绑定 chat 的快照查询逐字节/逐行不变)。为了让 `(chat_id, character_id)` 过滤
+ * 走索引,建复合索引覆盖查询形态;`created_at` 作第三列使"同命名空间内最近一轮"
+ * 的 orderBy desc + limit 1 成为纯索引扫描。
+ */
+const V11_SNAPSHOT_CHARACTER_NAMESPACE = /* sql */ `
+ALTER TABLE prompt_snapshots ADD COLUMN character_id TEXT;
+
+CREATE INDEX idx_prompt_snapshots_character
+    ON prompt_snapshots(chat_id, character_id, created_at);
+`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -895,6 +922,12 @@ export const MIGRATIONS: readonly Migration[] = [
     name: 'p4-memory-tables',
     sql: V10_P4_MEMORY_TABLES,
     checksum: sha256Hex(V10_P4_MEMORY_TABLES),
+  },
+  {
+    version: 11,
+    name: 'p4-snapshot-character-namespace',
+    sql: V11_SNAPSHOT_CHARACTER_NAMESPACE,
+    checksum: sha256Hex(V11_SNAPSHOT_CHARACTER_NAMESPACE),
   },
 ]
 

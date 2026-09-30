@@ -238,8 +238,22 @@ export function createApp(deps: ServerDeps): CreatedApp {
   app.post('/api/v2/chats', async (c) => {
     const requestId = requestIdOf(c)
     const body = await jsonBody(c)
+    // S33a(WP4.4):支持在建 chat 时绑定角色卡(§26 命名空间的前提)。口径与 PATCH 一致:
+    // 存在性校验 → 404;version 缺省取资产当前版本。createChat 早已支持该字段
+    // (CreateChatInput),此前只是 HTTP 面没接。
+    let characterId: string | undefined
+    let characterVersion: number | undefined
+    if (typeof body.characterId === 'string' && body.characterId !== '') {
+      const ch = deps.store.db.select().from(charactersTable).where(eq(charactersTable.id, body.characterId)).get()
+      if (ch === undefined) {
+        return fail(c, requestId, 'CHARACTER_NOT_FOUND', `character 不存在: ${body.characterId}`)
+      }
+      characterId = body.characterId
+      characterVersion = typeof body.characterVersion === 'number' ? body.characterVersion : ch.version
+    }
     const created = createChat(deps.store, deps.bus, {
       title: typeof body.title === 'string' ? body.title : undefined,
+      ...(characterId !== undefined ? { characterId, characterVersion } : {}),
       now: nowIso(),
     })
     if (!created.ok) return runtimeError(c, requestId, created.error)
@@ -253,6 +267,8 @@ export function createApp(deps: ServerDeps): CreatedApp {
       id: created.value.id,
       title: created.value.title ?? null,
       activeBranchId: created.value.activeBranchId ?? null,
+      characterId: created.value.characterId ?? null,
+      characterVersion: created.value.characterVersion ?? null,
     }, 201)
   })
 
@@ -311,6 +327,22 @@ export function createApp(deps: ServerDeps): CreatedApp {
       patch.personaVersion = null
     }
 
+    // S33a(WP4.4):角色卡绑定。此前 chats.character_id 只有 createChat 支持、HTTP 面
+    // 没有任何写入路径 —— 于是"角色身份进 header"(§26 per-character 前缀)在 API 面
+    // 根本不可达:绑定不了角色,character.ts 恒产空集,命名空间恒为 NULL。
+    // 口径与 personaId 一致:存在性校验 → 404;version 缺省取资产当前版本;null 解绑。
+    if (typeof body.characterId === 'string' && body.characterId !== '') {
+      const ch = deps.store.db.select().from(charactersTable).where(eq(charactersTable.id, body.characterId)).get()
+      if (ch === undefined) {
+        return fail(c, requestId, 'CHARACTER_NOT_FOUND', `character 不存在: ${body.characterId}`)
+      }
+      patch.characterId = body.characterId
+      patch.characterVersion = typeof body.characterVersion === 'number' ? body.characterVersion : ch.version
+    } else if (body.characterId === null) {
+      patch.characterId = null
+      patch.characterVersion = null
+    }
+
     if (typeof body.presetId === 'string' && body.presetId !== '') {
       const pr = deps.store.db.select().from(presetsTable).where(eq(presetsTable.id, body.presetId)).get()
       if (pr === undefined) return fail(c, requestId, 'PRESET_NOT_FOUND', `preset 不存在: ${body.presetId}`)
@@ -322,7 +354,7 @@ export function createApp(deps: ServerDeps): CreatedApp {
     }
 
     if (Object.keys(patch).length === 0) {
-      return fail(c, requestId, 'VALIDATION_ERROR', '至少需要一个绑定字段(personaId 或 presetId)')
+      return fail(c, requestId, 'VALIDATION_ERROR', '至少需要一个绑定字段(characterId / personaId / presetId)')
     }
     patch.updatedAt = now
     deps.store.db.update(chatsTable).set(patch).where(eq(chatsTable.id, chatId)).run()
@@ -336,6 +368,8 @@ export function createApp(deps: ServerDeps): CreatedApp {
       {
         id: chatId,
         name: updated.title ?? null,
+        characterId: updated.characterId ?? null,
+        characterVersion: updated.characterVersion ?? null,
         personaId: updated.personaId ?? null,
         personaVersion: updated.personaVersion ?? null,
         presetId: updated.presetId ?? null,
@@ -666,6 +700,20 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
   // ===== Inspector / Diff / Debug Export(S14/WP1.5;§107/§38 + 还账 #15)=====
 
+  /**
+   * "同缓存命名空间"过滤条件(S33a §26):character_id 相等,**NULL 与 NULL 也算相等**。
+   *
+   * 为什么不能用 `eq(col, nullable)` 一把梭:SQL 里 `x = NULL` 恒为 UNKNOWN,
+   * 行永远选不中——未绑定角色的单聊(命名空间恒为 NULL)就会**每轮都取不到前驱**,
+   * 表现成"永远首轮"。这类错在单测里很容易漏,因为它不报错,只是静默退化。
+   */
+  function sameNamespaceCondition(
+    column: Parameters<typeof eq>[0],
+    characterId: string | null,
+  ) {
+    return characterId === null ? isNull(column) : eq(column, characterId)
+  }
+
   /** prompt_snapshots 行 → PromptSnapshot 形状(ir 是权威段源,serialized 是发送原文) */
   function loadSnapshotRow(snapshotId: string) {
     const row = deps.store.db.select().from(promptSnapshots).where(eq(promptSnapshots.id, snapshotId)).get()
@@ -784,9 +832,12 @@ export function createApp(deps: ServerDeps): CreatedApp {
 
   // —— §41 Cache Telemetry / §43 Cache Simulation 共用聚合(纯读库;§43「不调用真实 Provider」)——
   // limit:只聚合最近 N 轮(§43 的 rounds 窗口;窗口首轮无前置基线,理论承接从窗口第 2 轮起算)
+  // characterId:§26 缓存命名空间过滤。省略 = 不过滤(单聊语义,向后兼容);显式 null = 只看未绑定链;
+  //   显式字符串 = 只看该角色链。群聊下**必须**显式传,否则会把多个角色混算成一条链。
   function buildCacheTelemetry(
     chatId: ChatId,
     limit?: number,
+    characterId?: string | null,
   ): {
     rounds: Record<string, unknown>[]
     aggregate: Record<string, number | undefined>
@@ -794,13 +845,27 @@ export function createApp(deps: ServerDeps): CreatedApp {
     simulator: Record<string, unknown>
     runCount: number
   } {
-    const allRunRows = deps.store.db
+    // §26 命名空间分组:同 chat 不同角色是**两条独立链**。快照行才带 character_id,
+    // 故先按"该 run 的快照命名空间键"把 runs 归组,再在组内各自从 1 开始编号。
+    // 不分组的具体后果(修的就是这个):角色 B 的第 1 轮会被当成角色 A 的延续轮,
+    // 于是理论承接基数、CacheBreak 计数、Simulator 前缀比对全部错位。
+    const runRowsMatchingNamespace = deps.store.db
       .select()
       .from(runsTable)
       .where(eq(runsTable.chatId, chatId))
       .orderBy(runsTable.createdAt)
       .all()
-    const runRows = limit === undefined ? allRunRows : allRunRows.slice(-limit)
+      .filter((run) => {
+        if (characterId === undefined) return true
+        if (run.snapshotId === null) return characterId === null
+        const row = deps.store.db
+          .select({ characterId: promptSnapshots.characterId })
+          .from(promptSnapshots)
+          .where(eq(promptSnapshots.id, run.snapshotId))
+          .get()
+        return (row?.characterId ?? null) === characterId
+      })
+    const runRows = limit === undefined ? runRowsMatchingNamespace : runRowsMatchingNamespace.slice(-limit)
     const usageByRun = new Map<string, { inputTokens: number; cachedTokens: number; outputTokens: number; source: string }>()
     for (const row of deps.store.db.select().from(generationsTable).all()) {
       if (row.runId === null) continue
@@ -832,7 +897,8 @@ export function createApp(deps: ServerDeps): CreatedApp {
     for (const run of runRows) {
       round += 1
       const usage = usageByRun.get(run.id)
-      const snapshot = run.snapshotId === null ? undefined : loadSnapshotRow(run.snapshotId)?.snapshot
+      const loaded = run.snapshotId === null ? undefined : loadSnapshotRow(run.snapshotId)
+      const snapshot = loaded?.snapshot
       const cachePlan = snapshot?.cachePlan
       const breakReasons = (cachePlan?.breakReasons ?? []) as { type: string }[]
       // §7 任务 1「每轮实际发送内容」:serialized.parts = 本轮真正上 wire 的消息序列(§65)
@@ -846,6 +912,12 @@ export function createApp(deps: ServerDeps): CreatedApp {
         runId: run.id,
         createdAt: run.createdAt,
         status: run.status,
+        /**
+         * §26 本轮的缓存命名空间键 = 快照的 (chat, character) character 半边。
+         * 每次**必须**回传给前端:同一响应内 rounds 只含单条链(调用方已过滤),
+         * 但 UI 需要它来标注"这是哪个角色的链",以及 per-character 链温度显示(ui-design §4.6+)。
+         */
+        characterId: loaded?.row.characterId ?? null,
         /** provider prompt_tokens(§2.2 token 计;§41 CacheRoundMetric) */
         promptTokens: usage?.inputTokens ?? 0,
         /** provider cached_tokens(§2.2) */
@@ -929,7 +1001,12 @@ export function createApp(deps: ServerDeps): CreatedApp {
     const requestId = requestIdOf(c)
     const chat = loadChat(deps.store, c.req.param('id') as ChatId)
     if (!chat.ok) return runtimeError(c, requestId, chat.error)
-    const telemetry = buildCacheTelemetry(chat.value.id)
+    // §26 命名空间过滤:`?characterId=<id>` 只看该角色链;`?characterId=` 空串 = 只看未绑定链;
+    // 省略 = 不过滤(单聊/旧口径,向后兼容)。群聊里不看角色会把多条链混算成一条。
+    const rawCharacterId = c.req.query('characterId')
+    const characterFilter: string | null | undefined =
+      rawCharacterId === undefined ? undefined : rawCharacterId === '' ? null : rawCharacterId
+    const telemetry = buildCacheTelemetry(chat.value.id, undefined, characterFilter)
     // §41 Query:from/to(ISO 时间窗;按轮次 createdAt 过滤)
     const from = c.req.query('from')
     const to = c.req.query('to')
@@ -950,11 +1027,20 @@ export function createApp(deps: ServerDeps): CreatedApp {
     if (run.snapshotId === null) return fail(c, requestId, 'GENERATION_NOT_FOUND', `run 无快照: ${runId}`)
     const current = loadSnapshotRow(run.snapshotId)
     if (current === undefined) return fail(c, requestId, 'NOT_FOUND', `snapshot 不存在: ${run.snapshotId}`)
-    // 上一轮 = 同 chat 中 createdAt 早于本轮的最近一条快照(二分比较的 A 侧)
+    // 上一轮 = **同命名空间**中 createdAt 早于本轮的最近一条快照(二分比较的 A 侧)。
+    // S33a(§26):命名空间 = (chat, character)。此前只按 chat 取,群聊里会拿
+    // 另一个角色的快照当基线 —— 角色卡进 header 后两者前缀必然不同,于是每轮
+    // 都报一次无意义的 CacheBreak。同命名空间才是"这条链的上一轮"。
     const prior = deps.store.db
       .select()
       .from(promptSnapshots)
-      .where(and(eq(promptSnapshots.chatId, run.chatId), lt(promptSnapshots.createdAt, current.row.createdAt)))
+      .where(
+        and(
+          eq(promptSnapshots.chatId, run.chatId),
+          sameNamespaceCondition(promptSnapshots.characterId, current.row.characterId),
+          lt(promptSnapshots.createdAt, current.row.createdAt),
+        ),
+      )
       .orderBy(desc(promptSnapshots.createdAt))
       .limit(1)
       .all()
@@ -962,7 +1048,11 @@ export function createApp(deps: ServerDeps): CreatedApp {
       return ok(c, requestId, {
         broken: false,
         affectedTokens: 0,
-        suggestions: ['本轮为该会话首轮快照,无前置缓存可破坏(§33:首轮不计 CacheBreak)'],
+        suggestions: [
+          current.row.characterId === null
+            ? '本轮为该会话首轮快照,无前置缓存可破坏(§33:首轮不计 CacheBreak)'
+            : '该角色在本会话尚无前置快照(per-character 链首轮),无前置缓存可破坏(§26)',
+        ],
       })
     }
     const previous = loadSnapshotRow(prior[0]!.id)
@@ -1063,7 +1153,12 @@ export function createApp(deps: ServerDeps): CreatedApp {
       typeof requestedRounds === 'number' && Number.isFinite(requestedRounds) && requestedRounds > 0
         ? Math.min(Math.floor(requestedRounds), 200)
         : 50
-    const telemetry = buildCacheTelemetry(chat.value.id, limit)
+    // §26 命名空间过滤与 §41 同口径(体字段 characterId:string=该角色链 / null=未绑定链 / 缺省=不过滤)。
+    // 模拟必须在**单条链**上跑:混算会让跨角色前缀比对恒不命中,模拟结果失去意义。
+    const bodyCharacterId: unknown = body.characterId
+    const characterFilter: string | null | undefined =
+      bodyCharacterId === undefined ? undefined : bodyCharacterId === null ? null : typeof bodyCharacterId === 'string' ? bodyCharacterId : undefined
+    const telemetry = buildCacheTelemetry(chat.value.id, limit, characterFilter)
     const simulatorRounds = telemetry.simulator.rounds as {
       round: number
       theoreticalStableTokens: number
