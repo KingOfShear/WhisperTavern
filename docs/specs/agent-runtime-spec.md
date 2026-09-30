@@ -1,6 +1,6 @@
 # WhisperTavern V2 — Agent Runtime Specification
 
-> 版本：V2.3（2026-09-28：S32/WP4.3——§115.1 补**回答者链**（per-chat → default → unavailable，弃权可下探、抛异常/枚举外当场 fail-closed）+ `createAutoApprover` 安全边界 + `requireApproval` 静态审批门；§89 补 **network 限制落地口径**（出站目标唯一 / 外发次数封顶 / 未配置即 fail-closed）与结果去重规则。先前 V2.2 修订内容：S28/WP3.6——§39 RunBudget 补 Agent Tree 四护栏字段、§93 Scheduler 补 `assertCanSpawn`、§100 补 `AGENT_RECURSION_LIMIT`（还账 #17，见 §39/§93 修订注）；§125 Debug 模式补实现注（五项能力 P3 已具备,Debug 读面 = §121 Run Timeline,见 §125 注））；V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
+> 版本：V2.4（2026-09-29：S33a/WP4.4a——§79 补 `character` 贡献行的**落地口径**（槽位原地填充 vs 独立角色贡献两面分工、正白名单 `{charDescription, charPersonality}`、未绑定零漂移不变量）；§77 补群聊选人**尚未实现**的注（归 S33b，含 `chat_members` v12 / 零额外模型调用裁决 / 命名空间必要性说明）。先前 V2.3 修订内容：S32/WP4.3——§115.1 补**回答者链**（per-chat → default → unavailable，弃权可下探、抛异常/枚举外当场 fail-closed）+ `createAutoApprover` 安全边界 + `requireApproval` 静态审批门；§89 补 **network 限制落地口径**（出站目标唯一 / 外发次数封顶 / 未配置即 fail-closed）与结果去重规则。V2.2：S28/WP3.6——§39 RunBudget 补 Agent Tree 四护栏字段、§93 Scheduler 补 `assertCanSpawn`、§100 补 `AGENT_RECURSION_LIMIT`（还账 #17）；§125 Debug 模式补实现注；V2.1（2026-09-05 参照 DeepSeek Harness 补强执行语义）
 > 状态：Draft（已与总设计对齐，待 P3 实施验证）
 > 文档层级：[technical-design.md](../technical-design.md) 之下的 **Agent Runtime 模块详细规格**，与 `prompt-compiler-spec.md`、`database-schema.md` 同级
 > 依赖：`database-schema.md`、`prompt-compiler-spec.md`
@@ -2584,6 +2584,17 @@ Select next Agent
 Agent Runtime + Workflow Runtime
 ```
 
+**【2026-09-29 注，S33a/WP4.4a】本节与 §76 的"选人"部分尚未实现，归 S33b**
+
+S33a 只交付了群聊的**前置块**（角色身份真的进 header + per-(chat, character) 缓存命名空间键，落地口径见 §79 注）。本节描述的 Director 选人循环仍是待办：
+
+- **`chat_members` 表**（migration v12）+ `chats.character_id` 单值绑定扩为成员集；
+- **Director 选人**——§76 的图把 Director 画成一个 Agent，而 §77 的循环里它每轮都被调用；但按 §79 之后的多 Agent 判据（**每轮 N 次调用 = N 个独立新前缀，只共享前缀可命中**，与命中率 ≥70% / 成本削减 ≥60% 直接冲突），群聊每轮额外一次 Director 模型调用会持续破坏前缀。**p4-plan §8 对 S33b 的裁决是"启发式选人、零额外模型调用"**；若实施中该启发式不足以覆盖所需语义，须回到作者处裁决而非默认加调用（X15：新增子 Agent 必须申报调用数与前缀共享情况）。
+- `generation/character.ts` 的输入从"chat 单值绑定"切换为"成员集"，`snapshotCharacterId` 补可选覆盖参数（S33a 已预留：现为 `chat.characterId ?? null`，一处集中收口）；
+- 3 角色 50 轮缓存门禁（S33a 已提供命名空间分链的遥测与 `character_id` 索引，门禁可直接断言各链互不污染）。
+
+**为何先拆出 S33a**：原 S33 把"建命名空间"当作可直接开工的第一步，但实测各角色 header 曾**逐字节相同**（角色文本根本没进 prompt）——那样建成的命名空间只会存一个与 chat 级完全同构的键，3 角色 50 轮门禁会全绿却什么都没证明，且三个角色会回复得一模一样。故先补生产者，再建群聊本体。**命名空间的真实必要**也在 S33a 中被独立证实（与群聊无关）：`buildCacheTelemetry` 此前把所有 run 压成平铺序列，同一 chat 下切换角色时，角色 B 的首轮会被当成角色 A 的延续轮——理论承接基数错位、CacheBreak 虚假、Simulator 前缀比对恒不命中。
+
 ---
 
 # 78. Single Chat
@@ -2631,6 +2642,19 @@ history
 ```text
 Prompt Compiler
 ```
+
+**【2026-09-29 补，S33a/WP4.4a】上图中 `character` 一行的落地口径（此前长期是空的）**
+
+本节自收编起就把 `character` 列为 Character Agent 的贡献来源之一，`SegmentSourceSchema` 也自 P0 起声明了 `{type:'character', assetId, field}`（`core/serializer/diff.ts` 一直映射 `CHARACTER_CHANGED`）——但**全仓零生产者**，`characters.description/personality/scenario` 也**零消费者**（彼时仅 `variables.ts` 读 `name` 供 `{{char}}`）。S33a 补齐这条链路，两个面分开承载：
+
+- **槽位原地填充**（`preset.ts` 收 `slotContents`）：预设里的 `charDescription`/`charPersonality` 标记段（ST 生态里多是 `content:""` 的空壳）**原地换掉 content**，段的 id / role / placement / `prompt_order` 一概不动。依据是 §81「顺序即语义序」——另发一条贡献会丢掉作者排好的位置。段的 `source` 仍是 `preset`，不冒充角色来源。
+- **独立角色贡献**（`generation/character.ts`，本仓第一个 `{type:'character'}` 生产者）：承载角色卡溯源，段 id = `character:<characterId>:<field>`、zone = `header`。
+
+填充范围是**正白名单**，恰好两项：`{charDescription→description, charPersonality→personality}`。`worldInfo*` / `chatHistory` / `personaDescription` **各有其主**（世界书、历史、Persona 三个产出者），此处填了就是双注入。
+
+**零漂移不变量**：chat 未绑定角色（`chats.character_id IS NULL`）时，槽位填充表为空 Map、角色贡献为空数组、快照 `character_id` 落 NULL——header 逐字节与 S33a 之前相同。P2 缓存门禁的 KPI 98.7%/98.7% 与反面对照 28.2% **原样不变**即是该不变量的证据；本仓全部金样/门禁 chat 均未绑定角色。
+
+群聊本体的选人（§76/§77）不在 S33a 范围，见 §77 注。
 
 ---
 

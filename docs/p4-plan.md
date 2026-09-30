@@ -2,7 +2,8 @@
 
 > **文件:** `docs/p4-plan.md`
 > **版本:** V1.0（2026-09-27：P4 细化会话落盘——按 B4 滚动细化原则，S29–S36 会话切分 / R-P4-1–10 范围裁决 / 出场 KPI 对齐总设计 §36 P4 行）
-> **状态:** 🟢 **执行中**——S29（WP4.1）+ S30（WP4.2a）✅ + S31（WP4.2b）✅ + **S32（WP4.3）✅ 测试全绿闭环**（565/62 + typecheck 0 + ESLint 0 error 0 warning + P2 缓存门禁保绿）；下一会话 = **S33（WP4.4 群聊 + per-char 缓存命名空间）**
+> **状态:** 🟢 **执行中**——S29（WP4.1）+ S30（WP4.2a）✅ + S31（WP4.2b）✅ + S32（WP4.3）✅ + **S33a（WP4.4a）✅ 测试全绿闭环**（571/63 + typecheck 全 9 包 0 + ESLint 0 error 0 warning + P2 缓存门禁保绿 KPI 98.7% 原样）；下一会话 = **S33b（WP4.4b 群聊本体）**
+> **2026-09-29 修订（S33 拆段）**：原 S33 任务清单第 1/3 条的前提**失实**（`{type:'character'}` 目 P0 起零生产者、`characters.description/personality` 零消费者、预设 fixture 的槽位标记全空）——命名空间照原计划建成即空转。经作者裁可拆为 **S33a（角色身份进 header + 命名空间键，已完成）** / **S33b（群聊本体，下一会话）**，详见 §8。
 > **文档层级:** [implementation-plan.md](./implementation-plan.md) §8（P4 WP 概览）的**会话级执行明细**。设计语义一律指向 spec，本文只管"会话里具体干什么"。
 > **上游锚点:** 总设计 §36（P4 行）/ §25（Memory）/ §26（群聊）/ implementation-plan §7·§8·§10 / [roleplay-runtime-spec.md](./specs/roleplay-runtime-spec.md) 及其三子规格（dialogue-director / roleplay-quality / roleplay-evaluation-engine）/ [database-schema.md](./specs/database-schema.md) §23·§25·§26·§29.1–29.5·§30–§31 / [api-spec.md](./specs/api-spec.md) §155 / [worldbook-cache-design.md](./worldbook-cache-design.md) §6 / §38 决策 28·36·45·46 / p3-plan（已归档） / AGENTS 会话纪律。
 
@@ -15,7 +16,8 @@ S29 WP4.1  memory-runtime-spec 骨架 + memory 持久化底座(migration v10)   
 S30 WP4.2a Summary 链(冻结块追加) + 四层记忆 + memories 双检索(FTS5+vec)            1–2 会话
 S31 WP4.2b Scribe Agent + Memory HTTP 面(§155) + 还账 #8 勾销                       1 会话
 S32 WP4.3  网络搜索工具(结果注 tail / agent 工具,origin 溯源)                       1 会话
-S33 WP4.4  群聊(chat_members + Director 接线) + per-(chat,character) 缓存命名空间    1–2 会话
+S33  WP4.4   群聊本体(chat_members + Director 接线) + per-(chat,character) 缓存命名空间 1–2 会话
+              → 2026-09-29 拆段:S33a 角色身份进 header + 命名空间键(✅ 已完成) / S33b 群聊本体
 S34 WP4.5a Roleplay Runtime(五表 migration + 状态机 + Emotion/Relationship/Thread)  1–2 会话
 S35 WP4.5b Roleplay Fast 端到端(BD 规则推导 + Directive→Compiler + Quality Fast)    1–2 会话
 S36 收官   Workflow HTTP 面(§155) + World State 规则版(#18) + Simulation mock + UI   1–2 会话
@@ -396,7 +398,8 @@ P3 转正挂账的 P4 归属：
 | S30 | WP4.2a | ✅ 完成 | 测试全绿闭环:runtime memory 全套(repository 14 + summary-contributions 3)+ agent memory/policy 6 + context-policy 14 + **全仓 534/59 全绿** + typecheck 全部 0 + ESLint 0 + P2 缓存门禁保绿(100 轮稳定前缀/KPI 98.7%);交付:四层 Memory Runtime(CRUD+timeline 读取+Data Bank 分块入表)+ Summary 链(appendSummaryBlock 冻结块 sequence 单调 + buildSummaryContributions 注 summary 区)+ chunks_fts 关键词检索 + agent Memory Policy 兑现(R-P3-9,resolveMemoryPolicy 四策略 + tail 注入)+ runAgent memoryRetrieval 接线;**顺带修复 S26 缺口:prepareIteration.filterContributions 此前已声明但从未被消费,现于 compile 前应用**;memory-runtime-spec 升 V0.2(锚点转已实现契约) |
 | S31 | WP4.2b | ☑ 完成 | 测试全绿闭环:**全仓 544/61 全绿**(S30 534 起 +10:runtime search 3 / agent scribe 3 / server memory-api 7 + agent-api 工具断言重编 -13...) + typecheck 全部 0 + ESLint 0 + P2 缓存门禁保绿(100 轮);交付:Scribe Agent(runScribe 影子会话隔离 + 三 memory 工具落账)+ Memory HTTP 面(api-spec V2.7 §88–§92/§155 九路由:search/search 中文 LIKE 兜底/summaries/dossier entities PATCH/timeline/scribe 202)+ MemoryHit 行级投影(时间戳/version/sourceMessageIds)+ web MemoryPanel;还账 #8 勾销;顺带修复 runtime timeline rowid 平局序(X14 确定性) |
 | S32 | WP4.3 | ☑ 完成 | 测试全绿闭环:**全仓 565/62 全绿**(S31 544 起 +21:web-search.test.ts 19 条 + 架构守卫 D6/D7)+ typecheck 全部 0 + ESLint 0(**0 error 0 warning**)+ P2 缓存门禁保绿(100 轮稳定前缀 / KPI 98.7% 原样);交付:`web.search` 工具(tool_calls 行 + `tool.call.*` 四件套、§89 结构性网络沙箱:出站目标唯一/外发次数封顶/未配置即 fail-closed、短窗 query 去重 + 并发在飞去重 + 预算按 Run 隔离)+ 审批回答者链(per-chat → default → unavailable;弃权可下探、抛异常/枚举外当场 fail-closed)+ `createAutoApprover`(白名单 ∩ 只读权限双重守门,判据不含 risk)+ `requireApproval` 静态审批门 + **结果注 tail + origin 溯源全链路**(`CreateMessageInput.metadata` → tool 结果消息 `toolCallId` → `buildContributions` 升格 `source.type='toolResult'`;精确口径 = **末尾连续输入段**,因 pipeline zone-first 排序要求连续性)+ `context/policy.ts` toolResult 同时过 History 与 ToolResultPolicy 双门 + server 组合根三件装配 + `DG_WEB_SEARCH_ENDPOINT/API_KEY`;spec 同步:agent-runtime-spec V2.3(§115.1/§89/§155)、prompt-compiler-spec V2.6(§86) |
-| S33 | WP4.4 | ☐ | |
+| S33a | WP4.4a | ☑ 完成 | 测试全绿闭环:**全仓 571/63 全绿**(S32 565 起 +6:character-namespace.test.ts)+ typecheck 全 9 包 0 + ESLint 0 error 0 warning + **P2 缓存门禁保绿**(100 轮稳定前缀 / KPI 98.7%/98.7% 与反面对照 28.2% **原样不变**——零基线漂移得证)+ 架构守卫 17/17;交付:`generation/character.ts`(全仓第一个 `{type:'character'}` 生产者,兼供槽位填充表 + 角色贡献两面)+ **slot 原地填充**(preset.ts 收 `slotContents`,命中则原地换 content,段 id/role/placement/**prompt_order 一概不动**——§81「顺序即语义序」;正白名单仅 `{charDescription→description, charPersonality→personality}`,防双注入)+ **migration v11** `prompt_snapshots.character_id` + 复合索引(不落 cache_runtime_states——S17 三次修订裁决 + 快照表是缓存链唯一真相源)+ `chats.character_id` HTTP 写入路径(POST/PATCH + `CHARACTER_NOT_FOUND` 404)+ **命名空间感知前驱**(`sameNamespaceCondition` **NULL 安全**——SQL `x = NULL` 恒 UNKNOWN,误用 `eq(col,null)` 让未绑定 chat 每轮静默退化"首轮",不报错只降智)+ **遥测分链**(此前全 run 压平铺序列致角色 B 首轮被当角色 A 延续轮 → 理论承接基数错位/CacheBreak 虚假/Simulator 恒不命中;现各链 round 各自从 1 起 + 轮带 `characterId` 投影 + §41 `characterId` 查询面);4 个负例探针逐一确认真能变红(禁用 slot 填充→①红 / chat-only 前驱→③红 / `eq(col,null)`→⑤红 / 禁用遥测过滤→⑥红);spec 同步:api-spec **V2.8**、prompt-compiler-spec **V2.7**、database-schema + §15 群聊预留修订。**原 S33 前提失实**已在 §8 整节实录 |
+| S33b | WP4.4b | ☐ | 群聊本体(下一会话):`chat_members`(migration v12)+ Director 启发式选人(零额外模型调用)+ `character.ts` 输入从单值 chat 绑定切到成员集 + `snapshotCharacterId` 覆盖参数 + 3 角色 50 轮缓存门禁 + 群聊 UI + per-character 链温度显示 |
 | S34 | WP4.5a | ☐ | |
 | S35 | WP4.5b | ☐ | |
 | S36 | 收官 | ☐ | |
